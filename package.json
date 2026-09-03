@@ -2,12 +2,13 @@
   "name": "guidegram",
   "version": "1.0.0",
   "description": "Next-generation portable multi-account desktop Telegram client",
+  "author": "DoctorGuidance",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:portable": "tsc && vite build && electron-builder --win portable",
+    "build:portable": "tsc && vite build && electron-builder --win dir",
     "preview": "vite preview"
   },
   "dependencies": {
