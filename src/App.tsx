@@ -159,7 +159,13 @@ export const App: React.FC = () => {
   }
 
   const handleAccountAdded = (newAccount: AccountInfo) => {
-    setAccounts((prev) => [...prev, newAccount])
+    setAccounts((prev) => {
+      const exists = prev.some((a) => a.id === newAccount.id)
+      if (exists) {
+        return prev.map((a) => (a.id === newAccount.id ? newAccount : a))
+      }
+      return [...prev, newAccount]
+    })
     setActiveAccountId(newAccount.id)
     loadDialogsForAccount(newAccount.id)
   }
