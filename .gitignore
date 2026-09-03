@@ -1,0 +1,36 @@
+# Node & Dependencies
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build Outputs
+dist/
+dist-electron/
+release/
+build/
+out/
+
+# Portable User Data & Telegram Sessions (Crucial: Keep local sessions confidential)
+data/
+*.session
+*.session-journal
+
+# Environment & Credentials
+.env
+.env.local
+.env.*.local
+
+# IDE & OS
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
