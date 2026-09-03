@@ -45,7 +45,7 @@ function createWindow() {
     title: 'Guidegram',
     frame: false, // Frameless window with custom titlebar
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
