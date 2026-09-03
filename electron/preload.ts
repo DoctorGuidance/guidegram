@@ -55,6 +55,12 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:update-config', { partial }),
   getPortableDataPath: () => ipcRenderer.invoke('system:get-portable-data-path'),
 
+  // Logging & Diagnostics
+  getLogs: (maxLines?: number) => ipcRenderer.invoke('system:get-logs', { maxLines }),
+  openLogsFolder: () => ipcRenderer.invoke('system:open-logs-folder'),
+  logError: (message: string, stack?: string) =>
+    ipcRenderer.invoke('system:log-renderer-error', { message, stack }),
+
   // Events
   on: (channel: string, callback: (...args: any[]) => void) => {
     const subscription = (_event: any, ...args: any[]) => callback(...args)

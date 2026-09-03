@@ -61,13 +61,13 @@ export const ChatList: React.FC<ChatListProps> = ({
         <div className="px-4 py-3 bg-dark-900/60 border-b border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-2.5 overflow-hidden">
             <div className="w-8 h-8 rounded-xl bg-primary-600/30 text-primary-400 font-bold text-xs flex items-center justify-center border border-primary-500/20">
-              {account.firstName.charAt(0)}
+              {(account.firstName || 'U').charAt(0)}
             </div>
             <div className="truncate">
               <div className="text-xs font-bold text-gray-200 truncate">
-                {account.firstName} {account.lastName || ''}
+                {account.firstName || 'User'} {account.lastName || ''}
               </div>
-              <div className="text-[11px] text-gray-400 truncate">{account.phone}</div>
+              <div className="text-[11px] text-gray-400 truncate">{account.phone || ''}</div>
             </div>
           </div>
 

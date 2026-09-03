@@ -322,10 +322,31 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
               {/* QR Code Loading State */}
               {qrState === 'loading' && (
                 <div className="flex flex-col items-center justify-center py-10 text-center space-y-3">
-                  <Loader2 className="w-10 h-10 text-primary-400 animate-spin" />
-                  <div className="text-xs font-medium text-gray-300">
-                    Connecting to Telegram & generating QR Code...
-                  </div>
+                  {errorMessage ? (
+                    <div className="flex flex-col items-center space-y-3">
+                      <div className="text-xs text-accent-rose font-medium max-w-xs leading-relaxed">
+                        {errorMessage}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startQr()}
+                        className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-semibold shadow-glow transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry Connection</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <Loader2 className="w-10 h-10 text-primary-400 animate-spin" />
+                      <div className="text-xs font-medium text-gray-300">
+                        Connecting to Telegram & generating QR Code...
+                      </div>
+                      <div className="text-[11px] text-gray-500 max-w-xs">
+                        If connection takes time, assign a local SOCKS5/HTTP proxy below.
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

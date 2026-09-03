@@ -55,13 +55,14 @@ export const AccountDock: React.FC<AccountDockProps> = ({
       <div className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-3 py-2 px-1">
         {accounts.map((acc) => {
           const isActive = !isUnifiedInboxOpen && acc.id === activeAccountId
-          const initials = `${acc.firstName.charAt(0)}${acc.lastName ? acc.lastName.charAt(0) : ''}`
+          const safeFirst = acc.firstName || 'User'
+          const initials = `${safeFirst.charAt(0)}${acc.lastName ? acc.lastName.charAt(0) : ''}`
 
           return (
             <div key={acc.id} className="relative group">
               <button
                 onClick={() => onSelectAccount(acc.id)}
-                title={`${acc.firstName} (${acc.phone})`}
+                title={`${safeFirst} (${acc.phone || 'No phone'})`}
                 className={`relative w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm transition-all duration-200 ${
                   isActive
                     ? 'bg-primary-600 text-white ring-2 ring-primary-400 ring-offset-2 ring-offset-dark-900 shadow-glow'

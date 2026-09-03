@@ -4,6 +4,7 @@ import { NewMessage } from 'telegram/events/index.js'
 import QRCode from 'qrcode'
 import { SessionStore } from './sessionStore'
 import { ProxyManager } from './proxyManager'
+import { Logger } from './logger'
 import { AccountInfo, DialogItem, MessageItem, ForwardOptions, ProxyConfig, QrTokenPayload } from './types'
 
 export interface ClientHolder {
@@ -92,6 +93,7 @@ export class AccountManager {
    * Step 1: Start login via Phone Number
    */
   public async startPhoneAuth(phone: string, proxy?: ProxyConfig): Promise<{ phoneCodeHash: string }> {
+    Logger.info(`[AccountManager] Starting phone auth for ${phone}, proxy=${proxy?.host || 'direct'}`)
     const config = this.store.getConfig()
     const session = new StringSession('')
     const gramProxy = ProxyManager.toGramJsProxy(proxy)
@@ -101,18 +103,28 @@ export class AccountManager {
       proxy: gramProxy,
     })
 
-    await client.connect()
+    try {
+      await client.connect()
+      Logger.info(`[AccountManager] Connected to Telegram DC for ${phone}. Sending code...`)
 
-    const { phoneCodeHash } = await client.sendCode(
-      {
-        apiId: config.apiId,
-        apiHash: config.apiHash,
-      },
-      phone
-    )
+      const { phoneCodeHash } = await client.sendCode(
+        {
+          apiId: config.apiId,
+          apiHash: config.apiHash,
+        },
+        phone
+      )
 
-    this.pendingAuthClients.set(phone, { client, phoneCodeHash, proxy })
-    return { phoneCodeHash }
+      Logger.info(`[AccountManager] Code sent to ${phone}, phoneCodeHash: ${phoneCodeHash}`)
+      this.pendingAuthClients.set(phone, { client, phoneCodeHash, proxy })
+      return { phoneCodeHash }
+    } catch (err: any) {
+      Logger.error(`[AccountManager] startPhoneAuth failed for ${phone}:`, err)
+      try {
+        await client.disconnect()
+      } catch (_) {}
+      throw err
+    }
   }
 
   /**
@@ -204,6 +216,7 @@ export class AccountManager {
    * Start QR Code authentication flow
    */
   public async startQrAuth(proxy?: ProxyConfig): Promise<QrTokenPayload> {
+    Logger.info(`[AccountManager] Starting QR auth, proxy=${proxy?.host || 'direct'}`)
     await this.cancelQrAuth()
 
     const config = this.store.getConfig()
@@ -225,6 +238,7 @@ export class AccountManager {
 
     try {
       await client.connect()
+      Logger.info('[AccountManager] Connected to Telegram DC for QR auth. Requesting ExportLoginToken...')
 
       const res = await client.invoke(
         new Api.auth.ExportLoginToken({
@@ -237,6 +251,8 @@ export class AccountManager {
       if (!(res instanceof Api.auth.LoginToken)) {
         throw new Error('Unexpected initial response from Telegram for QR authentication.')
       }
+
+      Logger.info('[AccountManager] Received initial LoginToken from Telegram DC.')
 
       const tokenStr = Buffer.from(res.token).toString('base64url')
       const url = `tg://login?token=${tokenStr}`
@@ -267,7 +283,8 @@ export class AccountManager {
       })
 
       return payload
-    } catch (err) {
+    } catch (err: any) {
+      Logger.error('[AccountManager] startQrAuth failed:', err)
       if (this.pendingQrAuth === qrState) {
         this.pendingQrAuth = undefined
       }
@@ -477,6 +494,7 @@ export class AccountManager {
 
     this.pendingQrAuth = undefined
     this.setupEventListeners(accountId, client)
+    Logger.info(`[AccountManager] finalizeQrLogin completed successfully for account ${accountId} (${phoneStr})`)
     this.onEventCallback?.('telegram:qr-success', { account: info })
 
     return info

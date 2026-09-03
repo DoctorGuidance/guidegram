@@ -41,7 +41,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ activeAccount, ghostMode }) 
         {activeAccount && (
           <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-white/10 text-xs">
             <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
-            <span className="text-gray-300 font-medium">{activeAccount.firstName}</span>
+            <span className="text-gray-300 font-medium">{activeAccount.firstName || 'User'}</span>
             {activeAccount.proxyConfig?.enabled && (
               <span className="text-[10px] text-accent-cyan bg-accent-cyan/10 px-1.5 py-0.2 rounded border border-accent-cyan/20">
                 Proxy
