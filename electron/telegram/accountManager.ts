@@ -1,5 +1,4 @@
-import { TelegramClient, Api } from 'telegram'
-import { StringSession } from 'telegram/sessions/index.js'
+import { TelegramClient, Api, sessions } from 'telegram'
 import { NewMessage } from 'telegram/events/index.js'
 import QRCode from 'qrcode'
 import { SessionStore } from './sessionStore'
@@ -9,7 +8,7 @@ import { AccountInfo, DialogItem, MessageItem, ForwardOptions, ProxyConfig, QrTo
 
 export interface ClientHolder {
   client: TelegramClient
-  session: StringSession
+  session: sessions.StringSession
   info: AccountInfo
 }
 
@@ -44,7 +43,7 @@ export class AccountManager {
         const sessionString = this.store.getSessionString(savedAcc.id)
         if (!sessionString) continue
 
-        const session = new StringSession(sessionString)
+        const session = new sessions.StringSession(sessionString)
         const proxy = ProxyManager.toGramJsProxy(savedAcc.proxyConfig)
 
         const client = new TelegramClient(session, config.apiId, config.apiHash, {
@@ -95,7 +94,7 @@ export class AccountManager {
   public async startPhoneAuth(phone: string, proxy?: ProxyConfig): Promise<{ phoneCodeHash: string }> {
     Logger.info(`[AccountManager] Starting phone auth for ${phone}, proxy=${proxy?.host || 'direct'}`)
     const config = this.store.getConfig()
-    const session = new StringSession('')
+    const session = new sessions.StringSession('')
     const gramProxy = ProxyManager.toGramJsProxy(proxy)
 
     const client = new TelegramClient(session, config.apiId, config.apiHash, {
@@ -220,7 +219,7 @@ export class AccountManager {
     await this.cancelQrAuth()
 
     const config = this.store.getConfig()
-    const session = new StringSession('')
+    const session = new sessions.StringSession('')
     const gramProxy = ProxyManager.toGramJsProxy(proxy)
 
     const client = new TelegramClient(session, config.apiId, config.apiHash, {

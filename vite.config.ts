@@ -13,7 +13,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['telegram', 'socks', 'electron']
+              external: [/^telegram(\/.*)?$/, 'socks', 'electron']
             }
           }
         }
