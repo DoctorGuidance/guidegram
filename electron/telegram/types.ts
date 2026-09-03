@@ -14,6 +14,12 @@ export interface ProxyConfig {
   lastChecked?: number
 }
 
+export interface QrTokenPayload {
+  url: string
+  qrDataUrl: string
+  expires: number
+}
+
 export type AccountStatus = 'connected' | 'connecting' | 'disconnected' | 'needs_auth'
 
 export interface AccountInfo {

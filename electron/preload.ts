@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { ProxyConfig, ForwardOptions, AppConfig } from './telegram/types'
+import { ProxyConfig, ForwardOptions, AppConfig, QrTokenPayload, AccountInfo } from './telegram/types'
 
 const guidegramAPI = {
   // Window Controls
@@ -14,6 +14,12 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:start-phone-auth', { phone, proxy }),
   completePhoneAuth: (phone: string, code: string, password?: string) =>
     ipcRenderer.invoke('telegram:complete-phone-auth', { phone, code, password }),
+  startQrAuth: (proxy?: ProxyConfig): Promise<QrTokenPayload> =>
+    ipcRenderer.invoke('telegram:start-qr-auth', { proxy }),
+  cancelQrAuth: (): Promise<void> =>
+    ipcRenderer.invoke('telegram:cancel-qr-auth'),
+  submitQrPassword: (password: string): Promise<AccountInfo> =>
+    ipcRenderer.invoke('telegram:submit-qr-password', { password }),
   logoutAccount: (accountId: string) =>
     ipcRenderer.invoke('telegram:logout-account', { accountId }),
 

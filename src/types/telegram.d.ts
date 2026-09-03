@@ -6,6 +6,7 @@ import type {
   ProxyConfig,
   AppConfig,
   ForwardOptions,
+  QrTokenPayload,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -21,4 +22,5 @@ export type {
   ProxyConfig,
   AppConfig,
   ForwardOptions,
+  QrTokenPayload,
 }

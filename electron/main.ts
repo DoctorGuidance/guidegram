@@ -119,6 +119,18 @@ function setupIpcHandlers() {
     return accountManager.completePhoneAuth(phone, code, password)
   })
 
+  ipcMain.handle('telegram:start-qr-auth', async (_event, { proxy }) => {
+    return accountManager.startQrAuth(proxy)
+  })
+
+  ipcMain.handle('telegram:cancel-qr-auth', async () => {
+    return accountManager.cancelQrAuth()
+  })
+
+  ipcMain.handle('telegram:submit-qr-password', async (_event, { password }) => {
+    return accountManager.submitQrPassword(password)
+  })
+
   ipcMain.handle('telegram:logout-account', async (_event, { accountId }) => {
     return accountManager.logoutAccount(accountId)
   })

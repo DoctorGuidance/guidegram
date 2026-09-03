@@ -1,9 +1,10 @@
 import { TelegramClient, Api } from 'telegram'
 import { StringSession } from 'telegram/sessions/index.js'
 import { NewMessage } from 'telegram/events/index.js'
+import QRCode from 'qrcode'
 import { SessionStore } from './sessionStore'
 import { ProxyManager } from './proxyManager'
-import { AccountInfo, DialogItem, MessageItem, ForwardOptions, ProxyConfig } from './types'
+import { AccountInfo, DialogItem, MessageItem, ForwardOptions, ProxyConfig, QrTokenPayload } from './types'
 
 export interface ClientHolder {
   client: TelegramClient
@@ -11,10 +12,17 @@ export interface ClientHolder {
   info: AccountInfo
 }
 
+interface PendingQrAuth {
+  client: TelegramClient
+  proxy?: ProxyConfig
+  cancelled: boolean
+}
+
 export class AccountManager {
   private store: SessionStore
   private clients = new Map<string, ClientHolder>()
   private pendingAuthClients = new Map<string, { client: TelegramClient; phoneCodeHash: string; proxy?: ProxyConfig }>()
+  private pendingQrAuth?: PendingQrAuth
   private onEventCallback?: (event: string, payload: any) => void
 
   constructor(store: SessionStore, onEvent?: (event: string, payload: any) => void) {
@@ -187,6 +195,260 @@ export class AccountManager {
 
     this.pendingAuthClients.delete(phone)
     this.setupEventListeners(accountId, client)
+
+    return info
+  }
+
+  /**
+   * Start QR Code authentication flow
+   */
+  public async startQrAuth(proxy?: ProxyConfig): Promise<QrTokenPayload> {
+    await this.cancelQrAuth()
+
+    const config = this.store.getConfig()
+    const session = new StringSession('')
+    const gramProxy = ProxyManager.toGramJsProxy(proxy)
+
+    const client = new TelegramClient(session, config.apiId, config.apiHash, {
+      connectionRetries: 5,
+      proxy: gramProxy,
+      useWSS: false,
+    })
+
+    await client.connect()
+
+    const qrState: PendingQrAuth = {
+      client,
+      proxy,
+      cancelled: false,
+    }
+    this.pendingQrAuth = qrState
+
+    const res = await client.invoke(
+      new Api.auth.ExportLoginToken({
+        apiId: config.apiId,
+        apiHash: config.apiHash,
+        exceptIds: [],
+      })
+    )
+
+    if (!(res instanceof Api.auth.LoginToken)) {
+      throw new Error('Unexpected initial response from Telegram for QR authentication.')
+    }
+
+    const tokenStr = Buffer.from(res.token).toString('base64url')
+    const url = `tg://login?token=${tokenStr}`
+    const expires = res.expires
+    const qrDataUrl = await QRCode.toDataURL(url, {
+      width: 280,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#ffffff',
+      },
+    })
+
+    const payload: QrTokenPayload = {
+      url,
+      qrDataUrl,
+      expires,
+    }
+
+    this.onEventCallback?.('telegram:qr-token', payload)
+
+    // Run polling loop in background
+    this.runQrLoop(qrState, tokenStr).catch((err) => {
+      if (!qrState.cancelled) {
+        console.error('[AccountManager] QR loop error:', err)
+        this.onEventCallback?.('telegram:qr-error', { message: err.message || 'QR login error' })
+      }
+    })
+
+    return payload
+  }
+
+  /**
+   * Cancel active QR Code authentication
+   */
+  public async cancelQrAuth(): Promise<void> {
+    if (this.pendingQrAuth) {
+      this.pendingQrAuth.cancelled = true
+      const client = this.pendingQrAuth.client
+      this.pendingQrAuth = undefined
+      try {
+        await client.disconnect()
+      } catch (err) {
+        console.warn('[AccountManager] Disconnect error during cancelQrAuth:', err)
+      }
+    }
+  }
+
+  /**
+   * Submit 2FA password during QR login flow
+   */
+  public async submitQrPassword(password: string): Promise<AccountInfo> {
+    if (!this.pendingQrAuth || this.pendingQrAuth.cancelled) {
+      throw new Error('No active QR login session in progress.')
+    }
+
+    const { client, proxy } = this.pendingQrAuth
+    const config = this.store.getConfig()
+
+    await client.signInWithPassword(
+      {
+        apiId: config.apiId,
+        apiHash: config.apiHash,
+      },
+      {
+        password: async () => password,
+        onError: (err: any) => {
+          throw err
+        },
+      }
+    )
+
+    return this.finalizeQrLogin(client, proxy)
+  }
+
+  /**
+   * Internal loop to poll QR token status or refresh expired QR tokens
+   */
+  private async runQrLoop(qrState: PendingQrAuth, initialTokenStr: string): Promise<void> {
+    const { client, proxy } = qrState
+    const config = this.store.getConfig()
+    let lastTokenStr = initialTokenStr
+
+    let wakeUpTrigger: (() => void) | undefined
+    const updateHandler = (update: any) => {
+      if (update?.className === 'UpdateLoginToken' || update instanceof Api.UpdateLoginToken) {
+        wakeUpTrigger?.()
+      }
+    }
+    client.addEventHandler(updateHandler)
+
+    while (!qrState.cancelled) {
+      await new Promise<void>((resolve) => {
+        let timer: NodeJS.Timeout | null = null
+        const onWake = () => {
+          if (timer) clearTimeout(timer)
+          resolve()
+        }
+        wakeUpTrigger = onWake
+        timer = setTimeout(() => {
+          wakeUpTrigger = undefined
+          resolve()
+        }, 2000)
+      })
+
+      if (qrState.cancelled) break
+
+      try {
+        const res = await client.invoke(
+          new Api.auth.ExportLoginToken({
+            apiId: config.apiId,
+            apiHash: config.apiHash,
+            exceptIds: [],
+          })
+        )
+
+        if (qrState.cancelled) break
+
+        if (res instanceof Api.auth.LoginToken) {
+          const tokenStr = Buffer.from(res.token).toString('base64url')
+          if (tokenStr !== lastTokenStr) {
+            lastTokenStr = tokenStr
+            const url = `tg://login?token=${tokenStr}`
+            const expires = res.expires
+            const qrDataUrl = await QRCode.toDataURL(url, {
+              width: 280,
+              margin: 2,
+              color: {
+                dark: '#000000',
+                light: '#ffffff',
+              },
+            })
+            this.onEventCallback?.('telegram:qr-token', { url, qrDataUrl, expires })
+          }
+        } else if (res instanceof Api.auth.LoginTokenSuccess) {
+          this.onEventCallback?.('telegram:qr-scanned', {})
+          await this.finalizeQrLogin(client, proxy)
+          break
+        } else if (res instanceof Api.auth.LoginTokenMigrateTo) {
+          this.onEventCallback?.('telegram:qr-scanned', {})
+          await client._switchDC(res.dcId)
+          const migrated = await client.invoke(
+            new Api.auth.ImportLoginToken({
+              token: res.token,
+            })
+          )
+          if (migrated instanceof Api.auth.LoginTokenSuccess) {
+            await this.finalizeQrLogin(client, proxy)
+          } else {
+            throw new Error('Unexpected response during DC migration.')
+          }
+          break
+        }
+      } catch (err: any) {
+        if (qrState.cancelled) break
+
+        if (
+          err.errorMessage === 'SESSION_PASSWORD_NEEDED' ||
+          (err.message && err.message.includes('SESSION_PASSWORD_NEEDED'))
+        ) {
+          this.onEventCallback?.('telegram:qr-scanned', {})
+          let hint = ''
+          try {
+            const pwd = await client.invoke(new Api.account.GetPassword())
+            hint = pwd.hint || ''
+          } catch (e) {
+            console.warn('[AccountManager] Could not get 2FA hint:', e)
+          }
+          this.onEventCallback?.('telegram:qr-2fa', { hint })
+          break
+        }
+
+        console.warn('[AccountManager] Transient error in QR poll iteration:', err?.message || err)
+      }
+    }
+  }
+
+  /**
+   * Finalize authorized account after QR approval
+   */
+  private async finalizeQrLogin(client: TelegramClient, proxy?: ProxyConfig): Promise<AccountInfo> {
+    const config = this.store.getConfig()
+    const me: any = await client.getMe()
+    const sessionString = client.session.save() as unknown as string
+    const accountId = me.id.toString()
+    const phoneStr = me.phone ? (me.phone.startsWith('+') ? me.phone : `+${me.phone}`) : 'QR User'
+
+    const info: AccountInfo = {
+      id: accountId,
+      phone: phoneStr,
+      firstName: me.firstName || 'User',
+      lastName: me.lastName || undefined,
+      username: me.username || undefined,
+      status: 'connected',
+      unreadTotal: 0,
+      proxyConfig: proxy,
+      isPremium: me.premium || false,
+    }
+
+    this.store.saveSessionString(accountId, sessionString)
+
+    const currentAccounts = config.accounts.filter((a) => a.id !== accountId)
+    currentAccounts.push(info)
+    this.store.updateConfig({ accounts: currentAccounts })
+
+    this.clients.set(accountId, {
+      client,
+      session: client.session as any,
+      info,
+    })
+
+    this.pendingQrAuth = undefined
+    this.setupEventListeners(accountId, client)
+    this.onEventCallback?.('telegram:qr-success', { account: info })
 
     return info
   }
