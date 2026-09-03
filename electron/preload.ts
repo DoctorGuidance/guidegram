@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { ProxyConfig, ForwardOptions, AppConfig } from './telegram/types'
 
 const guidegramAPI = {
+  // Window Controls
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+  isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+
   // Accounts
   getAccounts: () => ipcRenderer.invoke('telegram:get-accounts'),
   startPhoneAuth: (phone: string, proxy?: ProxyConfig) =>

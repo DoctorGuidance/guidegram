@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import { TitleBar } from './components/TitleBar'
+import { WelcomeScreen } from './components/WelcomeScreen'
 import { AccountDock } from './components/AccountDock'
 import { ChatTabs, TabCategory } from './components/ChatTabs'
 import { ChatList } from './components/ChatList'
@@ -11,6 +13,7 @@ import { UnifiedInbox } from './components/UnifiedInbox'
 import { AccountInfo, DialogItem, MessageItem } from './types/telegram'
 
 export const App: React.FC = () => {
+  const [isLoaded, setIsLoaded] = useState(false)
   const [accounts, setAccounts] = useState<AccountInfo[]>([])
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [dialogsByAccount, setDialogsByAccount] = useState<Record<string, DialogItem[]>>({})
@@ -30,31 +33,39 @@ export const App: React.FC = () => {
 
   // Initial Data Load
   useEffect(() => {
-    // Check if running in Electron environment
-    if (window.guidegram) {
-      window.guidegram.getAccounts().then((accs) => {
-        if (accs.length > 0) {
-          setAccounts(accs)
-          setActiveAccountId(accs[0].id)
-          loadDialogsForAccount(accs[0].id)
-        } else {
-          // If no accounts yet, provide sample preview or prompt user
-          setIsAddAccountOpen(true)
+    const initApp = async () => {
+      try {
+        if (window.guidegram) {
+          const accs = await window.guidegram.getAccounts()
+          setAccounts(accs || [])
+
+          if (accs && accs.length > 0) {
+            setActiveAccountId(accs[0].id)
+            loadDialogsForAccount(accs[0].id)
+          }
+
+          const cfg = await window.guidegram.getConfig()
+          if (cfg) {
+            setGhostMode(cfg.ghostMode || false)
+          }
         }
-      })
+      } catch (err) {
+        console.error('App init error:', err)
+      } finally {
+        setIsLoaded(true)
+      }
+    }
 
-      window.guidegram.getConfig().then((cfg) => {
-        setGhostMode(cfg.ghostMode)
-      })
+    initApp()
 
-      // Realtime new-message listener
+    // Realtime new-message listener
+    if (window.guidegram?.on) {
       const unsubscribe = window.guidegram.on('telegram:new-message', (payload: any) => {
         const { accountId, chatId, message } = payload
         setMessagesByChat((prev) => ({
           ...prev,
           [chatId]: [...(prev[chatId] || []), message],
         }))
-        // Increment unread count if not active
         if (chatId !== activeChatId) {
           setDialogsByAccount((prev) => {
             const list = prev[accountId] || []
@@ -75,7 +86,7 @@ export const App: React.FC = () => {
   }, [])
 
   const loadDialogsForAccount = async (accountId: string) => {
-    if (!window.guidegram) return
+    if (!window.guidegram?.getDialogs) return
     try {
       const dialogs = await window.guidegram.getDialogs(accountId)
       setDialogsByAccount((prev) => ({ ...prev, [accountId]: dialogs }))
@@ -89,7 +100,7 @@ export const App: React.FC = () => {
   }
 
   const loadMessages = async (accountId: string, chatId: string) => {
-    if (!window.guidegram) return
+    if (!window.guidegram?.getMessages) return
     try {
       const msgs = await window.guidegram.getMessages(accountId, chatId, 40)
       setMessagesByChat((prev) => ({ ...prev, [chatId]: msgs }))
@@ -178,34 +189,67 @@ export const App: React.FC = () => {
     unread: currentDialogs.filter((d) => d.unreadCount > 0).length,
   }
 
-  return (
-    <div className="flex h-screen w-screen overflow-hidden bg-dark-950 font-sans">
-      {/* 1. Vertical Multi-Account Dock (Supports 100+ accounts) */}
-      <AccountDock
-        accounts={accounts}
-        activeAccountId={activeAccountId}
-        isUnifiedInboxOpen={isUnifiedInboxOpen}
-        onSelectAccount={handleSelectAccount}
-        onOpenAddAccount={() => setIsAddAccountOpen(true)}
-        onToggleUnifiedInbox={() => setIsUnifiedInboxOpen(!isUnifiedInboxOpen)}
-        onOpenProxyModal={() => setIsProxyModalOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-      />
+  // Smooth Loading Splash
+  if (!isLoaded) {
+    return (
+      <div className="h-screen w-screen bg-dark-950 flex flex-col items-center justify-center text-white select-none">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary-600 to-accent-cyan flex items-center justify-center shadow-glow mb-4 animate-pulse">
+          <span className="text-2xl font-black">G</span>
+        </div>
+        <div className="text-xs font-semibold text-gray-400">Loading Guidegram...</div>
+      </div>
+    )
+  }
 
-      {/* 2. Main Interface: Either Unified Inbox OR Active Account View */}
-      {isUnifiedInboxOpen ? (
-        <UnifiedInbox
-          accounts={accounts}
-          allDialogs={dialogsByAccount}
-          onSelectAccountAndChat={(accId, chatId) => {
-            setActiveAccountId(accId)
-            setIsUnifiedInboxOpen(false)
-            setActiveChatId(chatId)
-            loadMessages(accId, chatId)
-          }}
+  return (
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-dark-950 font-sans">
+      {/* 1. Integrated Custom TitleBar (No Windows DWM black screen bugs) */}
+      <TitleBar activeAccount={currentAccount} ghostMode={ghostMode} />
+
+      {/* 2. Main Content: Welcome Screen (when no accounts) OR Active Multi-Account Workspace */}
+      {accounts.length === 0 ? (
+        <WelcomeScreen
+          onOpenAddAccount={() => setIsAddAccountOpen(true)}
+          onOpenProxyModal={() => setIsProxyModalOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
+      ) : isUnifiedInboxOpen ? (
+        <div className="flex flex-1 overflow-hidden">
+          <AccountDock
+            accounts={accounts}
+            activeAccountId={activeAccountId}
+            isUnifiedInboxOpen={isUnifiedInboxOpen}
+            onSelectAccount={handleSelectAccount}
+            onOpenAddAccount={() => setIsAddAccountOpen(true)}
+            onToggleUnifiedInbox={() => setIsUnifiedInboxOpen(!isUnifiedInboxOpen)}
+            onOpenProxyModal={() => setIsProxyModalOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+          />
+          <UnifiedInbox
+            accounts={accounts}
+            allDialogs={dialogsByAccount}
+            onSelectAccountAndChat={(accId, chatId) => {
+              setActiveAccountId(accId)
+              setIsUnifiedInboxOpen(false)
+              setActiveChatId(chatId)
+              loadMessages(accId, chatId)
+            }}
+          />
+        </div>
       ) : (
-        <div className="flex flex-1 h-full overflow-hidden">
+        <div className="flex flex-1 overflow-hidden">
+          {/* Vertical Multi-Account Dock */}
+          <AccountDock
+            accounts={accounts}
+            activeAccountId={activeAccountId}
+            isUnifiedInboxOpen={isUnifiedInboxOpen}
+            onSelectAccount={handleSelectAccount}
+            onOpenAddAccount={() => setIsAddAccountOpen(true)}
+            onToggleUnifiedInbox={() => setIsUnifiedInboxOpen(!isUnifiedInboxOpen)}
+            onOpenProxyModal={() => setIsProxyModalOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+          />
+
           {/* Chat List Column with Telegraph Tabs */}
           <div className="flex flex-col border-r border-white/5 h-full">
             <ChatTabs

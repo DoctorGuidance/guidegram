@@ -22,19 +22,14 @@ let accountManager: AccountManager
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: '#0D0F14',
+    width: 1260,
+    height: 840,
+    minWidth: 960,
+    minHeight: 640,
+    show: false, // Prevents blank/black flash during startup
+    backgroundColor: '#08090C',
     title: 'Guidegram',
-    frame: true,
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#0D0F14',
-      symbolColor: '#9CA3AF',
-      height: 38,
-    },
+    frame: false, // 100% stable frameless window with custom titlebar
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       sandbox: false,
@@ -43,10 +38,13 @@ function createWindow() {
     },
   })
 
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
+  })
+
   // In development, load from Vite dev server; in production, load the built HTML
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
-    // mainWindow.webContents.openDevTools()
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
@@ -64,13 +62,13 @@ app.whenReady().then(async () => {
     }
   })
 
-  // Initialize saved accounts in the background
-  accountManager.initialize().catch((err) => {
-    console.error('[Main] Error initializing accounts:', err)
-  })
-
   setupIpcHandlers()
   createWindow()
+
+  // Non-blocking initialization in the background
+  accountManager.initialize().catch((err) => {
+    console.error('[Main] Background account init warning:', err)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -84,6 +82,31 @@ app.on('window-all-closed', () => {
 })
 
 function setupIpcHandlers() {
+  // Window Controls
+  ipcMain.handle('window:minimize', () => {
+    mainWindow?.minimize()
+  })
+
+  ipcMain.handle('window:maximize', () => {
+    if (!mainWindow) return false
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize()
+      return false
+    } else {
+      mainWindow.maximize()
+      return true
+    }
+  })
+
+  ipcMain.handle('window:close', () => {
+    mainWindow?.close()
+  })
+
+  ipcMain.handle('window:is-maximized', () => {
+    return mainWindow?.isMaximized() || false
+  })
+
+  // Telegram Accounts
   ipcMain.handle('telegram:get-accounts', async () => {
     return accountManager.getAccounts()
   })
