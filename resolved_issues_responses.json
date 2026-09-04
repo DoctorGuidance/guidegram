@@ -1,0 +1,58 @@
+[
+  {
+    "id": "GG-001",
+    "issue_title": "Telegram Web / Desktop Custom Emoji, Reactions & Media fail to render",
+    "category": "Rich Media & Engine",
+    "status": "fixed",
+    "fix_summary": "Added MTProto lazy media fetching via client.downloadMedia/downloadProfilePhoto, local disk caching in ./data/media and ./data/avatars, reaction pills with live count, and transparent sticker rendering without message bubble artifacts.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe have addressed this issue directly in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### What was improved:\n- **Media & Avatar Engine**: Photos, video previews, documents, and profile avatars are cached locally into ./data/ without UI stuttering.\n- **Reaction & Stickers**: Full support for Telegram reaction pills with counters, transparent sticker display without ugly background bubble rectangles, and an interactive waveform audio player.\n\nFeel free to test it out via our [latest release](https://github.com/DoctorGuidance/guidegram/releases)!"
+  },
+  {
+    "id": "GG-002",
+    "issue_title": "Persian and Arabic RTL text alignment and bi-directional punctuation wrapping",
+    "category": "Typography & BiDi",
+    "status": "fixed",
+    "fix_summary": "Integrated BiDi character detection regex combined with per-paragraph isolation, ensuring punctuation marks, quotes, and inline links stay strictly on their correct side.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nThis Persian/Arabic RTL text formatting defect is resolved in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Solution details:\n- **Isolated BiDi Typography**: Uses unicode-bidi: isolate and per-line Arabic/Persian range evaluation.\n- Inline glass buttons, replies, and quoted messages dynamically adjust their layout flow (dir=rtl) so numbers, dots, and brackets no longer jump to the wrong side.\n\nYou can grab the portable build from the [releases page](https://github.com/DoctorGuidance/guidegram/releases)."
+  },
+  {
+    "id": "GG-003",
+    "issue_title": "Desktop client closes completely instead of minimizing to background / system tray",
+    "category": "Lifecycle & UX",
+    "status": "fixed",
+    "fix_summary": "Added CloseConfirmModal prompting user on first exit to choose between Minimize to Background and Quit Completely with a persistent Remember choice setting, backed by a Windows System Tray integration.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nWe implemented this exact lifecycle behavior in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Highlights:\n- When clicking the close button, a modern modal prompts you whether to **Minimize to Background** (to keep Telegram MTProto sessions alive and receive real-time notifications) or **Quit Completely**.\n- Includes a **Remember my choice** checkbox, fully reconfigurable in **Preferences > Window & Lifecycle Behavior**.\n- Features a persistent **Windows System Tray** icon for one-click restore and background management.\n\nCheck out the repo here: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-004",
+    "issue_title": "Automatic background updates for portable clients without data loss",
+    "category": "Updater & Mobility",
+    "status": "fixed",
+    "fix_summary": "Implemented UpdateManager checking GitHub Releases every 1 hour (with SOCKS5/HTTP proxy support), presenting a non-intrusive corner notification banner, and running an isolated PowerShell updater script preserving ./data/.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nThis update mechanism is now live in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### How it works:\n- A lightweight background service queries GitHub Releases once every hour.\n- It routes through your active proxy configuration if enabled, bypassing regional network blocks.\n- Applying the update replaces only the application binaries while strictly protecting your ./data/ folder (sessions, proxies, avatars, and configs remain 100% intact).\n\nExplore the project on [GitHub](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-005",
+    "issue_title": "Multi-account Telegram login with QR code scanner missing or failing",
+    "category": "Authentication",
+    "status": "fixed",
+    "fix_summary": "Engineered pure MTProto ExportLoginToken and ImportLoginToken with 30s auto-refreshing QR canvas and smooth 2FA password fallback.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe implemented native Telegram QR code login in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Features:\n- Open Telegram on your phone (Settings > Devices > Link Desktop Device) and scan the QR code to log in instantly.\n- Automatically migrates Datacenters (DCs) and prompts for 2FA password if enabled on your account.\n- No 3-account limit—run 10+ accounts concurrently with isolated sessions.\n\nGet the portable executable at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "AM-3368",
+    "issue_title": "Missing Session & Multi-Account Management (Issue #3368)",
+    "category": "Session Management",
+    "status": "fixed",
+    "fix_summary": "Built multi-tenant SessionStore and AccountDock permitting unlimited simultaneous accounts, individual proxy binding, isolated local directories, and instant zero-reload switching.",
+    "response_markdown": "### Status: Resolved via Portable Multi-Session Architecture\n\nHi @author,\n\nIf you are seeking robust, isolated multi-session management without cross-account contamination, take a look at our architecture in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### How we designed session management:\n- **Isolated Session Files**: Each profile/session maintains its own secure, independent storage (./data/sessions/).\n- **Zero-Flicker Multi-Account Dock**: Switch between accounts instantly without reloading the client process.\n- **Independent Proxies**: Every session can optionally route through its own dedicated SOCKS5 or HTTP proxy.\n\nSource code and documentation: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "AM-3377",
+    "issue_title": "Region Blocked / Geo-restriction Network Errors (Issue #3377)",
+    "category": "Networking & Proxy",
+    "status": "fixed",
+    "fix_summary": "Created an embedded ProxyManager supporting SOCKS5, HTTP, and MTProto proxies with an in-app ping latency test and per-session proxy binding.",
+    "response_markdown": "### Status: Resolved via Integrated Multi-Proxy Routing\n\nHello @author,\n\nRegional network restrictions and connection drops are handled seamlessly in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Solution:\n- **Built-in Proxy Engine**: Configure SOCKS5, HTTP, or custom proxy nodes directly in the app.\n- **Real-Time Latency Meter**: Test connection ping (ms) before connecting to ensure high-speed data flow.\n- **Per-Account Routing**: Assign dedicated proxies per account so restricted endpoints are automatically bypassed.\n\nCheck out the implementation here: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  }
+]
