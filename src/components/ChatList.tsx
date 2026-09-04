@@ -2,6 +2,8 @@ import React from 'react'
 import { Search, Pin, ShieldCheck } from 'lucide-react'
 import { DialogItem, AccountInfo } from '../types/telegram'
 import { TabCategory } from './ChatTabs'
+import { Avatar } from './Avatar'
+import { isRTL } from '../utils/textUtils'
 
 interface ChatListProps {
   account: AccountInfo | null
@@ -58,14 +60,19 @@ export const ChatList: React.FC<ChatListProps> = ({
   }
 
   return (
-    <div className="w-80 bg-dark-850 border-r border-white/5 flex flex-col h-full select-none titlebar-no-drag">
+    <div className="w-full flex-1 min-h-0 bg-dark-850 flex flex-col select-none titlebar-no-drag">
       {/* Account Info Bar */}
       {account && (
-        <div className="px-4 py-3 bg-dark-900/60 border-b border-white/5 flex items-center justify-between">
+        <div className="px-3.5 py-2.5 bg-dark-900/60 border-b border-white/5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-xl bg-primary-600/30 text-primary-400 font-bold text-xs flex items-center justify-center border border-primary-500/20">
-              {(account.firstName || 'U').charAt(0)}
-            </div>
+            <Avatar
+              accountId={account.id}
+              peerId={account.id}
+              title={account.firstName || 'User'}
+              initials={(account.firstName || 'U').charAt(0)}
+              avatarUrl={account.avatarUrl}
+              size="sm"
+            />
             <div className="truncate">
               <div className="text-xs font-bold text-gray-200 truncate">
                 {account.firstName || 'User'} {account.lastName || ''}
@@ -77,7 +84,7 @@ export const ChatList: React.FC<ChatListProps> = ({
           {account.proxyConfig?.enabled && (
             <div
               title={`Protected by ${account.proxyConfig.type.toUpperCase()} Proxy`}
-              className="flex items-center gap-1 bg-accent-cyan/10 text-accent-cyan px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-accent-cyan/20"
+              className="flex items-center gap-1 bg-accent-cyan/10 text-accent-cyan px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-accent-cyan/20 shrink-0"
             >
               <ShieldCheck className="w-3 h-3" />
               <span>Proxy</span>
@@ -87,7 +94,7 @@ export const ChatList: React.FC<ChatListProps> = ({
       )}
 
       {/* Search Input */}
-      <div className="p-3">
+      <div className="p-2.5 shrink-0">
         <div className="relative">
           <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -101,7 +108,7 @@ export const ChatList: React.FC<ChatListProps> = ({
       </div>
 
       {/* Dialogs List */}
-      <div className="flex-1 overflow-y-auto px-2 space-y-1">
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
         {filteredDialogs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-gray-500 text-xs gap-2">
             <div>No chats found</div>
@@ -109,6 +116,8 @@ export const ChatList: React.FC<ChatListProps> = ({
         ) : (
           filteredDialogs.map((dialog) => {
             const isSelected = dialog.id === activeChatId
+            const titleRtl = isRTL(dialog.title)
+            const textRtl = isRTL(dialog.lastMessageText)
 
             return (
               <div
@@ -120,25 +129,25 @@ export const ChatList: React.FC<ChatListProps> = ({
                     : 'hover:bg-dark-800/70 text-gray-300'
                 }`}
               >
-                {/* Avatar */}
-                <div
-                  className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                    isSelected
-                      ? 'bg-white/20 text-white'
-                      : 'bg-dark-750 text-gray-300 border border-white/5'
-                  }`}
-                >
-                  {dialog.avatarInitials}
-                </div>
+                {/* Real Avatar */}
+                <Avatar
+                  accountId={dialog.accountId}
+                  peerId={dialog.id}
+                  title={dialog.title}
+                  initials={dialog.avatarInitials}
+                  avatarUrl={dialog.avatarUrl}
+                  size="md"
+                />
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
                     <div className="flex items-center gap-1.5 truncate">
                       <span
+                        dir={titleRtl ? 'rtl' : 'ltr'}
                         className={`text-xs font-semibold truncate ${
                           isSelected ? 'text-white' : 'text-gray-200'
-                        }`}
+                        } ${titleRtl ? 'text-right' : 'text-left'}`}
                       >
                         {dialog.title}
                       </span>
@@ -171,9 +180,10 @@ export const ChatList: React.FC<ChatListProps> = ({
 
                   <div className="flex items-center justify-between">
                     <div
+                      dir={textRtl ? 'rtl' : 'ltr'}
                       className={`text-xs truncate ${
                         isSelected ? 'text-primary-100' : 'text-gray-400'
-                      }`}
+                      } ${textRtl ? 'text-right' : 'text-left'}`}
                     >
                       {dialog.lastMessageText || 'No messages'}
                     </div>

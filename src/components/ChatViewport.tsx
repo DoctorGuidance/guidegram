@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Send,
   Forward,
@@ -11,9 +11,25 @@ import {
   Bookmark,
   Trash2,
   ExternalLink,
-  Code,
+  Info,
+  X,
+  Radio,
+  Users,
+  Bot,
+  User,
+  Volume2,
+  VolumeX,
+  Play,
+  FileText,
+  Music,
+  Download,
+  Maximize2,
+  ChevronRight,
+  CornerUpLeft,
 } from 'lucide-react'
-import { DialogItem, MessageItem } from '../types/telegram'
+import { DialogItem, MessageItem, ChatDetails, MessageEntityItem } from '../types/telegram'
+import { Avatar } from './Avatar'
+import { isRTL, formatFileSize, formatDuration, formatNumber } from '../utils/textUtils'
 
 interface ChatViewportProps {
   chat: DialogItem | null
@@ -59,12 +75,31 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const [hoveredMessage, setHoveredMessage] = useState<MessageItem | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
+  // Media cache in component state (messageId -> dataUrl)
+  const [downloadedMedia, setDownloadedMedia] = useState<Record<number, string>>({})
+  const [loadingMediaIds, setLoadingMediaIds] = useState<Record<number, boolean>>({})
+
+  // Fullscreen image lightbox
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
+  // Channel / User Info Drawer
+  const [isInfoOpen, setIsInfoOpen] = useState(false)
+  const [chatDetails, setChatDetails] = useState<ChatDetails | null>(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Reset drawer state when active chat changes
+  useEffect(() => {
+    setIsInfoOpen(false)
+    setChatDetails(null)
+  }, [chat?.id])
 
   const showToast = (msg: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
@@ -74,10 +109,77 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     }, 2200)
   }
 
-  // 64Gram Keyboard Shortcuts: Alt+F (Fast Forward) and Alt+C (Copy message text)
+  // Load chat details when drawer opens
+  const handleOpenInfo = async () => {
+    if (!chat) return
+    setIsInfoOpen(true)
+    setIsLoadingDetails(true)
+    try {
+      if (window.guidegram?.getChatDetails) {
+        const details = await window.guidegram.getChatDetails(chat.accountId, chat.id)
+        setChatDetails(details)
+      }
+    } catch (err) {
+      console.warn('Failed to fetch chat details:', err)
+    } finally {
+      setIsLoadingDetails(false)
+    }
+  }
+
+  // Toggle notifications (Mute / Unmute)
+  const handleToggleNotifications = async () => {
+    if (!chat || !window.guidegram?.toggleChatNotifications) return
+    const nextMuted = !isMuted
+    const ok = await window.guidegram.toggleChatNotifications(chat.accountId, chat.id, nextMuted)
+    if (ok) {
+      setIsMuted(nextMuted)
+      showToast(nextMuted ? 'Notifications muted' : 'Notifications unmuted')
+    }
+  }
+
+  // Lazy download media (photo thumbnail or full media)
+  const requestMediaDownload = useCallback(
+    async (msg: MessageItem, thumb = true) => {
+      if (
+        downloadedMedia[msg.id] ||
+        loadingMediaIds[msg.id] ||
+        !window.guidegram?.downloadMedia
+      ) {
+        return
+      }
+
+      setLoadingMediaIds((prev) => ({ ...prev, [msg.id]: true }))
+      try {
+        const dataUrl = await window.guidegram.downloadMedia(
+          msg.accountId,
+          msg.chatId,
+          msg.id,
+          thumb
+        )
+        if (dataUrl) {
+          setDownloadedMedia((prev) => ({ ...prev, [msg.id]: dataUrl }))
+        }
+      } catch (err) {
+        console.warn('Failed to download media for message', msg.id, err)
+      } finally {
+        setLoadingMediaIds((prev) => ({ ...prev, [msg.id]: false }))
+      }
+    },
+    [downloadedMedia, loadingMediaIds]
+  )
+
+  // 64Gram Keyboard Shortcuts: Alt+F and Alt+C
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (lightboxUrl) {
+          setLightboxUrl(null)
+          return
+        }
+        if (isInfoOpen) {
+          setIsInfoOpen(false)
+          return
+        }
         setSelectedMessage(null)
         return
       }
@@ -95,7 +197,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         e.preventDefault()
         onOpenDirectForward(target)
       } else if (e.altKey && (e.key === 'c' || e.key === 'C')) {
-        // If user is selecting text in an input field, do not hijack Alt+C
         if (isInputFocused && window.getSelection()?.toString()) return
 
         const target =
@@ -123,7 +224,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedMessage, hoveredMessage, messages, onOpenDirectForward])
+  }, [selectedMessage, hoveredMessage, messages, onOpenDirectForward, lightboxUrl, isInfoOpen])
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
@@ -140,7 +241,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     setTimeout(() => setCopiedChatId(false), 2000)
   }
 
-  // 64Gram Feature: Format Message Timestamps with Seconds (HH:mm:ss)
   const formatMessageTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString([], {
       hour: '2-digit',
@@ -150,93 +250,133 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     })
   }
 
-  // 64Gram Feature: Clickable Mentions (@user), Deep links (tg://...), and URLs with punctuation stripping
-  const renderMessageContent = (text: string) => {
-    const tokenRegex = /(https?:\/\/[^\s]+|tg:\/\/[^\s]+|@[a-zA-Z0-9_]{3,32})/g
-    const parts = text.split(tokenRegex)
+  // Scroll to replied message and highlight it
+  const handleScrollToReply = (replyId: number) => {
+    const el = document.getElementById(`msg-${replyId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('reply-highlight')
+      setTimeout(() => el.classList.remove('reply-highlight'), 1800)
+    } else {
+      showToast(`Original message #${replyId} not in loaded history`)
+    }
+  }
 
-    return parts.map((part, index) => {
-      if (!part) return null
+  /**
+   * Rich text renderer supporting:
+   * 1. Telegram DC Entities (bold, italic, code, pre, text_url, etc.)
+   * 2. Raw Markdown syntax (**bold**, __italic__, `code`, ```code blocks```, [links](url))
+   * 3. Clickable URLs, tg:// deep links, t.me links, @mentions
+   * 4. BiDi / RTL text direction
+   */
+  const renderFormattedText = (text: string, entities?: MessageEntityItem[]) => {
+    if (!text) return null
 
-      // Strip trailing punctuation from URLs and deep links (e.g. '.', ',', ')', '>', '!')
-      let cleanPart = part
-      let trailingPunct = ''
-      if (
-        cleanPart.startsWith('http://') ||
-        cleanPart.startsWith('https://') ||
-        cleanPart.startsWith('tg://')
-      ) {
-        const match = cleanPart.match(/([.,!?;:)>\]]+)$/)
-        if (match) {
-          trailingPunct = match[1]
-          cleanPart = cleanPart.slice(0, -trailingPunct.length)
-        }
-      }
+    // Helper to render inline tokens (links, mentions, code, bold, italic)
+    const renderInlineTokens = (str: string, keyPrefix: string) => {
+      // Token regex for URLs, Telegram links, mentions, markdown bold/italic/code
+      const tokenRegex =
+        /(```[\s\S]*?```|`[^`\n]+`|\*\*[^*]+\*\*|__[^_]+__|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s]+|tg:\/\/[^\s]+|\bt\.me\/[a-zA-Z0-9_]+(?:\/[0-9]+)?|@[a-zA-Z0-9_]{3,32})/g
 
-      // 1. Telegram Deep Links (tg://...)
-      if (cleanPart.startsWith('tg://')) {
-        let targetDestination: string | null = null
-        try {
-          const parsedUrl = new URL(cleanPart)
-          if (parsedUrl.protocol === 'tg:') {
-            if (parsedUrl.pathname === '//user' || parsedUrl.hostname === 'user') {
-              targetDestination = parsedUrl.searchParams.get('id')
-            } else if (
-              parsedUrl.pathname === '//openmessage' ||
-              parsedUrl.hostname === 'openmessage'
-            ) {
-              targetDestination =
-                parsedUrl.searchParams.get('chat_id') || parsedUrl.searchParams.get('user_id')
-            } else if (parsedUrl.pathname === '//resolve' || parsedUrl.hostname === 'resolve') {
-              targetDestination = parsedUrl.searchParams.get('domain')
-            }
-          }
-        } catch (_) {
-          const userMatch = cleanPart.match(/tg:\/\/user\?id=([0-9-]+)/)
-          if (userMatch) targetDestination = userMatch[1]
-          const openMsgMatch = cleanPart.match(/tg:\/\/openmessage\?(?:chat_id|user_id)=([0-9-]+)/)
-          if (openMsgMatch) targetDestination = openMsgMatch[1]
-          const resolveMatch = cleanPart.match(/tg:\/\/resolve\?domain=([a-zA-Z0-9_]+)/)
-          if (resolveMatch) targetDestination = resolveMatch[1]
-        }
+      const parts = str.split(tokenRegex)
 
-        return (
-          <React.Fragment key={index}>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                if (targetDestination) {
-                  onSelectUserOrChat?.(targetDestination)
-                } else {
-                  window.guidegram?.openExternal?.(cleanPart)
-                }
-              }}
-              className="text-primary-300 font-mono hover:underline inline-flex items-center gap-0.5 cursor-pointer bg-white/5 px-1 rounded"
-              title={`Telegram Deep Link: ${cleanPart}`}
-            >
-              {cleanPart}
-            </button>
-            {trailingPunct}
-          </React.Fragment>
-        )
-      }
+      return parts.map((part, index) => {
+        if (!part) return null
+        const partKey = `${keyPrefix}-${index}`
 
-      // 2. Standard Web URLs (http:// or https://)
-      if (cleanPart.startsWith('http://') || cleanPart.startsWith('https://')) {
-        const tMeMatch = cleanPart.match(/^https?:\/\/t\.me\/([a-zA-Z0-9_]{3,32})$/)
-        if (tMeMatch) {
-          const username = tMeMatch[1]
+        // Code block: ```lang\ncode\n```
+        if (part.startsWith('```') && part.endsWith('```')) {
+          const content = part.slice(3, -3).replace(/^\n/, '')
           return (
-            <React.Fragment key={index}>
+            <pre
+              key={partKey}
+              className="my-1.5 p-3 rounded-xl bg-black/50 text-accent-cyan font-mono text-xs overflow-x-auto border border-white/10 select-text"
+              dir="ltr"
+            >
+              <code>{content}</code>
+            </pre>
+          )
+        }
+
+        // Inline code: `code`
+        if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+          return (
+            <code
+              key={partKey}
+              className="px-1.5 py-0.5 rounded-md bg-black/40 text-accent-cyan font-mono text-[11px] border border-white/10"
+              dir="ltr"
+            >
+              {part.slice(1, -1)}
+            </code>
+          )
+        }
+
+        // Bold: **text**
+        if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+          return (
+            <strong key={partKey} className="font-bold text-white">
+              {part.slice(2, -2)}
+            </strong>
+          )
+        }
+
+        // Italic: __text__
+        if (part.startsWith('__') && part.endsWith('__') && part.length > 4) {
+          return (
+            <em key={partKey} className="italic text-gray-200">
+              {part.slice(2, -2)}
+            </em>
+          )
+        }
+
+        // Markdown Link: [Title](url)
+        const mdLinkMatch = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/)
+        if (mdLinkMatch) {
+          const [, title, url] = mdLinkMatch
+          return (
+            <a
+              key={partKey}
+              href={url}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                window.guidegram?.openExternal?.(url)
+              }}
+              className="text-accent-cyan underline hover:text-cyan-300 transition-colors font-medium cursor-pointer"
+              title={`Open ${url}`}
+            >
+              {title}
+            </a>
+          )
+        }
+
+        // Strip trailing punctuation from standalone URLs
+        let cleanPart = part
+        let trailingPunct = ''
+        if (
+          cleanPart.startsWith('http://') ||
+          cleanPart.startsWith('https://') ||
+          cleanPart.startsWith('tg://')
+        ) {
+          const match = cleanPart.match(/([.,!?;:)>\]]+)$/)
+          if (match) {
+            trailingPunct = match[1]
+            cleanPart = cleanPart.slice(0, -trailingPunct.length)
+          }
+        }
+
+        // Telegram Deep Link (tg://...)
+        if (cleanPart.startsWith('tg://')) {
+          return (
+            <React.Fragment key={partKey}>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  onSelectUserOrChat?.(username)
+                  window.guidegram?.openExternal?.(cleanPart)
                 }}
-                className="text-accent-cyan underline hover:text-cyan-300 transition-colors inline cursor-pointer font-medium"
-                title={`Open Telegram profile: @${username}`}
+                className="text-primary-300 font-mono hover:underline inline-flex items-center gap-0.5 cursor-pointer bg-white/5 px-1 rounded"
+                title={`Telegram Deep Link: ${cleanPart}`}
               >
                 {cleanPart}
               </button>
@@ -245,88 +385,332 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        return (
-          <React.Fragment key={index}>
-            <a
-              href={cleanPart}
+        // Telegram t.me link (e.g. t.me/username or https://t.me/username)
+        const tMeMatch = cleanPart.match(/^(?:https?:\/\/)?t\.me\/([a-zA-Z0-9_]{3,32})(?:\/([0-9]+))?$/)
+        if (tMeMatch) {
+          const username = tMeMatch[1]
+          const targetMsgId = tMeMatch[2]
+          return (
+            <React.Fragment key={partKey}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (onSelectUserOrChat) {
+                    onSelectUserOrChat(username)
+                  } else {
+                    window.guidegram?.openExternal?.(cleanPart.startsWith('http') ? cleanPart : `https://${cleanPart}`)
+                  }
+                }}
+                className="text-accent-cyan underline hover:text-cyan-300 transition-colors font-medium inline cursor-pointer"
+                title={`Open @${username}${targetMsgId ? ` message #${targetMsgId}` : ''}`}
+              >
+                {cleanPart}
+              </button>
+              {trailingPunct}
+            </React.Fragment>
+          )
+        }
+
+        // Standard Web URL
+        if (cleanPart.startsWith('http://') || cleanPart.startsWith('https://')) {
+          return (
+            <React.Fragment key={partKey}>
+              <a
+                href={cleanPart}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  window.guidegram?.openExternal?.(cleanPart)
+                }}
+                className="text-accent-cyan underline hover:text-cyan-300 transition-colors break-all inline cursor-pointer"
+                title={`Open ${cleanPart}`}
+              >
+                {cleanPart}
+              </a>
+              {trailingPunct}
+            </React.Fragment>
+          )
+        }
+
+        // User Mentions (@username)
+        if (cleanPart.startsWith('@')) {
+          const username = cleanPart.slice(1)
+          return (
+            <button
+              key={partKey}
+              type="button"
               onClick={(e) => {
-                e.preventDefault()
                 e.stopPropagation()
-                window.guidegram?.openExternal?.(cleanPart)
+                if (onSelectUserOrChat) {
+                  onSelectUserOrChat(username)
+                } else {
+                  window.guidegram?.openExternal?.(`https://t.me/${username}`)
+                }
               }}
-              className="text-accent-cyan underline hover:text-cyan-300 transition-colors break-all inline cursor-pointer"
-              title={`Open ${cleanPart}`}
+              className="text-accent-cyan font-semibold hover:underline inline cursor-pointer"
+              title={`Open @${username}`}
             >
               {cleanPart}
-            </a>
-            {trailingPunct}
-          </React.Fragment>
-        )
+            </button>
+          )
+        }
+
+        return <span key={partKey}>{part}</span>
+      })
+    }
+
+    // Split paragraphs to handle BiDi per block
+    const paragraphs = text.split('\n')
+    return (
+      <div className="space-y-1">
+        {paragraphs.map((para, pIdx) => {
+          if (!para) return <div key={pIdx} className="h-2" />
+          const paraIsRtl = isRTL(para)
+
+          return (
+            <div
+              key={pIdx}
+              dir={paraIsRtl ? 'rtl' : 'ltr'}
+              className={`leading-relaxed break-words ${
+                paraIsRtl ? 'text-right font-sans' : 'text-left font-sans'
+              }`}
+            >
+              {renderInlineTokens(para, `p-${pIdx}`)}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Render media cards (Photo, Video, Document, Voice, Web Preview)
+  const renderMediaCard = (msg: MessageItem) => {
+    const mediaUrl = downloadedMedia[msg.id] || msg.mediaUrl
+
+    // 1. Photo Card
+    if (msg.mediaType === 'photo') {
+      // Trigger lazy download if not present
+      if (!mediaUrl) {
+        requestMediaDownload(msg, false)
       }
 
-      // 3. User Mentions (@username)
-      if (cleanPart.startsWith('@')) {
-        const username = cleanPart.slice(1)
-        return (
-          <button
-            key={index}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onSelectUserOrChat?.(username)
-            }}
-            className="text-accent-cyan font-semibold hover:underline inline cursor-pointer"
-            title={`User profile: @${username}`}
-          >
-            {cleanPart}
-          </button>
-        )
-      }
+      return (
+        <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-900/50">
+          {mediaUrl ? (
+            <div className="relative group cursor-pointer" onClick={() => setLightboxUrl(mediaUrl)}>
+              <img
+                src={mediaUrl}
+                alt="Telegram Photo"
+                className="w-full max-h-80 object-cover rounded-2xl transition-transform duration-200 group-hover:scale-[1.01]"
+              />
+              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl">
+                <span className="p-2 bg-dark-900/80 rounded-xl text-white shadow-md">
+                  <Maximize2 className="w-4 h-4" />
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div
+              onClick={() => requestMediaDownload(msg, false)}
+              className="w-72 h-48 bg-dark-850 flex flex-col items-center justify-center text-gray-400 gap-2 cursor-pointer hover:bg-dark-800 transition-colors"
+            >
+              {loadingMediaIds[msg.id] ? (
+                <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Download className="w-6 h-6 text-primary-400" />
+              )}
+              <span className="text-[11px] font-medium">
+                {loadingMediaIds[msg.id] ? 'Loading image...' : 'Click to load image'}
+              </span>
+            </div>
+          )}
+        </div>
+      )
+    }
 
-      return <span key={index}>{part}</span>
-    })
+    // 2. Video Card
+    if (msg.mediaType === 'video') {
+      return (
+        <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-850/80 p-3">
+          <div className="flex items-center gap-3">
+            <div
+              onClick={() => requestMediaDownload(msg, false)}
+              className="w-12 h-12 rounded-xl bg-primary-600/30 text-primary-400 flex items-center justify-center cursor-pointer hover:bg-primary-600 hover:text-white transition-all shadow-sm shrink-0"
+              title="Play / Download Video"
+            >
+              <Play className="w-5 h-5 fill-current ml-0.5" />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-gray-200 truncate">
+                {msg.mediaFileName || 'Video Message'}
+              </div>
+              <div className="text-[10px] text-gray-400 flex items-center gap-2 mt-0.5">
+                {msg.mediaDuration && <span>{formatDuration(msg.mediaDuration)}</span>}
+                {msg.mediaFileSize && <span>• {formatFileSize(msg.mediaFileSize)}</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // 3. Document / File Card
+    if (msg.mediaType === 'document') {
+      return (
+        <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-850/80 p-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-accent-cyan/20 text-accent-cyan flex items-center justify-center shrink-0">
+              <FileText className="w-5 h-5" />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-gray-200 truncate">
+                {msg.mediaFileName || 'Attached File'}
+              </div>
+              <div className="text-[10px] text-gray-400">
+                {formatFileSize(msg.mediaFileSize)}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => requestMediaDownload(msg, false)}
+              title="Download File"
+              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    // 4. Voice / Audio Card
+    if (msg.mediaType === 'voice') {
+      return (
+        <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-850/80 p-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-accent-emerald/20 text-accent-emerald flex items-center justify-center shrink-0">
+              <Music className="w-5 h-5" />
+            </div>
+
+            <div className="flex-1">
+              <div className="flex items-center gap-1 h-5">
+                {[40, 70, 30, 90, 60, 45, 80, 55, 35, 65, 85, 40].map((h, i) => (
+                  <div
+                    key={i}
+                    style={{ height: `${h}%` }}
+                    className="w-1 bg-white/20 rounded-full"
+                  />
+                ))}
+              </div>
+              <div className="text-[10px] text-gray-400 mt-1">
+                Voice Message • {formatDuration(msg.mediaDuration || 0)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // 5. Web Page Preview Card
+    if (msg.webPage) {
+      const wp = msg.webPage
+      return (
+        <div
+          onClick={(e) => {
+            e.stopPropagation()
+            if (wp.url) window.guidegram?.openExternal?.(wp.url)
+          }}
+          className="mt-2 p-3 rounded-2xl bg-black/30 border-l-2 border-primary-500 hover:bg-black/45 transition-colors cursor-pointer text-left"
+          dir={isRTL(wp.title || wp.description) ? 'rtl' : 'ltr'}
+        >
+          {wp.siteName && (
+            <div className="text-[10px] font-bold text-primary-400 mb-0.5 flex items-center gap-1">
+              <span>{wp.siteName}</span>
+              <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+            </div>
+          )}
+          {wp.title && (
+            <div className="text-xs font-bold text-gray-100 line-clamp-1 mb-0.5">{wp.title}</div>
+          )}
+          {wp.description && (
+            <div className="text-[11px] text-gray-400 line-clamp-2 leading-relaxed">
+              {wp.description}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return null
   }
 
   if (!chat) {
     return (
-      <div className="flex-1 bg-dark-900 flex flex-col items-center justify-center text-gray-500 gap-3">
-        <div className="w-16 h-16 rounded-3xl bg-dark-800/80 border border-white/5 flex items-center justify-center text-gray-400">
+      <div className="flex-1 min-w-0 bg-dark-900 flex flex-col items-center justify-center text-gray-500 gap-3 select-none">
+        <div className="w-16 h-16 rounded-3xl bg-dark-800/80 border border-white/5 flex items-center justify-center text-gray-400 shadow-glow">
           <Forward className="w-8 h-8" />
         </div>
-        <div className="text-sm font-medium">Select a conversation to start chatting</div>
+        <div className="text-sm font-semibold text-gray-300">Select a conversation to start chatting</div>
         <div className="text-xs text-gray-600">
-          64Gram Power Client • Unlimited Accounts • Fast Forward (Alt+F)
+          Guidegram • Multi-Account • Fast Direct Forward (Alt+F)
         </div>
       </div>
     )
   }
 
+  const isChannel = chat.isChannel
+  const isGroup = chat.isGroup
+  const isBot = chat.isBot
+
   return (
-    <div className="relative flex-1 bg-dark-900 flex flex-col h-full overflow-hidden select-none titlebar-no-drag">
+    <div className="relative flex-1 min-w-0 bg-dark-900 flex flex-col h-full overflow-hidden select-none titlebar-no-drag">
       {/* Toast Notification */}
       {toast && (
-        <div className="absolute top-16 right-6 z-40 px-4 py-2.5 rounded-2xl bg-dark-800/95 border border-primary-500/30 text-xs font-semibold text-white shadow-glow flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-md">
+        <div className="absolute top-16 right-6 z-50 px-4 py-2.5 rounded-2xl bg-dark-800/95 border border-primary-500/30 text-xs font-semibold text-white shadow-glow flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-md">
           <Check className="w-4 h-4 text-accent-emerald shrink-0" />
           <span>{toast}</span>
         </div>
       )}
 
-      {/* Chat Header */}
-      <div className="h-14 bg-dark-850/80 border-b border-white/5 px-4 flex items-center justify-between backdrop-blur-md z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-primary-600 to-accent-cyan text-white font-bold text-xs flex items-center justify-center shadow-sm">
-            {chat.avatarInitials}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-100">{chat.title}</span>
+      {/* 1. Chat Header with Generous Spacing & Clickable Channel Info */}
+      <div className="h-16 shrink-0 bg-dark-850/90 border-b border-white/5 px-4 flex items-center justify-between backdrop-blur-md z-20 shadow-sm">
+        {/* Clickable Header Profile Button */}
+        <div
+          onClick={handleOpenInfo}
+          title="Click to view channel/chat details"
+          className="flex items-center gap-3 hover:bg-white/5 p-1.5 -ml-1.5 rounded-2xl transition-colors cursor-pointer group max-w-lg"
+        >
+          <Avatar
+            accountId={chat.accountId}
+            peerId={chat.id}
+            title={chat.title}
+            initials={chat.avatarInitials}
+            avatarUrl={chat.avatarUrl}
+            size="md"
+            className="ring-2 ring-transparent group-hover:ring-primary-500/50 transition-all"
+          />
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span
+                dir={isRTL(chat.title) ? 'rtl' : 'ltr'}
+                className="text-xs font-bold text-gray-100 group-hover:text-primary-300 transition-colors truncate"
+              >
+                {chat.title}
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-gray-500 group-hover:text-primary-400 group-hover:translate-x-0.5 transition-all shrink-0" />
             </div>
-            <div className="text-[11px] text-gray-400">
-              {chat.isChannel
+
+            <div className="text-[11px] text-gray-400 truncate">
+              {isChannel
                 ? 'Broadcast Channel'
-                : chat.isGroup
-                ? 'Group'
-                : chat.isBot
+                : isGroup
+                ? 'Group Chat'
+                : isBot
                 ? 'Bot'
                 : 'Online'}
             </div>
@@ -335,7 +719,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
         {/* Quick Action Tools */}
         <div className="flex items-center gap-2">
-          {/* 64Gram Power Feature: Chat ID Badge with 1-Click Copy */}
+          {/* Chat ID Badge with 1-Click Copy */}
           {showChatId && (
             <button
               onClick={handleCopyChatId}
@@ -363,21 +747,30 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             }`}
           >
             <EyeOff className="w-3.5 h-3.5" />
-            <span>Ghost Mode: {ghostMode ? 'ON' : 'OFF'}</span>
+            <span className="hidden sm:inline">Ghost: {ghostMode ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* Chat Info Drawer Button */}
+          <button
+            onClick={handleOpenInfo}
+            title="Channel / Chat Info"
+            className="p-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-gray-400 hover:text-white border border-white/10 transition-colors cursor-pointer"
+          >
+            <Info className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Messages Feed */}
+      {/* 2. Messages Feed */}
       <div
-        className="flex-1 overflow-y-auto p-4 space-y-3"
+        className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3"
         onClick={(e) => {
           if (e.target === e.currentTarget) setSelectedMessage(null)
         }}
       >
         {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-xs text-gray-500">
-            No messages in this chat yet.
+          <div className="flex flex-col items-center justify-center h-full text-xs text-gray-500 gap-2">
+            <div>No messages in this chat yet.</div>
           </div>
         ) : (
           messages.map((msg) => {
@@ -386,6 +779,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             return (
               <div
                 key={msg.id}
+                id={`msg-${msg.id}`}
                 onMouseEnter={() => setHoveredMessage(msg)}
                 onMouseLeave={() => setHoveredMessage(null)}
                 onClick={async (e) => {
@@ -405,15 +799,14 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   }
                   setSelectedMessage(isSelected ? null : msg)
                 }}
-                className={`flex flex-col group ${
+                className={`flex flex-col group transition-all ${
                   msg.isOutgoing ? 'items-end' : 'items-start'
                 }`}
               >
-                <div className="relative max-w-[75%] flex items-end gap-1.5">
-                  {/* Outgoing Message Hover Action Bar */}
+                <div className="relative max-w-[80%] md:max-w-[70%] flex items-end gap-1.5">
+                  {/* Outgoing Message Action Bar */}
                   {msg.isOutgoing && (
                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md">
-                      {/* 64Gram Quick Forward to Saved Messages */}
                       {quickForwardToSaved && onQuickForwardToSaved && (
                         <button
                           type="button"
@@ -433,7 +826,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         </button>
                       )}
 
-                      {/* Direct Forward Modal (Alt+F) */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -446,7 +838,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         <Forward className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Copy Text (Alt+C) */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -470,7 +861,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         <Copy className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Delete Message (alwaysDeleteBoth) */}
                       {onDeleteMessage && (
                         <button
                           type="button"
@@ -497,19 +887,21 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     </div>
                   )}
 
-                  {/* 64Gram Feature: Group Sender Avatar */}
+                  {/* Group Sender Avatar */}
                   {!msg.isOutgoing && showSenderAvatar && chat.isGroup && (
-                    <div
-                      className="w-8 h-8 rounded-xl bg-gradient-to-tr from-accent-cyan/30 to-primary-600/30 text-white font-bold text-[10px] flex items-center justify-center shrink-0 self-end mb-1 border border-white/10 shadow-sm"
+                    <Avatar
+                      accountId={msg.accountId}
+                      peerId={msg.senderId}
                       title={msg.senderName || 'Sender'}
-                    >
-                      {(msg.senderName || 'U').substring(0, 2).toUpperCase()}
-                    </div>
+                      initials={(msg.senderName || 'U').substring(0, 2).toUpperCase()}
+                      size="sm"
+                      className="shrink-0 self-end mb-1"
+                    />
                   )}
 
                   {/* Message Bubble */}
                   <div
-                    className={`rounded-2xl px-3.5 py-2 text-xs leading-relaxed shadow-sm transition-all ${
+                    className={`rounded-2xl px-4 py-2.5 text-xs shadow-sm transition-all ${
                       isSelected ? 'ring-2 ring-primary-400' : ''
                     } ${
                       msg.isOutgoing
@@ -524,75 +916,105 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       </div>
                     )}
 
-                    {/* Forwarded Header Info */}
+                    {/* Forwarded Header */}
                     {msg.isForwarded && (
-                      <div className="text-[10px] text-primary-200/90 font-medium mb-1 flex items-center gap-1">
+                      <div className="text-[10px] text-primary-200/90 font-medium mb-1.5 flex items-center gap-1">
                         <Forward className="w-3 h-3 inline" />
                         <span>Forwarded from {msg.forwardFromName || 'unknown'}</span>
                       </div>
                     )}
 
-                    {/* Message Body with Clickable Links / Mentions */}
-                    <div className="whitespace-pre-wrap break-words">
-                      {renderMessageContent(msg.text)}
-                    </div>
-
-                    {/* 64Gram Inline Keyboard Buttons with Callback Data Inspection */}
-                    {msg.replyMarkup && msg.replyMarkup.rows && msg.replyMarkup.rows.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-white/10 space-y-1">
-                        {msg.replyMarkup.rows.map((row, rIdx) => (
-                          <div key={rIdx} className="flex gap-1.5 flex-wrap">
-                            {row.map((btn, bIdx) => (
-                              <button
-                                key={bIdx}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (btn.url) {
-                                    window.guidegram?.openExternal?.(btn.url)
-                                  } else if (btn.data && copyCallbackData) {
-                                    navigator.clipboard.writeText(btn.data)
-                                    showToast(`Copied callback data: "${btn.data}"`)
-                                  }
-                                }}
-                                onContextMenu={(e) => {
-                                  if (btn.data && copyCallbackData) {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    navigator.clipboard.writeText(btn.data)
-                                    showToast(`Copied callback data: "${btn.data}"`)
-                                  }
-                                }}
-                                title={
-                                  btn.data
-                                    ? `Callback data: "${btn.data}" (Click or Right-click to copy)`
-                                    : btn.url
-                                    ? `Open: ${btn.url}`
-                                    : undefined
-                                }
-                                className="flex-1 min-w-[70px] px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-medium text-white transition-all flex items-center justify-center gap-1 border border-white/10 cursor-pointer"
-                              >
-                                <span>{btn.text}</span>
-                                {btn.url && <ExternalLink className="w-3 h-3 text-gray-300" />}
-                                {btn.data && copyCallbackData && (
-                                  <span className="text-[9px] px-1 py-0.2 bg-black/40 rounded text-accent-cyan font-mono">
-                                    DATA
-                                  </span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        ))}
+                    {/* Reply Quote Banner */}
+                    {msg.replyToMsgId && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleScrollToReply(msg.replyToMsgId!)
+                        }}
+                        dir={isRTL(msg.replyTo?.text) ? 'rtl' : 'ltr'}
+                        className="mb-2 p-1.5 px-2.5 rounded-xl bg-black/25 hover:bg-black/40 border-l-2 border-accent-cyan cursor-pointer transition-colors flex flex-col text-left"
+                      >
+                        <div className="text-[10px] font-bold text-accent-cyan flex items-center gap-1">
+                          <CornerUpLeft className="w-2.5 h-2.5 shrink-0" />
+                          <span>{msg.replyTo?.senderName || 'Reply'}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-300 truncate max-w-md">
+                          {msg.replyTo?.text || `Message #${msg.replyToMsgId}`}
+                        </div>
                       </div>
                     )}
 
-                    {/* Message Footer: Message ID badge + Seconds Timestamp + Checkmarks */}
+                    {/* Media Card (Photo, Video, Document, etc.) */}
+                    {renderMediaCard(msg)}
+
+                    {/* Formatted Message Body with Markdown & Entities & RTL */}
+                    {msg.text && renderFormattedText(msg.text, msg.entities)}
+
+                    {/* Inline Keyboard Buttons with BiDi / RTL Support */}
+                    {msg.replyMarkup &&
+                      msg.replyMarkup.rows &&
+                      msg.replyMarkup.rows.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-white/10 space-y-1.5">
+                          {msg.replyMarkup.rows.map((row, rIdx) => (
+                            <div key={rIdx} className="flex gap-1.5 flex-wrap">
+                              {row.map((btn, bIdx) => {
+                                const btnIsRtl = isRTL(btn.text)
+                                return (
+                                  <button
+                                    key={bIdx}
+                                    dir={btnIsRtl ? 'rtl' : 'ltr'}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (btn.url) {
+                                        window.guidegram?.openExternal?.(btn.url)
+                                      } else if (btn.data && copyCallbackData) {
+                                        navigator.clipboard.writeText(btn.data)
+                                        showToast(`Copied callback data: "${btn.data}"`)
+                                      }
+                                    }}
+                                    onContextMenu={(e) => {
+                                      if (btn.data && copyCallbackData) {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        navigator.clipboard.writeText(btn.data)
+                                        showToast(`Copied callback data: "${btn.data}"`)
+                                      }
+                                    }}
+                                    title={
+                                      btn.data
+                                        ? `Callback data: "${btn.data}" (Click or Right-click to copy)`
+                                        : btn.url
+                                        ? `Open: ${btn.url}`
+                                        : undefined
+                                    }
+                                    className={`flex-1 min-w-[80px] px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-medium text-white transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer ${
+                                      btnIsRtl ? 'text-right' : 'text-center'
+                                    }`}
+                                  >
+                                    <span className="truncate">{btn.text}</span>
+                                    {btn.url && (
+                                      <ExternalLink className="w-3 h-3 text-gray-300 shrink-0" />
+                                    )}
+                                    {btn.data && copyCallbackData && (
+                                      <span className="text-[9px] px-1 py-0.2 bg-black/40 rounded text-accent-cyan font-mono shrink-0">
+                                        DATA
+                                      </span>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                    {/* Message Footer: ID + Seconds Timestamp + Status */}
                     <div
-                      className={`text-[10px] flex items-center justify-end gap-1.5 mt-1 ${
+                      className={`text-[10px] flex items-center justify-end gap-1.5 mt-1.5 ${
                         msg.isOutgoing ? 'text-primary-200' : 'text-gray-500'
                       }`}
                     >
-                      {/* 64Gram Feature: Message ID Badge */}
                       {showMessageId && (
                         <button
                           type="button"
@@ -609,16 +1031,14 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         </button>
                       )}
 
-                      {/* Precise Timestamp with Seconds */}
                       <span>{formatMessageTime(msg.date)}</span>
                       {msg.isOutgoing && <CheckCheck className="w-3 h-3 inline" />}
                     </div>
                   </div>
 
-                  {/* Incoming Message Hover Action Bar */}
+                  {/* Incoming Message Action Bar */}
                   {!msg.isOutgoing && (
                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md">
-                      {/* 64Gram Quick Forward to Saved Messages */}
                       {quickForwardToSaved && onQuickForwardToSaved && (
                         <button
                           type="button"
@@ -638,7 +1058,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         </button>
                       )}
 
-                      {/* Direct Forward Modal (Alt+F) */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -651,7 +1070,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         <Forward className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Copy Text (Alt+C) */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -675,7 +1093,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         <Copy className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Delete Message */}
                       {onDeleteMessage && (
                         <button
                           type="button"
@@ -709,19 +1126,20 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Box */}
-      <div className="p-3 bg-dark-850/60 border-t border-white/5 backdrop-blur-sm">
+      {/* 3. Input Box */}
+      <div className="shrink-0 p-3 bg-dark-850/80 border-t border-white/5 backdrop-blur-md">
         <form onSubmit={handleSend} className="flex items-center gap-2">
           <button
             type="button"
-            className="p-2 text-gray-400 hover:text-gray-200 rounded-xl hover:bg-dark-800 transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-200 rounded-xl hover:bg-dark-800 transition-colors cursor-pointer"
           >
             <Paperclip className="w-4 h-4" />
           </button>
 
           <input
             type="text"
-            placeholder="Write a message... (Alt+F to forward selected, Alt+C to copy text)"
+            dir={isRTL(inputText) ? 'rtl' : 'ltr'}
+            placeholder="Write a message... (Alt+F to forward, Alt+C to copy text)"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             className="flex-1 bg-dark-800 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors"
@@ -736,6 +1154,235 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           </button>
         </form>
       </div>
+
+      {/* 4. Channel / User Info Drawer */}
+      {isInfoOpen && (
+        <div className="absolute inset-0 z-40 flex justify-end bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-80 md:w-96 h-full bg-dark-900 border-l border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-250 select-none"
+          >
+            {/* Drawer Header */}
+            <div className="h-16 px-5 border-b border-white/5 flex items-center justify-between shrink-0">
+              <div className="text-sm font-bold text-gray-100">
+                {isChannel ? 'Channel Info' : isGroup ? 'Group Info' : 'User Info'}
+              </div>
+              <button
+                onClick={() => setIsInfoOpen(false)}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* Avatar & Title Hero */}
+              <div className="flex flex-col items-center text-center">
+                <Avatar
+                  accountId={chat.accountId}
+                  peerId={chat.id}
+                  title={chatDetails?.title || chat.title}
+                  initials={chat.avatarInitials}
+                  avatarUrl={chatDetails?.avatarUrl || chat.avatarUrl}
+                  size="xl"
+                  className="mb-3 cursor-pointer"
+                />
+
+                <h3
+                  dir={isRTL(chatDetails?.title || chat.title) ? 'rtl' : 'ltr'}
+                  className="text-base font-bold text-white mb-1 px-2"
+                >
+                  {chatDetails?.title || chat.title}
+                </h3>
+
+                <div className="text-xs text-gray-400 flex items-center gap-1.5">
+                  {isChannel ? (
+                    <span className="flex items-center gap-1 text-primary-400">
+                      <Radio className="w-3 h-3" />
+                      <span>Broadcast Channel</span>
+                    </span>
+                  ) : isGroup ? (
+                    <span className="flex items-center gap-1 text-accent-cyan">
+                      <Users className="w-3 h-3" />
+                      <span>Group Chat</span>
+                    </span>
+                  ) : isBot ? (
+                    <span className="flex items-center gap-1 text-accent-violet">
+                      <Bot className="w-3 h-3" />
+                      <span>Bot</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-gray-300">
+                      <User className="w-3 h-3" />
+                      <span>Personal Contact</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Members / Subscribers Count */}
+              {chatDetails?.membersCount != null && (
+                <div className="p-3 rounded-2xl bg-dark-850/90 border border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-gray-400 text-xs">
+                    <Users className="w-4 h-4 text-primary-400" />
+                    <span>{isChannel ? 'Subscribers' : 'Members'}</span>
+                  </div>
+                  <span className="text-xs font-bold text-gray-100">
+                    {formatNumber(chatDetails.membersCount)}
+                  </span>
+                </div>
+              )}
+
+              {/* Username Card */}
+              {chatDetails?.username && (
+                <div className="p-3 rounded-2xl bg-dark-850/90 border border-white/5 space-y-1">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Username
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.guidegram?.openExternal?.(`https://t.me/${chatDetails.username}`)
+                      }}
+                      className="text-xs font-semibold text-accent-cyan hover:underline cursor-pointer"
+                    >
+                      @{chatDetails.username}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`@${chatDetails.username}`)
+                        showToast(`Copied @${chatDetails.username}`)
+                      }}
+                      className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-dark-750 transition-colors cursor-pointer"
+                      title="Copy username"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Bio / Description Card */}
+              {chatDetails?.about && (
+                <div className="p-3.5 rounded-2xl bg-dark-850/90 border border-white/5 space-y-1">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    About / Description
+                  </div>
+                  <div
+                    dir={isRTL(chatDetails.about) ? 'rtl' : 'ltr'}
+                    className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap select-text"
+                  >
+                    {renderFormattedText(chatDetails.about)}
+                  </div>
+                </div>
+              )}
+
+              {/* Chat ID Card */}
+              <div className="p-3 rounded-2xl bg-dark-850/90 border border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <Hash className="w-4 h-4 text-primary-400" />
+                  <span>Numeric Chat ID</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-xs font-bold text-gray-200">{chat.id}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyChatId}
+                    className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-dark-750 transition-colors cursor-pointer"
+                    title="Copy numeric ID"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Notifications Toggle */}
+              <div className="p-3 rounded-2xl bg-dark-850/90 border border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-gray-300">
+                  {isMuted ? (
+                    <VolumeX className="w-4 h-4 text-accent-rose" />
+                  ) : (
+                    <Volume2 className="w-4 h-4 text-accent-emerald" />
+                  )}
+                  <span>Notifications</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleNotifications}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                    isMuted
+                      ? 'bg-accent-rose/20 text-accent-rose border border-accent-rose/30'
+                      : 'bg-accent-emerald/20 text-accent-emerald border border-accent-emerald/30'
+                  }`}
+                >
+                  {isMuted ? 'Muted' : 'Enabled'}
+                </button>
+              </div>
+
+              {/* External Navigation CTA */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = chatDetails?.username
+                      ? `https://t.me/${chatDetails.username}`
+                      : `tg://resolve?domain=${chat.id}`
+                    window.guidegram?.openExternal?.(target)
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold transition-all shadow-glow flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open in Telegram Official</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Fullscreen Lightbox Modal */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-150 select-none"
+        >
+          <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                const a = document.createElement('a')
+                a.href = lightboxUrl
+                a.download = `photo_${Date.now()}.jpg`
+                a.click()
+              }}
+              title="Download photo"
+              className="p-2.5 rounded-xl bg-dark-800/80 hover:bg-dark-750 text-white transition-colors cursor-pointer"
+            >
+              <Download className="w-5 h-5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLightboxUrl(null)}
+              title="Close (Esc)"
+              className="p-2.5 rounded-xl bg-dark-800/80 hover:bg-dark-750 text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <img
+            src={lightboxUrl}
+            alt="Preview"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
+          />
+        </div>
+      )}
     </div>
   )
 }

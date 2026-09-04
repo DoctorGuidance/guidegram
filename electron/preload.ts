@@ -55,6 +55,19 @@ const guidegramAPI = {
     revoke?: boolean
   ): Promise<boolean> =>
     ipcRenderer.invoke('telegram:delete-messages', { accountId, chatId, messageIds, revoke }),
+  getProfilePhoto: (accountId: string, peerId: string): Promise<string | null> =>
+    ipcRenderer.invoke('telegram:get-profile-photo', { accountId, peerId }),
+  downloadMedia: (
+    accountId: string,
+    chatId: string,
+    messageId: number,
+    thumb?: boolean
+  ): Promise<string | null> =>
+    ipcRenderer.invoke('telegram:download-media', { accountId, chatId, messageId, thumb }),
+  getChatDetails: (accountId: string, chatId: string): Promise<any> =>
+    ipcRenderer.invoke('telegram:get-chat-details', { accountId, chatId }),
+  toggleChatNotifications: (accountId: string, chatId: string, mute: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('telegram:toggle-chat-notifications', { accountId, chatId, mute }),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke('system:open-external', { url }),
 

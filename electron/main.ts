@@ -274,6 +274,42 @@ function setupIpcHandlers() {
     }
   )
 
+  ipcMain.handle('telegram:get-profile-photo', async (_event, { accountId, peerId }) => {
+    try {
+      return await accountManager.getProfilePhoto(accountId, peerId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getProfilePhoto error:`, err)
+      return null
+    }
+  })
+
+  ipcMain.handle('telegram:download-media', async (_event, { accountId, chatId, messageId, thumb }) => {
+    try {
+      return await accountManager.downloadMedia(accountId, chatId, messageId, thumb)
+    } catch (err: any) {
+      Logger.warn(`[IPC] downloadMedia error:`, err)
+      return null
+    }
+  })
+
+  ipcMain.handle('telegram:get-chat-details', async (_event, { accountId, chatId }) => {
+    try {
+      return await accountManager.getChatDetails(accountId, chatId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getChatDetails error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:toggle-chat-notifications', async (_event, { accountId, chatId, mute }) => {
+    try {
+      return await accountManager.toggleChatNotifications(accountId, chatId, mute)
+    } catch (err: any) {
+      Logger.warn(`[IPC] toggleChatNotifications error:`, err)
+      return false
+    }
+  })
+
   ipcMain.handle('system:open-external', async (_event, { url }) => {
     try {
       if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('tg://'))) {

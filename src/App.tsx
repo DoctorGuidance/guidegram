@@ -297,7 +297,7 @@ export const App: React.FC = () => {
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
       ) : isUnifiedInboxOpen ? (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           <AccountDock
             accounts={accounts}
             activeAccountId={activeAccountId}
@@ -320,7 +320,7 @@ export const App: React.FC = () => {
           />
         </div>
       ) : (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Vertical Multi-Account Dock */}
           <AccountDock
             accounts={accounts}
@@ -334,7 +334,7 @@ export const App: React.FC = () => {
           />
 
           {/* Chat List Column with Telegraph Tabs */}
-          <div className="flex flex-col border-r border-white/5 h-full">
+          <div className="w-80 shrink-0 flex flex-col border-r border-white/5 h-full bg-dark-850 overflow-hidden">
             <ChatTabs
               activeTab={activeTab}
               onTabChange={setActiveTab}

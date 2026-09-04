@@ -1,6 +1,7 @@
 import React from 'react'
-import { Plus, Shield, Inbox, Settings, Wifi, WifiOff } from 'lucide-react'
+import { Plus, Shield, Inbox, Settings } from 'lucide-react'
 import { AccountInfo } from '../types/telegram'
+import { Avatar } from './Avatar'
 
 interface AccountDockProps {
   accounts: AccountInfo[]
@@ -24,7 +25,7 @@ export const AccountDock: React.FC<AccountDockProps> = ({
   onOpenSettings,
 }) => {
   return (
-    <aside className="w-18 bg-dark-900 border-r border-white/5 flex flex-col items-center py-3 select-none z-20 titlebar-no-drag">
+    <aside className="w-[72px] shrink-0 h-full bg-dark-900 border-r border-white/5 flex flex-col items-center py-3 select-none z-20 titlebar-no-drag">
       {/* Brand Icon */}
       <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary-600 to-accent-cyan flex items-center justify-center shadow-glow mb-4 cursor-pointer hover:scale-105 transition-transform">
         <span className="text-white font-black text-xl tracking-tighter">G</span>
@@ -34,7 +35,7 @@ export const AccountDock: React.FC<AccountDockProps> = ({
       <button
         onClick={onToggleUnifiedInbox}
         title="Unified Inbox (All Accounts)"
-        className={`relative w-12 h-12 rounded-2xl flex items-center justify-center mb-3 transition-all ${
+        className={`relative w-12 h-12 rounded-2xl flex items-center justify-center mb-3 transition-all cursor-pointer ${
           isUnifiedInboxOpen
             ? 'bg-primary-600 text-white shadow-glow'
             : 'bg-dark-800/80 text-gray-400 hover:text-white hover:bg-dark-750'
@@ -63,17 +64,25 @@ export const AccountDock: React.FC<AccountDockProps> = ({
               <button
                 onClick={() => onSelectAccount(acc.id)}
                 title={`${safeFirst} (${acc.phone || 'No phone'})`}
-                className={`relative w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm transition-all duration-200 ${
+                className={`relative w-12 h-12 rounded-2xl flex items-center justify-center overflow-hidden transition-all duration-200 cursor-pointer ${
                   isActive
-                    ? 'bg-primary-600 text-white ring-2 ring-primary-400 ring-offset-2 ring-offset-dark-900 shadow-glow'
-                    : 'bg-dark-800 text-gray-300 hover:bg-dark-750 hover:text-white border border-white/5'
+                    ? 'ring-2 ring-primary-400 ring-offset-2 ring-offset-dark-900 shadow-glow'
+                    : 'hover:opacity-90 border border-white/5'
                 }`}
               >
-                {initials.toUpperCase()}
+                <Avatar
+                  accountId={acc.id}
+                  peerId={acc.id}
+                  title={safeFirst}
+                  initials={initials}
+                  avatarUrl={acc.avatarUrl}
+                  size="lg"
+                  className="w-full h-full rounded-2xl"
+                />
 
                 {/* Status dot */}
                 <span
-                  className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ring-2 ring-dark-900 ${
+                  className={`absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full ring-2 ring-dark-900 ${
                     acc.status === 'connected'
                       ? 'bg-accent-emerald'
                       : acc.status === 'connecting'
@@ -86,7 +95,7 @@ export const AccountDock: React.FC<AccountDockProps> = ({
                 {acc.proxyConfig?.enabled && (
                   <span
                     title={`Proxy: ${acc.proxyConfig.type.toUpperCase()} (${acc.proxyConfig.host})`}
-                    className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-accent-cyan ring-1 ring-dark-900"
+                    className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-accent-cyan ring-1 ring-dark-900"
                   />
                 )}
               </button>
@@ -104,8 +113,8 @@ export const AccountDock: React.FC<AccountDockProps> = ({
         {/* Add Account Button */}
         <button
           onClick={onOpenAddAccount}
-          title="Add New Account (No 3-account limit!)"
-          className="w-12 h-12 rounded-2xl border border-dashed border-white/20 hover:border-primary-500 text-gray-400 hover:text-primary-400 flex items-center justify-center transition-colors bg-dark-850/50 hover:bg-primary-500/10"
+          title="Add New Account (No limit!)"
+          className="w-12 h-12 rounded-2xl border border-dashed border-white/20 hover:border-primary-500 text-gray-400 hover:text-primary-400 flex items-center justify-center transition-colors bg-dark-850/50 hover:bg-primary-500/10 cursor-pointer shrink-0"
         >
           <Plus className="w-5 h-5" />
         </button>
@@ -118,7 +127,7 @@ export const AccountDock: React.FC<AccountDockProps> = ({
         <button
           onClick={onOpenProxyModal}
           title="Proxy Settings & Latency"
-          className="w-10 h-10 rounded-xl bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-750 flex items-center justify-center transition-colors"
+          className="w-10 h-10 rounded-xl bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-750 flex items-center justify-center transition-colors cursor-pointer"
         >
           <Shield className="w-4 h-4" />
         </button>
@@ -126,7 +135,7 @@ export const AccountDock: React.FC<AccountDockProps> = ({
         <button
           onClick={onOpenSettings}
           title="Settings & Portable Config"
-          className="w-10 h-10 rounded-xl bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-750 flex items-center justify-center transition-colors"
+          className="w-10 h-10 rounded-xl bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-750 flex items-center justify-center transition-colors cursor-pointer"
         >
           <Settings className="w-4 h-4" />
         </button>

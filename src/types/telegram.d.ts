@@ -8,6 +8,10 @@ import type {
   ForwardOptions,
   QrTokenPayload,
   InlineButton,
+  ChatDetails,
+  WebPagePreview,
+  ReplyInfo,
+  MessageEntityItem,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -25,4 +29,8 @@ export type {
   ForwardOptions,
   QrTokenPayload,
   InlineButton,
+  ChatDetails,
+  WebPagePreview,
+  ReplyInfo,
+  MessageEntityItem,
 }

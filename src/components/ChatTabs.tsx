@@ -42,8 +42,8 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
   }
 
   return (
-    <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 overflow-x-auto scrollbar-none titlebar-no-drag">
-      <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
+    <div className="w-full shrink-0 flex items-center gap-1 px-2.5 py-2 border-b border-white/5 overflow-x-auto scrollbar-none titlebar-no-drag">
+      <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-none">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id
           const count = unreadCounts[tab.id] || 0

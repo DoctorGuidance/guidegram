@@ -49,6 +49,7 @@ export interface DialogItem {
   lastMessageText?: string
   lastMessageDate?: number
   avatarInitials?: string
+  avatarUrl?: string
 }
 
 export interface InlineButton {
@@ -57,22 +58,73 @@ export interface InlineButton {
   data?: string // callback_data
 }
 
+export interface WebPagePreview {
+  url: string
+  siteName?: string
+  title?: string
+  description?: string
+  photoUrl?: string
+}
+
+export interface ReplyInfo {
+  replyToMsgId: number
+  senderName?: string
+  text?: string
+}
+
+export interface MessageEntityItem {
+  type: string // 'bold' | 'italic' | 'code' | 'pre' | 'text_url' | 'url' | 'mention' | 'strike' | 'spoiler' | 'underline' | 'custom_emoji'
+  offset: number
+  length: number
+  url?: string
+  language?: string
+}
+
 export interface MessageItem {
   id: number
   chatId: string
   accountId: string
   senderId?: string
   senderName?: string
+  senderAvatarUrl?: string
   text: string
   date: number
   isOutgoing: boolean
   isForwarded?: boolean
   forwardFromName?: string
   replyToMsgId?: number
-  mediaType?: 'photo' | 'video' | 'document' | 'voice' | 'sticker'
+  replyTo?: ReplyInfo
+  mediaType?: 'photo' | 'video' | 'document' | 'voice' | 'sticker' | 'webpage'
+  mediaUrl?: string
+  mediaThumbnailUrl?: string
+  mediaFileName?: string
+  mediaFileSize?: number // bytes
+  mediaDuration?: number // seconds
+  mediaWidth?: number
+  mediaHeight?: number
+  mediaMimeType?: string
+  webPage?: WebPagePreview
+  entities?: MessageEntityItem[]
   replyMarkup?: {
     rows: InlineButton[][]
   }
+}
+
+export interface ChatDetails {
+  id: string
+  title: string
+  username?: string
+  about?: string
+  membersCount?: number
+  isChannel: boolean
+  isGroup: boolean
+  isUser: boolean
+  isBot: boolean
+  avatarUrl?: string
+  verified?: boolean
+  fake?: boolean
+  scam?: boolean
+  notificationsEnabled?: boolean
 }
 
 export interface ForwardOptions {

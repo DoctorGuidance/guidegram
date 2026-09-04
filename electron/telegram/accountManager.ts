@@ -1,10 +1,24 @@
+import fs from 'fs'
+import path from 'path'
 import { TelegramClient, Api, sessions } from 'telegram'
 import { NewMessage } from 'telegram/events/index.js'
 import QRCode from 'qrcode'
 import { SessionStore } from './sessionStore'
 import { ProxyManager } from './proxyManager'
 import { Logger } from './logger'
-import { AccountInfo, DialogItem, MessageItem, ForwardOptions, ProxyConfig, QrTokenPayload, InlineButton } from './types'
+import {
+  AccountInfo,
+  DialogItem,
+  MessageItem,
+  ForwardOptions,
+  ProxyConfig,
+  QrTokenPayload,
+  InlineButton,
+  ChatDetails,
+  WebPagePreview,
+  ReplyInfo,
+  MessageEntityItem,
+} from './types'
 
 export interface ClientHolder {
   client: TelegramClient
@@ -25,10 +39,22 @@ export class AccountManager {
   private pendingAuthClients = new Map<string, { client: TelegramClient; phoneCodeHash: string; proxy?: ProxyConfig }>()
   private pendingQrAuth?: PendingQrAuth
   private onEventCallback?: (event: string, payload: any) => void
+  private avatarsDir: string
+  private mediaDir: string
+  private avatarCache = new Map<string, string>() // `${accountId}_${peerId}` -> data URL
+  private mediaCache = new Map<string, string>() // `${accountId}_${chatId}_${msgId}` -> data URL
 
   constructor(store: SessionStore, onEvent?: (event: string, payload: any) => void) {
     this.store = store
     this.onEventCallback = onEvent
+    this.avatarsDir = path.join(this.store.getDataDirectory(), 'avatars')
+    this.mediaDir = path.join(this.store.getDataDirectory(), 'media_cache')
+    try {
+      if (!fs.existsSync(this.avatarsDir)) fs.mkdirSync(this.avatarsDir, { recursive: true })
+      if (!fs.existsSync(this.mediaDir)) fs.mkdirSync(this.mediaDir, { recursive: true })
+    } catch (e) {
+      Logger.warn('[AccountManager] Cache directories creation warning:', e)
+    }
   }
 
   /**
@@ -529,9 +555,11 @@ export class AccountManager {
       const isGroup = d.isGroup || false
       const isChannel = d.isChannel || false
       const isBot = entity.bot || false
+      const peerId = d.id.toString()
+      const cachedAvatar = this.avatarCache.get(`${accountId}_${peerId}`)
 
       return {
-        id: d.id.toString(),
+        id: peerId,
         accountId,
         title: d.title || d.name || 'Chat',
         unreadCount: d.unreadCount || 0,
@@ -543,18 +571,27 @@ export class AccountManager {
         lastMessageText: d.message?.message || '',
         lastMessageDate: d.message?.date ? d.message.date * 1000 : Date.now(),
         avatarInitials: (d.title || d.name || 'C').substring(0, 2).toUpperCase(),
+        avatarUrl: cachedAvatar,
       }
     })
   }
 
   /**
-   * Get messages for a given chat
+   * Get messages for a given chat with rich replies, media and formatting entities
    */
   public async getMessages(accountId: string, chatId: string, limit = 40): Promise<MessageItem[]> {
     const holder = this.clients.get(accountId)
     if (!holder) throw new Error(`Account ${accountId} not found`)
 
     const messages = await holder.client.getMessages(chatId, { limit })
+
+    // Build map for quick reply lookup
+    const msgMap = new Map<number, any>()
+    for (const m of messages) {
+      if (m && m.id) {
+        msgMap.set(m.id, m)
+      }
+    }
 
     return messages.map((m: any) => {
       let replyMarkup: { rows: InlineButton[][] } | undefined = undefined
@@ -582,6 +619,29 @@ export class AccountManager {
         }
       }
 
+      // Parse reply info
+      let replyTo: ReplyInfo | undefined = undefined
+      const replyToMsgId = m.replyTo?.replyToMsgId
+      if (replyToMsgId) {
+        const replied = msgMap.get(replyToMsgId)
+        if (replied) {
+          replyTo = {
+            replyToMsgId,
+            senderName: replied.sender?.firstName || replied.sender?.title || 'User',
+            text: replied.message || (replied.media ? `[${this.detectMediaType(replied.media) || 'Media'}]` : ''),
+          }
+        } else {
+          replyTo = {
+            replyToMsgId,
+          }
+        }
+      }
+
+      const mediaData = this.parseMedia(m.media)
+      const cacheKey = `${accountId}_${chatId}_${m.id}_thumb`
+      const cachedMediaUrl = this.mediaCache.get(cacheKey) || this.mediaCache.get(`${accountId}_${chatId}_${m.id}`)
+      const entities = this.parseEntities(m.entities)
+
       return {
         id: m.id,
         chatId,
@@ -593,11 +653,215 @@ export class AccountManager {
         isOutgoing: m.out || false,
         isForwarded: !!m.fwdFrom,
         forwardFromName: m.fwdFrom?.fromName || undefined,
-        replyToMsgId: m.replyTo?.replyToMsgId,
-        mediaType: m.media ? this.detectMediaType(m.media) : undefined,
+        replyToMsgId,
+        replyTo,
+        mediaType: mediaData.mediaType,
+        mediaFileName: mediaData.mediaFileName,
+        mediaFileSize: mediaData.mediaFileSize,
+        mediaDuration: mediaData.mediaDuration,
+        mediaWidth: mediaData.mediaWidth,
+        mediaHeight: mediaData.mediaHeight,
+        mediaMimeType: mediaData.mediaMimeType,
+        webPage: mediaData.webPage,
+        mediaUrl: cachedMediaUrl,
+        entities,
         replyMarkup,
       }
     }).reverse() // Chronological order
+  }
+
+  /**
+   * Get / Download profile photo of a user, chat or channel
+   */
+  public async getProfilePhoto(accountId: string, peerId: string): Promise<string | null> {
+    const cacheKey = `${accountId}_${peerId}`
+    if (this.avatarCache.has(cacheKey)) {
+      return this.avatarCache.get(cacheKey)!
+    }
+
+    const diskPath = path.join(this.avatarsDir, `${cacheKey}.jpg`)
+    if (fs.existsSync(diskPath)) {
+      try {
+        const fileBuf = await fs.promises.readFile(diskPath)
+        const dataUrl = `data:image/jpeg;base64,${fileBuf.toString('base64')}`
+        this.avatarCache.set(cacheKey, dataUrl)
+        return dataUrl
+      } catch (_) {}
+    }
+
+    const holder = this.clients.get(accountId)
+    if (!holder) return null
+
+    try {
+      const entity = await holder.client.getEntity(peerId)
+      const photoBuf = await holder.client.downloadProfilePhoto(entity, { isBig: false })
+      if (photoBuf && photoBuf.length > 0) {
+        const dataUrl = `data:image/jpeg;base64,${Buffer.from(photoBuf).toString('base64')}`
+        this.avatarCache.set(cacheKey, dataUrl)
+        fs.promises.writeFile(diskPath, photoBuf).catch((err) => {
+          Logger.warn(`[AccountManager] Failed to cache avatar to disk:`, err)
+        })
+        return dataUrl
+      }
+    } catch (err) {
+      // Entity has no avatar photo or privacy restricts it
+    }
+
+    return null
+  }
+
+  /**
+   * Download message media (photo, video thumb, document) with local disk caching
+   */
+  public async downloadMedia(
+    accountId: string,
+    chatId: string,
+    messageId: number,
+    thumb = false
+  ): Promise<string | null> {
+    const cacheKey = `${accountId}_${chatId}_${messageId}${thumb ? '_thumb' : ''}`
+    if (this.mediaCache.has(cacheKey)) {
+      return this.mediaCache.get(cacheKey)!
+    }
+
+    const diskPath = path.join(this.mediaDir, `${cacheKey}.jpg`)
+    if (fs.existsSync(diskPath)) {
+      try {
+        const fileBuf = await fs.promises.readFile(diskPath)
+        const dataUrl = `data:image/jpeg;base64,${fileBuf.toString('base64')}`
+        this.mediaCache.set(cacheKey, dataUrl)
+        return dataUrl
+      } catch (_) {}
+    }
+
+    const holder = this.clients.get(accountId)
+    if (!holder) return null
+
+    try {
+      const msgs = await holder.client.getMessages(chatId, { ids: [messageId] })
+      if (msgs && msgs.length > 0 && msgs[0].media) {
+        const buf = await holder.client.downloadMedia(msgs[0].media, {
+          thumb: thumb ? -1 : undefined,
+        })
+        if (buf && buf.length > 0) {
+          const mime = (msgs[0].media as any)?.document?.mimeType || 'image/jpeg'
+          const dataUrl = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`
+          this.mediaCache.set(cacheKey, dataUrl)
+          fs.promises.writeFile(diskPath, buf).catch((err) => {
+            Logger.warn(`[AccountManager] Failed to cache media to disk:`, err)
+          })
+          return dataUrl
+        }
+      }
+    } catch (err: any) {
+      Logger.warn(`[AccountManager] Failed to download media for ${chatId}/${messageId}:`, err)
+    }
+
+    return null
+  }
+
+  /**
+   * Get rich channel, group, or user details for header info drawer
+   */
+  public async getChatDetails(accountId: string, chatId: string): Promise<ChatDetails> {
+    const holder = this.clients.get(accountId)
+    if (!holder) throw new Error(`Account ${accountId} not found`)
+
+    const fallback: ChatDetails = {
+      id: chatId,
+      title: 'Conversation',
+      isChannel: false,
+      isGroup: false,
+      isUser: false,
+      isBot: false,
+    }
+
+    try {
+      const entity: any = await holder.client.getEntity(chatId)
+      const isChannel = entity.className === 'Channel' || entity.broadcast === true
+      const isGroup =
+        entity.className === 'Chat' ||
+        (entity.className === 'Channel' && entity.megagroup === true)
+      const isUser = entity.className === 'User'
+      const isBot = isUser && entity.bot === true
+
+      let about: string | undefined = undefined
+      let membersCount: number | undefined = undefined
+      const verified = entity.verified || false
+      const fake = entity.fake || false
+      const scam = entity.scam || false
+      const username = entity.username || undefined
+
+      if (isChannel || isGroup) {
+        try {
+          const full: any = await holder.client.invoke(
+            new Api.channels.GetFullChannel({ channel: entity })
+          )
+          about = full.fullChat?.about
+          membersCount = full.fullChat?.participantsCount
+        } catch (e) {
+          Logger.warn(`[AccountManager] GetFullChannel warning for ${chatId}:`, e)
+        }
+      } else if (isUser) {
+        try {
+          const full: any = await holder.client.invoke(
+            new Api.users.GetFullUser({ id: entity })
+          )
+          about = full.fullUser?.about
+        } catch (e) {
+          Logger.warn(`[AccountManager] GetFullUser warning for ${chatId}:`, e)
+        }
+      }
+
+      const avatarUrl = await this.getProfilePhoto(accountId, chatId)
+
+      return {
+        id: chatId,
+        title: entity.title || entity.firstName || 'Chat',
+        username,
+        about,
+        membersCount,
+        isChannel: isChannel && !isGroup,
+        isGroup,
+        isUser,
+        isBot,
+        avatarUrl: avatarUrl || undefined,
+        verified,
+        fake,
+        scam,
+      }
+    } catch (err: any) {
+      Logger.warn(`[AccountManager] getChatDetails fallback for ${chatId}:`, err)
+      return fallback
+    }
+  }
+
+  /**
+   * Mute or unmute chat notifications
+   */
+  public async toggleChatNotifications(
+    accountId: string,
+    chatId: string,
+    mute: boolean
+  ): Promise<boolean> {
+    const holder = this.clients.get(accountId)
+    if (!holder) throw new Error(`Account ${accountId} not found`)
+
+    try {
+      const peer = await holder.client.getInputEntity(chatId)
+      await holder.client.invoke(
+        new Api.account.UpdateNotifySettings({
+          peer: new Api.InputNotifyPeer({ peer }),
+          settings: new Api.InputPeerNotifySettings({
+            muteUntil: mute ? 2147483647 : 0,
+          }),
+        })
+      )
+      return true
+    } catch (err: any) {
+      Logger.warn(`[AccountManager] toggleChatNotifications error for ${chatId}:`, err)
+      return false
+    }
   }
 
   /**
@@ -743,6 +1007,11 @@ export class AccountManager {
         }
       }
 
+      const mediaData = this.parseMedia(msg.media)
+      const entities = this.parseEntities(msg.entities)
+      const replyToMsgId = msg.replyTo?.replyToMsgId
+      const replyTo: ReplyInfo | undefined = replyToMsgId ? { replyToMsgId } : undefined
+
       const payload = {
         accountId,
         chatId: msg.chatId?.toString(),
@@ -754,13 +1023,147 @@ export class AccountManager {
           text: msg.message || '',
           date: msg.date * 1000,
           isOutgoing: msg.out || false,
-          mediaType: msg.media ? this.detectMediaType(msg.media) : undefined,
+          replyToMsgId,
+          replyTo,
+          mediaType: mediaData.mediaType,
+          mediaFileName: mediaData.mediaFileName,
+          mediaFileSize: mediaData.mediaFileSize,
+          mediaDuration: mediaData.mediaDuration,
+          mediaWidth: mediaData.mediaWidth,
+          mediaHeight: mediaData.mediaHeight,
+          mediaMimeType: mediaData.mediaMimeType,
+          webPage: mediaData.webPage,
+          entities,
           replyMarkup,
         },
       }
 
       this.onEventCallback?.('telegram:new-message', payload)
     }, new NewMessage({}))
+  }
+
+  /**
+   * Extract rich media metadata from GramJS Message.media
+   */
+  private parseMedia(media: any): {
+    mediaType?: 'photo' | 'video' | 'document' | 'voice' | 'sticker' | 'webpage'
+    mediaFileName?: string
+    mediaFileSize?: number
+    mediaDuration?: number
+    mediaWidth?: number
+    mediaHeight?: number
+    mediaMimeType?: string
+    webPage?: WebPagePreview
+  } {
+    if (!media) return {}
+    if (media.photo || media.className === 'MessageMediaPhoto') {
+      const photo: any = media.photo
+      let mediaWidth: number | undefined
+      let mediaHeight: number | undefined
+      let mediaFileSize: number | undefined
+      if (photo && Array.isArray(photo.sizes)) {
+        const largest = photo.sizes[photo.sizes.length - 1]
+        if (largest) {
+          mediaWidth = largest.w
+          mediaHeight = largest.h
+          mediaFileSize = largest.size
+        }
+      }
+      return { mediaType: 'photo', mediaWidth, mediaHeight, mediaFileSize }
+    }
+
+    if (media.document || media.className === 'MessageMediaDocument') {
+      const doc: any = media.document
+      if (doc) {
+        let mediaType: 'video' | 'document' | 'voice' | 'sticker' = 'document'
+        let mediaDuration: number | undefined
+        let mediaWidth: number | undefined
+        let mediaHeight: number | undefined
+        let mediaFileName: string | undefined
+
+        const mime = doc.mimeType || ''
+        if (mime.startsWith('video/')) mediaType = 'video'
+        else if (mime.startsWith('audio/') || mime.includes('ogg')) mediaType = 'voice'
+        else if (mime.includes('webp')) mediaType = 'sticker'
+
+        if (Array.isArray(doc.attributes)) {
+          for (const attr of doc.attributes) {
+            const aName = attr.className || attr.constructor?.name || ''
+            if (aName === 'DocumentAttributeVideo') {
+              mediaType = 'video'
+              mediaDuration = attr.duration
+              mediaWidth = attr.w
+              mediaHeight = attr.h
+            } else if (aName === 'DocumentAttributeAudio') {
+              if (attr.voice) mediaType = 'voice'
+              mediaDuration = attr.duration
+            } else if (aName === 'DocumentAttributeFilename') {
+              mediaFileName = attr.fileName
+            } else if (aName === 'DocumentAttributeSticker') {
+              mediaType = 'sticker'
+            }
+          }
+        }
+
+        const mediaFileSize = typeof doc.size === 'bigint' ? Number(doc.size) : (doc.size || 0)
+        return {
+          mediaType,
+          mediaFileName,
+          mediaFileSize,
+          mediaDuration,
+          mediaWidth,
+          mediaHeight,
+          mediaMimeType: mime,
+        }
+      }
+    }
+
+    if (media.webpage || media.className === 'MessageMediaWebPage') {
+      const wp = media.webpage
+      if (wp && (wp.className === 'WebPage' || wp.url)) {
+        return {
+          mediaType: 'webpage',
+          webPage: {
+            url: wp.url || '',
+            siteName: wp.siteName,
+            title: wp.title,
+            description: wp.description,
+          },
+        }
+      }
+    }
+
+    return {}
+  }
+
+  /**
+   * Parse GramJS entities into frontend MessageEntityItem
+   */
+  private parseEntities(rawEntities: any): MessageEntityItem[] | undefined {
+    if (!Array.isArray(rawEntities) || rawEntities.length === 0) return undefined
+    return rawEntities.map((ent: any) => {
+      let type = 'unknown'
+      const cName = ent.className || ent.constructor?.name || ''
+      if (cName === 'MessageEntityBold') type = 'bold'
+      else if (cName === 'MessageEntityItalic') type = 'italic'
+      else if (cName === 'MessageEntityCode') type = 'code'
+      else if (cName === 'MessageEntityPre') type = 'pre'
+      else if (cName === 'MessageEntityTextUrl') type = 'text_url'
+      else if (cName === 'MessageEntityUrl') type = 'url'
+      else if (cName === 'MessageEntityMention') type = 'mention'
+      else if (cName === 'MessageEntityStrike') type = 'strike'
+      else if (cName === 'MessageEntityUnderline') type = 'underline'
+      else if (cName === 'MessageEntitySpoiler') type = 'spoiler'
+      else if (cName === 'MessageEntityCustomEmoji') type = 'custom_emoji'
+
+      return {
+        type,
+        offset: ent.offset,
+        length: ent.length,
+        url: ent.url,
+        language: ent.language,
+      }
+    })
   }
 
   private detectMediaType(media: any): 'photo' | 'video' | 'document' | 'voice' | 'sticker' | undefined {

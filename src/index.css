@@ -6,6 +6,24 @@
   * {
     box-sizing: border-box;
   }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Vazirmatn', Tahoma, 'Helvetica Neue', Arial, sans-serif;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  [dir="rtl"] {
+    direction: rtl;
+    text-align: right;
+    unicode-bidi: isolate;
+  }
+
+  [dir="ltr"] {
+    direction: ltr;
+    text-align: left;
+    unicode-bidi: isolate;
+  }
 }
 
 /* Custom Thin Dark Scrollbar */
@@ -19,12 +37,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.28);
 }
 
 /* Window Drag Regions */
@@ -47,4 +65,36 @@
   background: rgba(13, 15, 20, 0.92);
   backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Smooth reply-to glow animation */
+@keyframes replyGlow {
+  0% {
+    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.9), 0 0 25px rgba(6, 182, 212, 0.5);
+  }
+  60% {
+    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.8), 0 0 20px rgba(6, 182, 212, 0.4);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+.reply-highlight {
+  animation: replyGlow 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Spoiler reveal */
+.spoiler-hidden {
+  filter: blur(5px);
+  user-select: none;
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: filter 0.2s ease, background-color 0.2s ease;
+}
+
+.spoiler-revealed {
+  filter: none;
+  background-color: transparent;
 }
