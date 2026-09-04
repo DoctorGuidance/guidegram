@@ -36,7 +36,7 @@ const guidegramAPI = {
     fromChatId: string,
     messageIds: number[],
     options: ForwardOptions
-  ) =>
+  ): Promise<boolean> =>
     ipcRenderer.invoke('telegram:forward-messages', {
       accountId,
       toChatId,
@@ -44,13 +44,18 @@ const guidegramAPI = {
       messageIds,
       options,
     }),
-  markAsRead: (accountId: string, chatId: string) =>
+  markAsRead: (accountId: string, chatId: string): Promise<void> =>
     ipcRenderer.invoke('telegram:mark-as-read', { accountId, chatId }),
-  markAllAsRead: (accountId: string) =>
+  markAllAsRead: (accountId: string): Promise<{ success: boolean; count: number }> =>
     ipcRenderer.invoke('telegram:mark-all-as-read', { accountId }),
-  deleteMessages: (accountId: string, chatId: string, messageIds: number[], revoke?: boolean) =>
+  deleteMessages: (
+    accountId: string,
+    chatId: string,
+    messageIds: number[],
+    revoke?: boolean
+  ): Promise<boolean> =>
     ipcRenderer.invoke('telegram:delete-messages', { accountId, chatId, messageIds, revoke }),
-  openExternal: (url: string) =>
+  openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke('system:open-external', { url }),
 
   // Proxy & Settings

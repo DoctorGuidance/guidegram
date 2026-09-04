@@ -157,8 +157,8 @@ export const App: React.FC = () => {
   }
 
   // 64Gram Feature: Quick Forward to Saved Messages
-  const handleQuickForwardToSaved = async (message: MessageItem) => {
-    if (!activeAccountId || !window.guidegram) return
+  const handleQuickForwardToSaved = async (message: MessageItem): Promise<boolean> => {
+    if (!activeAccountId || !window.guidegram) return false
     try {
       await window.guidegram.forwardMessages(
         activeAccountId,
@@ -167,14 +167,16 @@ export const App: React.FC = () => {
         [message.id],
         { withoutQuote: false, silent: false }
       )
+      return true
     } catch (err) {
       console.error('Failed to quick forward to Saved Messages:', err)
+      return false
     }
   }
 
   // 64Gram Feature: Delete message with alwaysDeleteBoth setting
-  const handleDeleteMessage = async (message: MessageItem) => {
-    if (!activeAccountId || !activeChatId || !window.guidegram) return
+  const handleDeleteMessage = async (message: MessageItem): Promise<boolean> => {
+    if (!activeAccountId || !activeChatId || !window.guidegram) return false
     const revoke = config?.alwaysDeleteBoth ?? true
     try {
       await window.guidegram.deleteMessages(activeAccountId, activeChatId, [message.id], revoke)
@@ -182,14 +184,16 @@ export const App: React.FC = () => {
         ...prev,
         [activeChatId]: (prev[activeChatId] || []).filter((m) => m.id !== message.id),
       }))
+      return true
     } catch (err) {
       console.error('Failed to delete message:', err)
+      return false
     }
   }
 
   // 64Gram Feature: Mark all chats as read
-  const handleMarkAllAsRead = async () => {
-    if (!activeAccountId || !window.guidegram) return
+  const handleMarkAllAsRead = async (): Promise<boolean> => {
+    if (!activeAccountId || !window.guidegram) return false
     try {
       await window.guidegram.markAllAsRead(activeAccountId)
       setDialogsByAccount((prev) => {
@@ -199,8 +203,10 @@ export const App: React.FC = () => {
           [activeAccountId]: list.map((d) => ({ ...d, unreadCount: 0 })),
         }
       })
+      return true
     } catch (err) {
       console.error('Failed to mark all as read:', err)
+      return false
     }
   }
 
@@ -208,13 +214,18 @@ export const App: React.FC = () => {
   const handleSelectUserOrChat = (target: string) => {
     if (!activeAccountId) return
     const dialogs = dialogsByAccount[activeAccountId] || []
+    const cleanTarget = target.replace(/^@/, '').trim()
     const found = dialogs.find(
-      (d) => d.id === target || d.title.toLowerCase() === target.toLowerCase()
+      (d) =>
+        d.id === cleanTarget ||
+        d.id === target ||
+        d.title.toLowerCase() === cleanTarget.toLowerCase() ||
+        d.title.toLowerCase() === target.toLowerCase()
     )
     if (found) {
       handleSelectChat(found.id)
     } else {
-      setSearchQuery(target)
+      setSearchQuery(cleanTarget)
     }
   }
 

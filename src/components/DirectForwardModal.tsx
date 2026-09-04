@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Forward, Check, EyeOff, VolumeX, ShieldAlert } from 'lucide-react'
+import { X, Forward, Check, EyeOff, VolumeX, ShieldAlert, Bookmark } from 'lucide-react'
 import { DialogItem, MessageItem } from '../types/telegram'
 
 interface DirectForwardModalProps {
@@ -125,6 +125,22 @@ export const DirectForwardModal: React.FC<DirectForwardModalProps> = ({
           />
 
           <div className="space-y-1 max-h-48 overflow-y-auto">
+            {(!search || 'saved messages'.includes(search.toLowerCase())) && (
+              <div
+                onClick={() => setSelectedChatId('me')}
+                className={`p-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors text-xs ${
+                  selectedChatId === 'me'
+                    ? 'bg-primary-600 text-white'
+                    : 'hover:bg-dark-800 text-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Bookmark className="w-3.5 h-3.5 text-accent-cyan" />
+                  <span className="truncate font-medium">Saved Messages (پیام‌های ذخیره‌شده)</span>
+                </div>
+                {selectedChatId === 'me' && <Check className="w-3.5 h-3.5" />}
+              </div>
+            )}
             {filtered.map((d) => {
               const isSelected = selectedChatId === d.id
               return (

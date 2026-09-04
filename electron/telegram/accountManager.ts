@@ -635,10 +635,11 @@ export class AccountManager {
     if (!holder) throw new Error(`Account ${accountId} not found`)
 
     const targetPeer = (toChatId === 'me' || toChatId === accountId) ? 'me' : toChatId
+    const sourcePeer = (fromChatId === 'me' || fromChatId === accountId) ? 'me' : fromChatId
 
     await holder.client.forwardMessages(targetPeer, {
       messages: messageIds,
-      fromPeer: fromChatId,
+      fromPeer: sourcePeer,
       dropAuthor: options.withoutQuote ?? true, // Removes "Forwarded from" header
       silent: options.silent ?? false,
     })
@@ -664,24 +665,29 @@ export class AccountManager {
 
   /**
    * Mark all chats as read for the account (64Gram Mark All Read feature)
+   * Passes message object / maxId to properly advance channel read pointer
    */
-  public async markAllAsRead(accountId: string): Promise<void> {
+  public async markAllAsRead(accountId: string): Promise<{ success: boolean; count: number }> {
     const holder = this.clients.get(accountId)
     if (!holder) throw new Error(`Account ${accountId} not found`)
 
     const config = this.store.getConfig()
-    if (config.ghostMode) return // Ghost Mode blocks read receipts
+    if (config.ghostMode) return { success: true, count: 0 } // Ghost Mode blocks read receipts
 
-    const dialogs = await holder.client.getDialogs({ limit: 100 })
+    const dialogs = await holder.client.getDialogs({ limit: 200 })
+    let count = 0
     for (const d of dialogs) {
       if ((d as any).unreadCount > 0 && d.id != null) {
         try {
-          await holder.client.markAsRead(d.id)
+          const peer = (d as any).inputEntity || d.id
+          await holder.client.markAsRead(peer, (d as any).message)
+          count++
         } catch (err) {
-          console.warn(`[AccountManager] Failed to mark ${d.id} as read:`, err)
+          Logger.warn(`[AccountManager] Failed to mark ${d.id} as read:`, err)
         }
       }
     }
+    return { success: true, count }
   }
 
   /**

@@ -143,15 +143,21 @@ export const ChatList: React.FC<ChatListProps> = ({
                         {dialog.title}
                       </span>
                       {showChatId && (
-                        <span
-                          className={`text-[9px] font-mono px-1 py-0.2 rounded shrink-0 ${
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigator.clipboard.writeText(dialog.id)
+                          }}
+                          title={`Click to copy Chat ID #${dialog.id}`}
+                          className={`text-[9px] font-mono px-1 py-0.2 rounded shrink-0 hover:scale-105 active:scale-95 transition-all cursor-pointer ${
                             isSelected
-                              ? 'bg-white/20 text-white'
-                              : 'bg-dark-900 text-gray-500 border border-white/5'
+                              ? 'bg-white/20 text-white hover:bg-white/30'
+                              : 'bg-dark-900 text-gray-400 hover:text-white border border-white/5 hover:border-white/20'
                           }`}
                         >
                           #{dialog.id}
-                        </span>
+                        </button>
                       )}
                     </div>
                     <div

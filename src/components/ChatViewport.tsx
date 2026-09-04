@@ -29,8 +29,8 @@ interface ChatViewportProps {
   copyCallbackData?: boolean
   onSendMessage: (text: string) => void
   onOpenDirectForward: (message: MessageItem) => void
-  onQuickForwardToSaved?: (message: MessageItem) => void
-  onDeleteMessage?: (message: MessageItem) => void
+  onQuickForwardToSaved?: (message: MessageItem) => Promise<boolean> | void
+  onDeleteMessage?: (message: MessageItem) => Promise<boolean> | void
   onToggleGhostMode: () => void
   onSelectUserOrChat?: (target: string) => void
 }
@@ -77,22 +77,53 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   // 64Gram Keyboard Shortcuts: Alt+F (Fast Forward) and Alt+C (Copy message text)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = selectedMessage || hoveredMessage
-      if (!target) return
+      if (e.key === 'Escape') {
+        setSelectedMessage(null)
+        return
+      }
+
+      const activeEl = document.activeElement
+      const isInputFocused =
+        activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')
 
       if (e.altKey && (e.key === 'f' || e.key === 'F')) {
+        const target =
+          selectedMessage ||
+          hoveredMessage ||
+          (messages.length > 0 ? messages[messages.length - 1] : null)
+        if (!target) return
         e.preventDefault()
         onOpenDirectForward(target)
       } else if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+        // If user is selecting text in an input field, do not hijack Alt+C
+        if (isInputFocused && window.getSelection()?.toString()) return
+
+        const target =
+          selectedMessage ||
+          hoveredMessage ||
+          (messages.length > 0 ? messages[messages.length - 1] : null)
+        if (!target) return
         e.preventDefault()
-        navigator.clipboard.writeText(target.text)
-        showToast(`Copied text of message #${target.id}`)
+
+        if (!target.text || !target.text.trim()) {
+          showToast(`Message #${target.id} has no text to copy`)
+          return
+        }
+
+        navigator.clipboard
+          .writeText(target.text)
+          .then(() => {
+            showToast(`Copied text of message #${target.id}`)
+          })
+          .catch(() => {
+            showToast('Failed to copy to clipboard')
+          })
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedMessage, hoveredMessage, onOpenDirectForward])
+  }, [selectedMessage, hoveredMessage, messages, onOpenDirectForward])
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
@@ -119,55 +150,123 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     })
   }
 
-  // 64Gram Feature: Clickable Mentions (@user), Deep links (tg://user?id=...), and URLs
+  // 64Gram Feature: Clickable Mentions (@user), Deep links (tg://...), and URLs with punctuation stripping
   const renderMessageContent = (text: string) => {
-    const regex = /(https?:\/\/[^\s]+|tg:\/\/[^\s]+|@[a-zA-Z0-9_]{3,32})/g
-    const parts = text.split(regex)
+    const tokenRegex = /(https?:\/\/[^\s]+|tg:\/\/[^\s]+|@[a-zA-Z0-9_]{3,32})/g
+    const parts = text.split(tokenRegex)
 
     return parts.map((part, index) => {
       if (!part) return null
 
-      if (part.startsWith('http://') || part.startsWith('https://')) {
+      // Strip trailing punctuation from URLs and deep links (e.g. '.', ',', ')', '>', '!')
+      let cleanPart = part
+      let trailingPunct = ''
+      if (
+        cleanPart.startsWith('http://') ||
+        cleanPart.startsWith('https://') ||
+        cleanPart.startsWith('tg://')
+      ) {
+        const match = cleanPart.match(/([.,!?;:)>\]]+)$/)
+        if (match) {
+          trailingPunct = match[1]
+          cleanPart = cleanPart.slice(0, -trailingPunct.length)
+        }
+      }
+
+      // 1. Telegram Deep Links (tg://...)
+      if (cleanPart.startsWith('tg://')) {
+        let targetDestination: string | null = null
+        try {
+          const parsedUrl = new URL(cleanPart)
+          if (parsedUrl.protocol === 'tg:') {
+            if (parsedUrl.pathname === '//user' || parsedUrl.hostname === 'user') {
+              targetDestination = parsedUrl.searchParams.get('id')
+            } else if (
+              parsedUrl.pathname === '//openmessage' ||
+              parsedUrl.hostname === 'openmessage'
+            ) {
+              targetDestination =
+                parsedUrl.searchParams.get('chat_id') || parsedUrl.searchParams.get('user_id')
+            } else if (parsedUrl.pathname === '//resolve' || parsedUrl.hostname === 'resolve') {
+              targetDestination = parsedUrl.searchParams.get('domain')
+            }
+          }
+        } catch (_) {
+          const userMatch = cleanPart.match(/tg:\/\/user\?id=([0-9-]+)/)
+          if (userMatch) targetDestination = userMatch[1]
+          const openMsgMatch = cleanPart.match(/tg:\/\/openmessage\?(?:chat_id|user_id)=([0-9-]+)/)
+          if (openMsgMatch) targetDestination = openMsgMatch[1]
+          const resolveMatch = cleanPart.match(/tg:\/\/resolve\?domain=([a-zA-Z0-9_]+)/)
+          if (resolveMatch) targetDestination = resolveMatch[1]
+        }
+
         return (
-          <a
-            key={index}
-            href={part}
-            onClick={(e) => {
-              e.preventDefault()
-              window.guidegram?.openExternal?.(part)
-            }}
-            className="text-accent-cyan underline hover:text-cyan-300 transition-colors break-all inline cursor-pointer"
-            title={`Open ${part}`}
-          >
-            {part}
-          </a>
+          <React.Fragment key={index}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (targetDestination) {
+                  onSelectUserOrChat?.(targetDestination)
+                } else {
+                  window.guidegram?.openExternal?.(cleanPart)
+                }
+              }}
+              className="text-primary-300 font-mono hover:underline inline-flex items-center gap-0.5 cursor-pointer bg-white/5 px-1 rounded"
+              title={`Telegram Deep Link: ${cleanPart}`}
+            >
+              {cleanPart}
+            </button>
+            {trailingPunct}
+          </React.Fragment>
         )
       }
 
-      if (part.startsWith('tg://')) {
+      // 2. Standard Web URLs (http:// or https://)
+      if (cleanPart.startsWith('http://') || cleanPart.startsWith('https://')) {
+        const tMeMatch = cleanPart.match(/^https?:\/\/t\.me\/([a-zA-Z0-9_]{3,32})$/)
+        if (tMeMatch) {
+          const username = tMeMatch[1]
+          return (
+            <React.Fragment key={index}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelectUserOrChat?.(username)
+                }}
+                className="text-accent-cyan underline hover:text-cyan-300 transition-colors inline cursor-pointer font-medium"
+                title={`Open Telegram profile: @${username}`}
+              >
+                {cleanPart}
+              </button>
+              {trailingPunct}
+            </React.Fragment>
+          )
+        }
+
         return (
-          <button
-            key={index}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              if (part.includes('tg://user?id=')) {
-                const id = part.replace('tg://user?id=', '')
-                onSelectUserOrChat?.(id)
-              } else {
-                window.guidegram?.openExternal?.(part)
-              }
-            }}
-            className="text-primary-300 font-mono hover:underline inline-flex items-center gap-0.5 cursor-pointer bg-white/5 px-1 rounded"
-            title={`Telegram Deep Link: ${part}`}
-          >
-            {part}
-          </button>
+          <React.Fragment key={index}>
+            <a
+              href={cleanPart}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                window.guidegram?.openExternal?.(cleanPart)
+              }}
+              className="text-accent-cyan underline hover:text-cyan-300 transition-colors break-all inline cursor-pointer"
+              title={`Open ${cleanPart}`}
+            >
+              {cleanPart}
+            </a>
+            {trailingPunct}
+          </React.Fragment>
         )
       }
 
-      if (part.startsWith('@')) {
-        const username = part.slice(1)
+      // 3. User Mentions (@username)
+      if (cleanPart.startsWith('@')) {
+        const username = cleanPart.slice(1)
         return (
           <button
             key={index}
@@ -179,7 +278,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             className="text-accent-cyan font-semibold hover:underline inline cursor-pointer"
             title={`User profile: @${username}`}
           >
-            {part}
+            {cleanPart}
           </button>
         )
       }
@@ -270,7 +369,12 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       </div>
 
       {/* Messages Feed */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div
+        className="flex-1 overflow-y-auto p-4 space-y-3"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSelectedMessage(null)
+        }}
+      >
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-xs text-gray-500">
             No messages in this chat yet.
@@ -284,7 +388,23 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 key={msg.id}
                 onMouseEnter={() => setHoveredMessage(msg)}
                 onMouseLeave={() => setHoveredMessage(null)}
-                onClick={() => setSelectedMessage(isSelected ? null : msg)}
+                onClick={async (e) => {
+                  // 64Gram Feature: Quick forward when pressed ctrl
+                  if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (onQuickForwardToSaved) {
+                      const ok = await onQuickForwardToSaved(msg)
+                      if (ok !== false) {
+                        showToast(`Forwarded message #${msg.id} to Saved Messages!`)
+                      } else {
+                        showToast('Failed to forward to Saved Messages')
+                      }
+                    }
+                    return
+                  }
+                  setSelectedMessage(isSelected ? null : msg)
+                }}
                 className={`flex flex-col group ${
                   msg.isOutgoing ? 'items-end' : 'items-start'
                 }`}
@@ -297,12 +417,16 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       {quickForwardToSaved && onQuickForwardToSaved && (
                         <button
                           type="button"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation()
-                            onQuickForwardToSaved(msg)
-                            showToast('Forwarded to Saved Messages!')
+                            const ok = await onQuickForwardToSaved(msg)
+                            if (ok !== false) {
+                              showToast('Forwarded to Saved Messages!')
+                            } else {
+                              showToast('Failed to forward to Saved Messages')
+                            }
                           }}
-                          title="Quick Forward to Saved Messages"
+                          title="Quick Forward to Saved Messages (Ctrl+Click on message)"
                           className="p-1.5 rounded-lg text-gray-400 hover:text-accent-cyan hover:bg-dark-750 transition-colors cursor-pointer"
                         >
                           <Bookmark className="w-3.5 h-3.5" />
@@ -327,8 +451,18 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
-                          navigator.clipboard.writeText(msg.text)
-                          showToast(`Copied message #${msg.id} text`)
+                          if (!msg.text || !msg.text.trim()) {
+                            showToast(`Message #${msg.id} has no text to copy`)
+                            return
+                          }
+                          navigator.clipboard
+                            .writeText(msg.text)
+                            .then(() => {
+                              showToast(`Copied message #${msg.id} text`)
+                            })
+                            .catch(() => {
+                              showToast('Failed to copy text')
+                            })
                         }}
                         title="Copy Text (Alt+C)"
                         className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-dark-750 transition-colors cursor-pointer"
@@ -340,9 +474,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       {onDeleteMessage && (
                         <button
                           type="button"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation()
-                            onDeleteMessage(msg)
+                            const confirmMsg = alwaysDeleteBoth
+                              ? `Delete message #${msg.id} for both sides?`
+                              : `Delete message #${msg.id}?`
+                            if (window.confirm(confirmMsg)) {
+                              const ok = await onDeleteMessage(msg)
+                              if (ok !== false) {
+                                showToast(`Deleted message #${msg.id}`)
+                              } else {
+                                showToast('Failed to delete message')
+                              }
+                            }
                           }}
                           title={alwaysDeleteBoth ? 'Delete for everyone' : 'Delete message'}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-accent-rose hover:bg-dark-750 transition-colors cursor-pointer"
@@ -478,12 +622,16 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       {quickForwardToSaved && onQuickForwardToSaved && (
                         <button
                           type="button"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation()
-                            onQuickForwardToSaved(msg)
-                            showToast('Forwarded to Saved Messages!')
+                            const ok = await onQuickForwardToSaved(msg)
+                            if (ok !== false) {
+                              showToast('Forwarded to Saved Messages!')
+                            } else {
+                              showToast('Failed to forward to Saved Messages')
+                            }
                           }}
-                          title="Quick Forward to Saved Messages"
+                          title="Quick Forward to Saved Messages (Ctrl+Click on message)"
                           className="p-1.5 rounded-lg text-gray-400 hover:text-accent-cyan hover:bg-dark-750 transition-colors cursor-pointer"
                         >
                           <Bookmark className="w-3.5 h-3.5" />
@@ -508,8 +656,18 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
-                          navigator.clipboard.writeText(msg.text)
-                          showToast(`Copied message #${msg.id} text`)
+                          if (!msg.text || !msg.text.trim()) {
+                            showToast(`Message #${msg.id} has no text to copy`)
+                            return
+                          }
+                          navigator.clipboard
+                            .writeText(msg.text)
+                            .then(() => {
+                              showToast(`Copied message #${msg.id} text`)
+                            })
+                            .catch(() => {
+                              showToast('Failed to copy text')
+                            })
                         }}
                         title="Copy Text (Alt+C)"
                         className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-dark-750 transition-colors cursor-pointer"
@@ -521,9 +679,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       {onDeleteMessage && (
                         <button
                           type="button"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation()
-                            onDeleteMessage(msg)
+                            const confirmMsg = alwaysDeleteBoth
+                              ? `Delete message #${msg.id} for both sides?`
+                              : `Delete message #${msg.id}?`
+                            if (window.confirm(confirmMsg)) {
+                              const ok = await onDeleteMessage(msg)
+                              if (ok !== false) {
+                                showToast(`Deleted message #${msg.id}`)
+                              } else {
+                                showToast('Failed to delete message')
+                              }
+                            }
                           }}
                           title={alwaysDeleteBoth ? 'Delete for everyone' : 'Delete message'}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-accent-rose hover:bg-dark-750 transition-colors cursor-pointer"
