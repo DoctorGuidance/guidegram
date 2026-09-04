@@ -6,11 +6,13 @@
   "directories": {
     "output": "release"
   },
-  "files": [
+    "files": [
     "dist",
-    "dist-electron"
+    "dist-electron",
+    "resources"
   ],
   "win": {
+    "icon": "resources/icon.ico",
     "target": [
       {
         "target": "dir",

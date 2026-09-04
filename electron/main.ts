@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { SessionStore } from './telegram/sessionStore'
 import { AccountManager } from './telegram/accountManager'
@@ -30,13 +31,113 @@ process.on('unhandledRejection', (reason) => {
 })
 
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 let sessionStore: SessionStore
 let accountManager: AccountManager
 let updateManager: UpdateManager
 
+function getAppIconPath(): string {
+  const isPackaged = app.isPackaged
+  const basePath = isPackaged
+    ? path.join(process.resourcesPath, 'resources')
+    : path.resolve(__dirname, '../resources')
+  
+  const iconIco = path.join(basePath, 'icon.ico')
+  const iconPng = path.join(basePath, 'icon32.png')
+
+  if (fs.existsSync(iconIco)) return iconIco
+  if (fs.existsSync(iconPng)) return iconPng
+  return ''
+}
+
+function createTray() {
+  if (tray) return
+
+  const iconPath = getAppIconPath()
+  let trayIcon: InstanceType<typeof nativeImage> | null = null
+
+  if (iconPath) {
+    trayIcon = nativeImage.createFromPath(iconPath)
+  }
+
+  // Fallback: create empty 16x16 nativeImage if no file found
+  if (!trayIcon || trayIcon.isEmpty()) {
+    trayIcon = nativeImage.createEmpty()
+  }
+
+  tray = new Tray(trayIcon)
+  tray.setToolTip('Guidegram - Telegram Client')
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open Guidegram',
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore()
+          mainWindow.show()
+          mainWindow.focus()
+        } else {
+          createWindow()
+        }
+      },
+    },
+    {
+      label: 'Check for Updates...',
+      click: async () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        }
+        const cfg = sessionStore.getConfig()
+        const activeProxy = cfg.proxies.find((p) => p.enabled)
+        try {
+          const info = await updateManager.checkForUpdates(activeProxy)
+          if (info && info.hasUpdate && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('app:update-available', info)
+          }
+        } catch (e) {
+          Logger.warn('[Tray] Check updates error:', e)
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Guidegram',
+      click: () => {
+        if (tray) {
+          tray.destroy()
+          tray = null
+        }
+        app.quit()
+      },
+    },
+  ])
+
+  tray.setContextMenu(contextMenu)
+
+  tray.on('click', () => {
+    if (!mainWindow) {
+      createWindow()
+      return
+    }
+    if (mainWindow.isVisible()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore()
+        mainWindow.focus()
+      } else {
+        mainWindow.focus()
+      }
+    } else {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+}
+
 function createWindow() {
   Logger.info('[Window] Creating main application window...')
 
+  const iconPath = getAppIconPath()
   mainWindow = new BrowserWindow({
     width: 1260,
     height: 840,
@@ -46,6 +147,7 @@ function createWindow() {
     backgroundColor: '#08090C',
     title: 'Guidegram',
     frame: false, // Frameless window with custom titlebar
+    icon: iconPath || undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       sandbox: false,
@@ -114,6 +216,7 @@ app.whenReady().then(async () => {
   updateManager = new UpdateManager()
 
   setupIpcHandlers()
+  createTray()
   createWindow()
 
   // Start background hourly check for updates
