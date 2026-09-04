@@ -21,5 +21,33 @@
         ]
       }
     ]
+  },
+  "mac": {
+    "icon": "resources/icon256.png",
+    "category": "public.app-category.social-networking",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["x64", "arm64"]
+      }
+    ]
+  },
+  "linux": {
+    "icon": "resources/icon256.png",
+    "category": "Network;Chat;",
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64"]
+      },
+      {
+        "target": "tar.gz",
+        "arch": ["x64"]
+      }
+    ]
   }
 }
