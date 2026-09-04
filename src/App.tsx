@@ -10,7 +10,7 @@ import { AddAccountModal } from './components/AddAccountModal'
 import { ProxySettingsModal } from './components/ProxySettingsModal'
 import { SettingsModal } from './components/SettingsModal'
 import { UnifiedInbox } from './components/UnifiedInbox'
-import { AccountInfo, DialogItem, MessageItem } from './types/telegram'
+import { AccountInfo, DialogItem, MessageItem, AppConfig } from './types/telegram'
 
 export const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false)
@@ -23,6 +23,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabCategory>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [ghostMode, setGhostMode] = useState(false)
+  const [config, setConfig] = useState<AppConfig | null>(null)
 
   // Modals state
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false)
@@ -46,6 +47,7 @@ export const App: React.FC = () => {
 
           const cfg = await window.guidegram.getConfig()
           if (cfg) {
+            setConfig(cfg)
             setGhostMode(cfg.ghostMode || false)
           }
         }
@@ -72,7 +74,9 @@ export const App: React.FC = () => {
             return {
               ...prev,
               [accountId]: list.map((d) =>
-                d.id === chatId ? { ...d, unreadCount: d.unreadCount + 1, lastMessageText: message.text } : d
+                d.id === chatId
+                  ? { ...d, unreadCount: d.unreadCount + 1, lastMessageText: message.text }
+                  : d
               ),
             }
           })
@@ -152,6 +156,68 @@ export const App: React.FC = () => {
     )
   }
 
+  // 64Gram Feature: Quick Forward to Saved Messages
+  const handleQuickForwardToSaved = async (message: MessageItem) => {
+    if (!activeAccountId || !window.guidegram) return
+    try {
+      await window.guidegram.forwardMessages(
+        activeAccountId,
+        'me', // Saved Messages
+        message.chatId,
+        [message.id],
+        { withoutQuote: false, silent: false }
+      )
+    } catch (err) {
+      console.error('Failed to quick forward to Saved Messages:', err)
+    }
+  }
+
+  // 64Gram Feature: Delete message with alwaysDeleteBoth setting
+  const handleDeleteMessage = async (message: MessageItem) => {
+    if (!activeAccountId || !activeChatId || !window.guidegram) return
+    const revoke = config?.alwaysDeleteBoth ?? true
+    try {
+      await window.guidegram.deleteMessages(activeAccountId, activeChatId, [message.id], revoke)
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [activeChatId]: (prev[activeChatId] || []).filter((m) => m.id !== message.id),
+      }))
+    } catch (err) {
+      console.error('Failed to delete message:', err)
+    }
+  }
+
+  // 64Gram Feature: Mark all chats as read
+  const handleMarkAllAsRead = async () => {
+    if (!activeAccountId || !window.guidegram) return
+    try {
+      await window.guidegram.markAllAsRead(activeAccountId)
+      setDialogsByAccount((prev) => {
+        const list = prev[activeAccountId] || []
+        return {
+          ...prev,
+          [activeAccountId]: list.map((d) => ({ ...d, unreadCount: 0 })),
+        }
+      })
+    } catch (err) {
+      console.error('Failed to mark all as read:', err)
+    }
+  }
+
+  // 64Gram Feature: Select chat by username or numeric ID
+  const handleSelectUserOrChat = (target: string) => {
+    if (!activeAccountId) return
+    const dialogs = dialogsByAccount[activeAccountId] || []
+    const found = dialogs.find(
+      (d) => d.id === target || d.title.toLowerCase() === target.toLowerCase()
+    )
+    if (found) {
+      handleSelectChat(found.id)
+    } else {
+      setSearchQuery(target)
+    }
+  }
+
   const handleToggleGhostMode = async () => {
     const next = !ghostMode
     setGhostMode(next)
@@ -209,10 +275,10 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-dark-950 font-sans">
-      {/* 1. Integrated Custom TitleBar (No Windows DWM black screen bugs) */}
+      {/* 1. Integrated Custom TitleBar */}
       <TitleBar activeAccount={currentAccount} ghostMode={ghostMode} />
 
-      {/* 2. Main Content: Welcome Screen (when no accounts) OR Active Multi-Account Workspace */}
+      {/* 2. Main Content: Welcome Screen OR Active Multi-Account Workspace */}
       {accounts.length === 0 ? (
         <WelcomeScreen
           onOpenAddAccount={() => setIsAddAccountOpen(true)}
@@ -262,6 +328,8 @@ export const App: React.FC = () => {
               activeTab={activeTab}
               onTabChange={setActiveTab}
               unreadCounts={unreadCounts}
+              markAllReadEnabled={config?.markAllReadEnabled ?? true}
+              onMarkAllAsRead={handleMarkAllAsRead}
             />
             <ChatList
               account={currentAccount}
@@ -269,19 +337,30 @@ export const App: React.FC = () => {
               activeChatId={activeChatId}
               activeTab={activeTab}
               searchQuery={searchQuery}
+              showChatId={config?.showChatId ?? true}
               onSearchChange={setSearchQuery}
               onSelectChat={handleSelectChat}
             />
           </div>
 
-          {/* Active Conversation Viewport */}
+          {/* Active Conversation Viewport with 64Gram Fork Enhancements */}
           <ChatViewport
             chat={currentChat}
             messages={currentMessages}
             ghostMode={ghostMode}
+            showChatId={config?.showChatId ?? true}
+            showMessageId={config?.showMessageId ?? true}
+            showSeconds={config?.showSeconds ?? true}
+            showSenderAvatar={config?.showSenderAvatar ?? true}
+            quickForwardToSaved={config?.quickForwardToSaved ?? true}
+            alwaysDeleteBoth={config?.alwaysDeleteBoth ?? true}
+            copyCallbackData={config?.copyCallbackData ?? true}
             onSendMessage={handleSendMessage}
             onOpenDirectForward={(msg) => setForwardMessage(msg)}
+            onQuickForwardToSaved={handleQuickForwardToSaved}
+            onDeleteMessage={handleDeleteMessage}
             onToggleGhostMode={handleToggleGhostMode}
+            onSelectUserOrChat={handleSelectUserOrChat}
           />
         </div>
       )}
@@ -313,6 +392,7 @@ export const App: React.FC = () => {
         accounts={accounts}
         onClose={() => setIsSettingsOpen(false)}
         onLogoutAccount={handleLogoutAccount}
+        onConfigUpdated={(newCfg) => setConfig(newCfg)}
       />
     </div>
   )

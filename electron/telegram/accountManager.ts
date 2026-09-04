@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import { SessionStore } from './sessionStore'
 import { ProxyManager } from './proxyManager'
 import { Logger } from './logger'
-import { AccountInfo, DialogItem, MessageItem, ForwardOptions, ProxyConfig, QrTokenPayload } from './types'
+import { AccountInfo, DialogItem, MessageItem, ForwardOptions, ProxyConfig, QrTokenPayload, InlineButton } from './types'
 
 export interface ClientHolder {
   client: TelegramClient
@@ -557,6 +557,31 @@ export class AccountManager {
     const messages = await holder.client.getMessages(chatId, { limit })
 
     return messages.map((m: any) => {
+      let replyMarkup: { rows: InlineButton[][] } | undefined = undefined
+      if (m.replyMarkup && (m.replyMarkup as any).rows) {
+        replyMarkup = {
+          rows: (m.replyMarkup as any).rows.map((row: any) =>
+            (row.buttons || []).map((btn: any) => {
+              let callbackData: string | undefined = undefined
+              if (btn.data) {
+                try {
+                  callbackData = Buffer.isBuffer(btn.data)
+                    ? btn.data.toString('utf-8')
+                    : String(btn.data)
+                } catch (_) {
+                  callbackData = String(btn.data)
+                }
+              }
+              return {
+                text: btn.text || '',
+                url: btn.url,
+                data: callbackData,
+              }
+            })
+          ),
+        }
+      }
+
       return {
         id: m.id,
         chatId,
@@ -570,6 +595,7 @@ export class AccountManager {
         forwardFromName: m.fwdFrom?.fromName || undefined,
         replyToMsgId: m.replyTo?.replyToMsgId,
         mediaType: m.media ? this.detectMediaType(m.media) : undefined,
+        replyMarkup,
       }
     }).reverse() // Chronological order
   }
@@ -596,6 +622,7 @@ export class AccountManager {
   /**
    * Telegraph-like Direct Forwarding:
    * dropAuthor: true removes the "Forwarded From" header!
+   * Supports forwarding to Saved Messages ('me' or accountId)
    */
   public async forwardMessages(
     accountId: string,
@@ -607,7 +634,9 @@ export class AccountManager {
     const holder = this.clients.get(accountId)
     if (!holder) throw new Error(`Account ${accountId} not found`)
 
-    await holder.client.forwardMessages(toChatId, {
+    const targetPeer = (toChatId === 'me' || toChatId === accountId) ? 'me' : toChatId
+
+    await holder.client.forwardMessages(targetPeer, {
       messages: messageIds,
       fromPeer: fromChatId,
       dropAuthor: options.withoutQuote ?? true, // Removes "Forwarded from" header
@@ -615,6 +644,44 @@ export class AccountManager {
     })
 
     return true
+  }
+
+  /**
+   * Delete messages (Supports 64Gram alwaysDeleteBoth / revoke for both users)
+   */
+  public async deleteMessages(
+    accountId: string,
+    chatId: string,
+    messageIds: number[],
+    revoke = true
+  ): Promise<boolean> {
+    const holder = this.clients.get(accountId)
+    if (!holder) throw new Error(`Account ${accountId} not found`)
+
+    await holder.client.deleteMessages(chatId, messageIds, { revoke })
+    return true
+  }
+
+  /**
+   * Mark all chats as read for the account (64Gram Mark All Read feature)
+   */
+  public async markAllAsRead(accountId: string): Promise<void> {
+    const holder = this.clients.get(accountId)
+    if (!holder) throw new Error(`Account ${accountId} not found`)
+
+    const config = this.store.getConfig()
+    if (config.ghostMode) return // Ghost Mode blocks read receipts
+
+    const dialogs = await holder.client.getDialogs({ limit: 100 })
+    for (const d of dialogs) {
+      if ((d as any).unreadCount > 0 && d.id != null) {
+        try {
+          await holder.client.markAsRead(d.id)
+        } catch (err) {
+          console.warn(`[AccountManager] Failed to mark ${d.id} as read:`, err)
+        }
+      }
+    }
   }
 
   /**
@@ -645,6 +712,31 @@ export class AccountManager {
       const msg = event.message
       if (!msg) return
 
+      let replyMarkup: { rows: InlineButton[][] } | undefined = undefined
+      if (msg.replyMarkup && (msg.replyMarkup as any).rows) {
+        replyMarkup = {
+          rows: (msg.replyMarkup as any).rows.map((row: any) =>
+            (row.buttons || []).map((btn: any) => {
+              let callbackData: string | undefined = undefined
+              if (btn.data) {
+                try {
+                  callbackData = Buffer.isBuffer(btn.data)
+                    ? btn.data.toString('utf-8')
+                    : String(btn.data)
+                } catch (_) {
+                  callbackData = String(btn.data)
+                }
+              }
+              return {
+                text: btn.text || '',
+                url: btn.url,
+                data: callbackData,
+              }
+            })
+          ),
+        }
+      }
+
       const payload = {
         accountId,
         chatId: msg.chatId?.toString(),
@@ -656,6 +748,8 @@ export class AccountManager {
           text: msg.message || '',
           date: msg.date * 1000,
           isOutgoing: msg.out || false,
+          mediaType: msg.media ? this.detectMediaType(msg.media) : undefined,
+          replyMarkup,
         },
       }
 

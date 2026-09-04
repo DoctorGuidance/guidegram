@@ -33,7 +33,15 @@ export class SessionStore {
       ghostMode: false,
       theme: 'dark',
       accounts: [],
-      proxies: []
+      proxies: [],
+      showChatId: true,
+      showMessageId: true,
+      showSeconds: true,
+      showSenderAvatar: true,
+      quickForwardToSaved: true,
+      alwaysDeleteBoth: true,
+      markAllReadEnabled: true,
+      copyCallbackData: true,
     }
 
     try {

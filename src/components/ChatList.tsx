@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Search, Pin, ShieldCheck, CheckCheck } from 'lucide-react'
+import React from 'react'
+import { Search, Pin, ShieldCheck } from 'lucide-react'
 import { DialogItem, AccountInfo } from '../types/telegram'
 import { TabCategory } from './ChatTabs'
 
@@ -9,6 +9,7 @@ interface ChatListProps {
   activeChatId: string | null
   activeTab: TabCategory
   searchQuery: string
+  showChatId?: boolean
   onSearchChange: (query: string) => void
   onSelectChat: (chatId: string) => void
 }
@@ -19,6 +20,7 @@ export const ChatList: React.FC<ChatListProps> = ({
   activeChatId,
   activeTab,
   searchQuery,
+  showChatId = true,
   onSearchChange,
   onSelectChat,
 }) => {
@@ -28,7 +30,8 @@ export const ChatList: React.FC<ChatListProps> = ({
     if (
       searchQuery.trim() &&
       !dialog.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !dialog.lastMessageText?.toLowerCase().includes(searchQuery.toLowerCase())
+      !dialog.lastMessageText?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !dialog.id.includes(searchQuery.trim())
     ) {
       return false
     }
@@ -89,7 +92,7 @@ export const ChatList: React.FC<ChatListProps> = ({
           <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search chats, groups, channels..."
+            placeholder="Search chats, IDs, groups..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full bg-dark-800 border border-white/5 rounded-xl pl-9 pr-3 py-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors"
@@ -131,12 +134,25 @@ export const ChatList: React.FC<ChatListProps> = ({
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
-                    <div
-                      className={`text-xs font-semibold truncate ${
-                        isSelected ? 'text-white' : 'text-gray-200'
-                      }`}
-                    >
-                      {dialog.title}
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span
+                        className={`text-xs font-semibold truncate ${
+                          isSelected ? 'text-white' : 'text-gray-200'
+                        }`}
+                      >
+                        {dialog.title}
+                      </span>
+                      {showChatId && (
+                        <span
+                          className={`text-[9px] font-mono px-1 py-0.2 rounded shrink-0 ${
+                            isSelected
+                              ? 'bg-white/20 text-white'
+                              : 'bg-dark-900 text-gray-500 border border-white/5'
+                          }`}
+                        >
+                          #{dialog.id}
+                        </span>
+                      )}
                     </div>
                     <div
                       className={`text-[10px] shrink-0 ml-1 ${
@@ -159,9 +175,7 @@ export const ChatList: React.FC<ChatListProps> = ({
                     <div className="flex items-center gap-1.5 shrink-0 ml-1">
                       {dialog.isPinned && (
                         <Pin
-                          className={`w-3 h-3 ${
-                            isSelected ? 'text-white' : 'text-gray-500'
-                          }`}
+                          className={`w-3 h-3 ${isSelected ? 'text-white' : 'text-gray-500'}`}
                         />
                       )}
                       {dialog.unreadCount > 0 && (

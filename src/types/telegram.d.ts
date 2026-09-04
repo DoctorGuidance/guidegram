@@ -7,6 +7,7 @@ import type {
   AppConfig,
   ForwardOptions,
   QrTokenPayload,
+  InlineButton,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -23,4 +24,5 @@ export type {
   AppConfig,
   ForwardOptions,
   QrTokenPayload,
+  InlineButton,
 }

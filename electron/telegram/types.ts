@@ -51,6 +51,12 @@ export interface DialogItem {
   avatarInitials?: string
 }
 
+export interface InlineButton {
+  text: string
+  url?: string
+  data?: string // callback_data
+}
+
 export interface MessageItem {
   id: number
   chatId: string
@@ -64,6 +70,9 @@ export interface MessageItem {
   forwardFromName?: string
   replyToMsgId?: number
   mediaType?: 'photo' | 'video' | 'document' | 'voice' | 'sticker'
+  replyMarkup?: {
+    rows: InlineButton[][]
+  }
 }
 
 export interface ForwardOptions {
@@ -79,4 +88,13 @@ export interface AppConfig {
   theme: 'dark' | 'oled' | 'light'
   accounts: AccountInfo[]
   proxies: ProxyConfig[]
+  // 64Gram Power Features
+  showChatId: boolean
+  showMessageId: boolean
+  showSeconds: boolean
+  showSenderAvatar: boolean
+  quickForwardToSaved: boolean
+  alwaysDeleteBoth: boolean
+  markAllReadEnabled: boolean
+  copyCallbackData: boolean
 }

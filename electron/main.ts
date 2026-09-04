@@ -253,6 +253,37 @@ function setupIpcHandlers() {
     return accountManager.markAsRead(accountId, chatId)
   })
 
+  ipcMain.handle('telegram:mark-all-as-read', async (_event, { accountId }) => {
+    try {
+      return await accountManager.markAllAsRead(accountId)
+    } catch (err: any) {
+      Logger.error(`[IPC] markAllAsRead failed:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle(
+    'telegram:delete-messages',
+    async (_event, { accountId, chatId, messageIds, revoke }) => {
+      try {
+        return await accountManager.deleteMessages(accountId, chatId, messageIds, revoke)
+      } catch (err: any) {
+        Logger.error(`[IPC] deleteMessages failed:`, err)
+        throw err
+      }
+    }
+  )
+
+  ipcMain.handle('system:open-external', async (_event, { url }) => {
+    try {
+      if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('tg://'))) {
+        await shell.openExternal(url)
+      }
+    } catch (err) {
+      Logger.warn(`[IPC] Failed to open external URL: ${url}`, err)
+    }
+  })
+
   ipcMain.handle('telegram:test-proxy-ping', async (_event, { proxy }) => {
     return ProxyManager.testProxyPing(proxy)
   })

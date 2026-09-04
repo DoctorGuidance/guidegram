@@ -46,6 +46,12 @@ const guidegramAPI = {
     }),
   markAsRead: (accountId: string, chatId: string) =>
     ipcRenderer.invoke('telegram:mark-as-read', { accountId, chatId }),
+  markAllAsRead: (accountId: string) =>
+    ipcRenderer.invoke('telegram:mark-all-as-read', { accountId }),
+  deleteMessages: (accountId: string, chatId: string, messageIds: number[], revoke?: boolean) =>
+    ipcRenderer.invoke('telegram:delete-messages', { accountId, chatId, messageIds, revoke }),
+  openExternal: (url: string) =>
+    ipcRenderer.invoke('system:open-external', { url }),
 
   // Proxy & Settings
   testProxyPing: (proxy: ProxyConfig) =>
