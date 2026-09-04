@@ -80,7 +80,7 @@ export const DirectForwardModal: React.FC<DirectForwardModalProps> = ({
               <EyeOff className="w-4 h-4 text-primary-400" />
               <div>
                 <div className="text-xs font-semibold text-gray-200">
-                  Forward Without Quote (بدون نقل قول)
+                  Forward Without Quote (Direct Forward)
                 </div>
                 <div className="text-[10px] text-gray-400">
                   Removes the original sender & channel name
@@ -136,7 +136,7 @@ export const DirectForwardModal: React.FC<DirectForwardModalProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <Bookmark className="w-3.5 h-3.5 text-accent-cyan" />
-                  <span className="truncate font-medium">Saved Messages (پیام‌های ذخیره‌شده)</span>
+                  <span className="truncate font-medium">Saved Messages</span>
                 </div>
                 {selectedChatId === 'me' && <Check className="w-3.5 h-3.5" />}
               </div>

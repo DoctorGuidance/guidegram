@@ -113,7 +113,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               <div className="p-2 rounded-xl bg-accent-violet/10 text-accent-violet border border-accent-violet/20">
                 <Forward className="w-4 h-4" />
               </div>
-              <h3 className="text-xs font-bold text-gray-100">Direct Forward (بدون نقل قول)</h3>
+              <h3 className="text-xs font-bold text-gray-100">Direct Forward (No Quote)</h3>
             </div>
             <p className="text-[11px] text-gray-400 leading-normal">
               Forward messages silently with original author and channel headers completely removed.

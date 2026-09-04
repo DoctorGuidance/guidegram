@@ -1,139 +1,154 @@
-# 🚀 Guidegram (گایدگرام)
+# 🚀 Guidegram
 
 [![GitHub Release](https://img.shields.io/github/v/release/DoctorGuidance/guidegram?style=for-the-badge&color=22c55e&logo=github)](https://github.com/DoctorGuidance/guidegram/releases/latest)
 [![Windows](https://img.shields.io/badge/Platform-Windows%20x64-0078d4?style=for-the-badge&logo=windows)](https://github.com/DoctorGuidance/guidegram/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Electron](https://img.shields.io/badge/Electron-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
 
 > **Next-Generation Portable Desktop Telegram Client with Unlimited Multi-Account & 64Gram / Telegraph Power Features**
-> کلاینت دسکتاپ مدرن و کاملاً پورتابل تلگرام بدون محدودیت ۳ اکانت، مجهز به پروکسی اختصاصی برای هر اکانت و قابلیت‌های پیشرفته برگرفته از ۶۴گرم و تلگراف.
+> A modern, lightning-fast, portable desktop client for Telegram designed to eliminate the 3-account restriction, empower users with individual per-account proxies, and provide advanced forwarding and messaging capabilities.
 
 ---
 
-## 📥 دانلود نسخه آماده اجرا (Download Latest Release)
+## 📥 Download Ready-to-Use Release
 
-بدون نیاز به نصب یا ابزارهای برنامه‌نویسی، فایل فشرده پرتابل نسخهٔ ویندوز را مستقیماً دانلود و اجرا کنید:
+No installation or developer tools required. Download the portable standalone zip for Windows 64-bit:
 
-👉 **[دانلود Guidegram v1.0.0 (نسخه پورتابل ویندوز ۶۴ بیتی - ZIP)](https://github.com/DoctorGuidance/guidegram/releases/download/v1.0.0/Guidegram-v1.0.0-Windows-x64.zip)**
+👉 **[Download Guidegram v1.0.0 (Windows x64 Portable ZIP)](https://github.com/DoctorGuidance/guidegram/releases/download/v1.0.0/Guidegram-v1.0.0-Windows-x64.zip)**
 
-*پس از دانلود، فایل زیپ را اکسترکت کنید و فایل `Guidegram.exe` را اجرا نمایید.*
-
----
-
-## 🌟 ویژگی‌های کلیدی (Key Features)
-
-1. **مدیریت نامحدود اکانت‌ها (Unlimited Multi-Account):**
-   - شکستن کامل محدودیت ۳ اکانته تلگرام رسمی (پشتیبانی از ۵، ۲۰، ۵۰ یا بیش از ۱۰۰ اکانت همزمان).
-   - سوییچر عمودی و روان اکانت‌ها در سایدبار با نمایش آواتار، وضعیت آنلاین/آفلاین و تعداد پیام‌های خوانده‌نشده هر اکانت.
-
-2. **۱۰۰٪ پورتابل (Truly Portable):**
-   - تمامی سشن‌ها، کش‌ها، تنظیمات و اطلاعات کاربری درون پوشهٔ محلی `./data` ذخیره می‌شوند.
-   - هیچ نیازی به نصب ندارد و هیچ ردپایی در رجیستری یا AppData ویندوز باقی نمی‌گذارد (آماده برای اجرا روی فلش‌مموری).
-
-3. **پروکسی اختصاصی برای هر اکانت (Per-Account Dedicated Proxy):**
-   - تخصیص پروکسی جداگانه (SOCKS5، HTTP یا MTProto) به هر اکانت برای تفکیک کامل ترافیک و جلوگیری از بلاک شدن IP.
-   - تست زندهٔ پینگ و تاخیر (Latency Monitor) برای سنجش کیفیت پروکسی‌ها.
-
-4. **فوروارد پیشرفته و بدون نقل‌قول (Direct / Silent Forward - Telegraph Style):**
-   - فوروارد پیام‌ها با حذف کامل نام فرستنده یا کانال مبدا (`dropAuthor: true` در پروتکل MTProto).
-   - امکان ارسال بی‌صدا (Silent).
-
-5. **صندوق ورودی یکپارچه (Unified Inbox):**
-   - مشاهده پیام‌های خوانده‌نشدهٔ تمامی اکانت‌های فعال در یک فید مشترک بدون نیاز به جابجایی مداوم میان اکانت‌ها.
-
-6. **حالت روح (Ghost Mode):**
-   - امکان خواندن پیام‌ها بدون ارسال تیک دوم (Read Receipts) به طرف مقابل.
-
-7. **تب‌بندی موضوعی چت‌ها (Categorized Tabs):**
-   - تفکیک خودکار چت‌ها به: شخصی (Personal)، گروه‌ها (Groups)، کانال‌ها (Channels)، ربات‌ها (Bots) و خوانده‌نشده‌ها (Unread).
-
-8. **قابلیت‌های پیشرفته برگرفته از 64Gram (Power User Features):**
-   - **Show Chat ID**: نمایش آیدی عددی چت در بالای گفتگو و لیست چت‌ها با یک کلیک برای کپی.
-   - **Show Message ID**: بج اختصاصی `#ID` برای هر پیام در فوتر با قابلیت کپی سریع.
-   - **نمایش زمان با ثانیه**: فرمت زمانی پیام‌ها با دقت ثانیه (`HH:mm:ss`).
-   - **فوروارد سریع به Saved Messages**: با آیکون بوکمارک و کلید میانبر `Ctrl + Click` روی حباب پیام.
-   - **کلیدهای میانبر پرسرعت**: `Alt + F` (فوروارد بدون نقل‌قول) و `Alt + C` (کپی متن پیام).
-   - **نمایش آواتار ارسال‌کننده در گروه‌ها**: نمایش آواتار متمایز اعضا در سوپرگروه‌ها.
-   - **پشتیبانی از دیپ‌لینک‌ها**: باز کردن خودکار `tg://user?id=...` و آیدی‌ها درون برنامه.
-   - **بازرسی دکمه‌های شیشه‌ای ربات‌ها**: کلیک راست یا چپ برای کپی مستقیم `callback_data`.
-   - **Mark All As Read**: خواندن سریع تمام چت‌ها و کانال‌ها در نوار تب‌ها.
+*Extract the archive to any directory or USB drive and run `Guidegram.exe` to launch.*
 
 ---
 
-## 🛠️ ساختار فنی و فناوری‌ها (Tech Stack)
+## 🌟 Key Features
 
-* **پوسته دسکتاپ:** [Electron](https://www.electronjs.org/) با بهینه‌سازی مسیر کاربر (`app.setPath('userData', './data')`)
-* **فرانت‌اند:** [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/)
-* **طراحی و استایلینگ:** [Tailwind CSS](https://tailwindcss.com/) با تم تیره اختصاصی، شیشه‌ای (Glassmorphism) و آیکون‌های [Lucide React](https://lucide.dev/)
-* **موتور تلگرام:** [GramJS](https://github.com/gram-js/gramjs) (کلاینت خالص MTProto 2.0 در تایپ‌اسکریپت، بدون نیاز به کامپایل سنگین C++ روی ویندوز)
-* **بسته‌بندی پورتابل:** [electron-builder](https://www.electron.build/) با تارگت `portable` برای ویندوز ۶۴ بیتی
+### 1. 📱 Unlimited Multi-Account Management
+- Completely bypasses Telegram Desktop's 3-account limit. Add 5, 20, 50, or 100+ accounts concurrently.
+- Fluid vertical account dock with live unread indicators, avatar badges, and instant zero-latency switching.
+- Easy authentication via **Telegram QR Code Scan** (Settings > Devices > Link Desktop Device) or international phone number with 2FA support.
+
+### 2. 💼 100% Truly Portable Architecture
+- Zero Windows registry pollution and zero hidden files in `AppData`.
+- All credentials, MTProto session tokens, proxy lists, and settings reside in a local `./data` folder right next to the executable.
+- Easily backup or transfer your entire workspace simply by copying the folder.
+
+### 3. 🔒 Per-Account Dedicated Proxy
+- Assign dedicated proxies (SOCKS5, HTTP, or MTProto) to individual accounts to prevent IP bans and isolate network traffic.
+- Real-time latency monitor with live ping testing to verify network reachability before connecting.
+
+### 4. 🚀 Direct Forward Without Quote (Telegraph Style)
+- Forward messages with original sender and channel headers cleanly removed (`dropAuthor: true` in MTProto).
+- Send silently without alerting recipients.
+
+### 5. ⚡ 64Gram-Inspired Power Features
+- **Show Chat ID & Message ID**: Interactive badges in the header and message footer with 1-click clipboard copy.
+- **Message Timestamp with Seconds**: Millisecond-accurate timestamp display (`HH:mm:ss`).
+- **Quick Forward to Saved Messages**: Bookmark action on hover + instant `Ctrl + Click` shortcut on any message bubble.
+- **Power Keyboard Shortcuts**:
+  - `Alt + F`: Open direct forward modal for active or hovered message.
+  - `Alt + C`: Instant copy of message text.
+  - `Esc`: Cancel active message selection.
+- **Group Sender Avatars**: Distinct visual sender avatars displayed next to messages in supergroups.
+- **Bot Inline Button Inspection**: Click or right-click any inline keyboard button to inspect and copy `callback_data`.
+- **Mark All Chats As Read**: One-click bulk read button in folder tabs with channel read-pointer advancement.
+- **Deep Link Navigation**: Native handling of `tg://user?id=...`, `tg://openmessage`, and `@username` deep links.
+
+### 6. 🗂️ Unified Inbox & Categorized Tabs
+- Optional consolidated feed aggregating unread messages across all connected accounts.
+- Automatic conversation organization into **Personal**, **Groups**, **Channels**, **Bots**, and **Unread** tabs.
+
+### 7. 👁️ Ghost Mode
+- Suppresses read receipts so you can preview incoming messages without triggering double checkmarks.
 
 ---
 
-## 📂 ساختار پوشه‌های پروژه
+## 🛠️ Tech Stack
 
-```
+- **Desktop Shell**: [Electron](https://www.electronjs.org/) configured with localized portable user paths (`userData -> ./data`)
+- **Frontend Core**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/)
+- **UI & Styling**: [Tailwind CSS](https://tailwindcss.com/) with glassmorphic dark theme and [Lucide Icons](https://lucide.dev/)
+- **Telegram Engine**: [GramJS](https://github.com/gram-js/gramjs) (pure MTProto 2.0 implementation in TypeScript)
+- **Packaging**: [electron-builder](https://www.electron.build/) targeting portable Windows x64 distributions
+
+---
+
+## 📂 Project Structure
+
+```text
 Guidegram/
-├── data/                    # پوشه ذخیره‌سازی محلی سشن‌ها و کانفیگ (پورتابل)
-│   ├── sessions/            # کلیدهای نشست هر اکانت
-│   └── config.json          # تنظیمات برنامه، پروکسی‌ها و اکانت‌ها
+├── data/                    # Portable local data directory (sessions, logs, config)
+│   ├── sessions/            # Encrypted Telegram session keys
+│   ├── logs/                # guidegram.log runtime diagnostics
+│   └── config.json          # Account and proxy configuration
 ├── electron/
-│   ├── main.ts              # پروسس اصلی، مدیریت پنجره و کانال‌های IPC
-│   ├── preload.ts           # پل ارتباطی امن میان نود و فرانت‌اند
+│   ├── main.ts              # Main Electron process, window management, IPC handlers
+│   ├── preload.ts           # Secure ContextBridge IPC bridge (CommonJS bundle)
 │   └── telegram/
-│       ├── accountManager.ts # هسته مدیریت چند اکانت و ارتباط با MTProto
-│       ├── sessionStore.ts   # لود و سیو پورتابل اطلاعات
-│       ├── proxyManager.ts   # سیستم تست پینگ و تبدیل کانفیگ پروکسی
-│       └── types.ts          # تایپ‌های اختصاصی سیستم
+│       ├── accountManager.ts # MTProto client management, QR auth, forwarder
+│       ├── sessionStore.ts   # Persistent JSON configuration manager
+│       ├── proxyManager.ts   # SOCKS5/MTProto proxy converter and ping tester
+│       ├── logger.ts         # Dual file logging system
+│       └── types.ts          # TypeScript interfaces and data models
 ├── src/
-│   ├── components/          # کامپوننت‌های فرانت‌اند
-│   │   ├── AccountDock.tsx      # سایدبار عمودی اکانت‌ها
-│   │   ├── AddAccountModal.tsx  # مودال لاگین با کد و پسورد ۲مرحله‌ای
-│   │   ├── ChatList.tsx         # لیست گفتگوها با قابلیت جستجو
-│   │   ├── ChatTabs.tsx         # تب‌های دسته‌بندی موضوعی چت‌ها
-│   │   ├── ChatViewport.tsx     # پنجره پیام‌ها و باکس چت
-│   │   ├── DirectForwardModal.tsx # مودال فوروارد پیشرفته بدون نقل‌قول
-│   │   ├── ProxySettingsModal.tsx # تنظیمات و تست پینگ پروکسی‌ها
-│   │   ├── SettingsModal.tsx    # تنظیمات عمومی، حالت روح و کلید API
-│   │   └── UnifiedInbox.tsx     # صندوق ورودی پیام‌های همه اکانت‌ها
-│   ├── App.tsx              # مدیریت استیت کلی و هماهنگی کامپوننت‌ها
-│   ├── main.tsx             # نقطه ورود ری‌اکت
-│   └── index.css            # استایل‌های سراسری و اسکرول‌بار سفارشی
+│   ├── components/          # React UI components
+│   │   ├── AccountDock.tsx      # Vertical account switcher
+│   │   ├── AddAccountModal.tsx  # QR code & phone login modal
+│   │   ├── ChatList.tsx         # Conversation list with search
+│   │   ├── ChatTabs.tsx         # Categorized chat tabs with Mark All Read
+│   │   ├── ChatViewport.tsx     # Message viewer, power actions, shortcuts
+│   │   ├── DirectForwardModal.tsx # No-quote forwarding dialog
+│   │   ├── ProxySettingsModal.tsx # Proxy configuration & latency monitor
+│   │   ├── SettingsModal.tsx    # Preferences, 64Gram toggles, log viewer
+│   │   ├── UnifiedInbox.tsx     # Consolidated cross-account inbox
+│   │   └── WelcomeScreen.tsx    # Onboarding screen
+│   ├── App.tsx              # Root application state orchestrator
+│   ├── main.tsx             # Application bootstrap with ErrorBoundary
+│   └── index.css            # Tailwind styling and custom scrollbars
 ├── package.json
 └── vite.config.ts
 ```
 
 ---
 
-## ⚡ نحوه اجرا و توسعه (Development)
+## 💻 Development Setup
 
-### پیش‌نیازها:
-* نود جی‌اس (Node.js v20+)
-* ابزار pnpm یا npm
+### Prerequisites
+- Node.js (v20 or newer recommended)
+- `pnpm` (or `npm`)
 
-### ۱. نصب وابستگی‌ها:
+### 1. Clone Repository
+```bash
+git clone https://github.com/DoctorGuidance/guidegram.git
+cd guidegram
+```
+
+### 2. Install Dependencies
 ```bash
 pnpm install
 ```
 
-### ۲. اجرای پروژه در حالت زنده (Hot-Reload Dev):
+### 3. Run Development Server
 ```bash
 pnpm dev
 ```
 
-### ۳. ساخت نسخهٔ مستقل و ۱۰۰٪ پورتابل برای ویندوز:
+### 4. Build Portable Executable
 ```bash
 pnpm build:portable
 ```
-فایل خروجی `Guidegram-Portable-1.0.0.exe` در پوشهٔ `release/` قرار می‌گیرد. با انتقال این فایل به هر پوشه، برنامه با دیتای لوکال در همان پوشه بالا می‌آید.
+The compiled portable application will be output to the `release/win-unpacked` directory.
 
 ---
 
-## 🔒 امنیت و حفظ حریم خصوصی
+## 🛡️ Security & Privacy
 
-* **امنیت نشست‌ها:** سشن‌ها مستقیماً بر روی هارد لوکال کاربر در پوشه `./data` قرار دارند و به هیچ سرور ثالثی ارسال نمی‌شوند.
-* **کلیدهای API:** برنامه به طور پیش‌فرض از API IDهای استاندارد تلگرام استفاده می‌کند، اما در صفحهٔ تنظیمات (Settings) می‌توانید `api_id` و `api_hash` اختصاصی خود را از سایت [my.telegram.org](https://my.telegram.org) وارد کنید.
+- **Local Session Storage**: All authentication credentials and session tokens remain on your local filesystem under `./data/sessions/`. No telemetry or third-party servers are involved.
+- **Open MTProto Implementation**: Direct cryptographic connection between your machine and official Telegram MTProto Data Centers (DCs).
+- **Custom API Credentials**: Guidegram ships with default Telegram Desktop credentials, but you can configure your own `api_id` and `api_hash` from [my.telegram.org](https://my.telegram.org) in the Preferences panel.
 
 ---
 
-## 📜 مجوز (License)
-توسعه یافته برای پروژه Guidegram تحت مجوز MIT.
+## 📜 License
+
+Licensed under the [GNU General Public License v3.0](LICENSE).
