@@ -1,7 +1,21 @@
 # 🚀 Guidegram (گایدگرام)
 
-> **Next-Generation Portable Desktop Telegram Client with Unlimited Multi-Account & Advanced Telegraph Features**
-> کلاینت دسکتاپ مدرن و کاملاً پورتابل تلگرام بدون محدودیت ۳ اکانت، مجهز به پروکسی اختصاصی برای هر اکانت و قابلیت‌های پیشرفته مشابه تلگراف.
+[![GitHub Release](https://img.shields.io/github/v/release/DoctorGuidance/guidegram?style=for-the-badge&color=22c55e&logo=github)](https://github.com/DoctorGuidance/guidegram/releases/latest)
+[![Windows](https://img.shields.io/badge/Platform-Windows%20x64-0078d4?style=for-the-badge&logo=windows)](https://github.com/DoctorGuidance/guidegram/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+
+> **Next-Generation Portable Desktop Telegram Client with Unlimited Multi-Account & 64Gram / Telegraph Power Features**
+> کلاینت دسکتاپ مدرن و کاملاً پورتابل تلگرام بدون محدودیت ۳ اکانت، مجهز به پروکسی اختصاصی برای هر اکانت و قابلیت‌های پیشرفته برگرفته از ۶۴گرم و تلگراف.
+
+---
+
+## 📥 دانلود نسخه آماده اجرا (Download Latest Release)
+
+بدون نیاز به نصب یا ابزارهای برنامه‌نویسی، فایل فشرده پرتابل نسخهٔ ویندوز را مستقیماً دانلود و اجرا کنید:
+
+👉 **[دانلود Guidegram v1.0.0 (نسخه پورتابل ویندوز ۶۴ بیتی - ZIP)](https://github.com/DoctorGuidance/guidegram/releases/download/v1.0.0/Guidegram-v1.0.0-Windows-x64.zip)**
+
+*پس از دانلود، فایل زیپ را اکسترکت کنید و فایل `Guidegram.exe` را اجرا نمایید.*
 
 ---
 
@@ -31,6 +45,17 @@
 
 7. **تب‌بندی موضوعی چت‌ها (Categorized Tabs):**
    - تفکیک خودکار چت‌ها به: شخصی (Personal)، گروه‌ها (Groups)، کانال‌ها (Channels)، ربات‌ها (Bots) و خوانده‌نشده‌ها (Unread).
+
+8. **قابلیت‌های پیشرفته برگرفته از 64Gram (Power User Features):**
+   - **Show Chat ID**: نمایش آیدی عددی چت در بالای گفتگو و لیست چت‌ها با یک کلیک برای کپی.
+   - **Show Message ID**: بج اختصاصی `#ID` برای هر پیام در فوتر با قابلیت کپی سریع.
+   - **نمایش زمان با ثانیه**: فرمت زمانی پیام‌ها با دقت ثانیه (`HH:mm:ss`).
+   - **فوروارد سریع به Saved Messages**: با آیکون بوکمارک و کلید میانبر `Ctrl + Click` روی حباب پیام.
+   - **کلیدهای میانبر پرسرعت**: `Alt + F` (فوروارد بدون نقل‌قول) و `Alt + C` (کپی متن پیام).
+   - **نمایش آواتار ارسال‌کننده در گروه‌ها**: نمایش آواتار متمایز اعضا در سوپرگروه‌ها.
+   - **پشتیبانی از دیپ‌لینک‌ها**: باز کردن خودکار `tg://user?id=...` و آیدی‌ها درون برنامه.
+   - **بازرسی دکمه‌های شیشه‌ای ربات‌ها**: کلیک راست یا چپ برای کپی مستقیم `callback_data`.
+   - **Mark All As Read**: خواندن سریع تمام چت‌ها و کانال‌ها در نوار تب‌ها.
 
 ---
 
