@@ -5,9 +5,10 @@ import { AccountInfo } from '../types/telegram'
 interface TitleBarProps {
   activeAccount: AccountInfo | null
   ghostMode: boolean
+  onRequestClose?: () => void
 }
 
-export const TitleBar: React.FC<TitleBarProps> = ({ activeAccount, ghostMode }) => {
+export const TitleBar: React.FC<TitleBarProps> = ({ activeAccount, ghostMode, onRequestClose }) => {
   const [isMax, setIsMax] = useState(false)
 
   const handleMinimize = () => {
@@ -22,7 +23,11 @@ export const TitleBar: React.FC<TitleBarProps> = ({ activeAccount, ghostMode }) 
   }
 
   const handleClose = () => {
-    window.guidegram?.closeWindow?.()
+    if (onRequestClose) {
+      onRequestClose()
+    } else {
+      window.guidegram?.closeWindow?.()
+    }
   }
 
   return (

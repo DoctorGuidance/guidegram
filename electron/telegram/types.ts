@@ -156,6 +156,17 @@ export interface ForwardOptions {
   caption?: string
 }
 
+export type CloseAction = 'ask' | 'minimize' | 'quit'
+
+export interface UpdateInfo {
+  currentVersion: string
+  latestVersion: string
+  releaseNotes?: string
+  downloadUrl?: string
+  publishedAt?: string
+  hasUpdate: boolean
+}
+
 export interface AppConfig {
   apiId: number
   apiHash: string
@@ -163,6 +174,9 @@ export interface AppConfig {
   theme: 'dark' | 'oled' | 'light'
   accounts: AccountInfo[]
   proxies: ProxyConfig[]
+  // Window & Lifecycle Preferences
+  closeAction: CloseAction
+  rememberCloseAction: boolean
   // 64Gram Power Features
   showChatId: boolean
   showMessageId: boolean

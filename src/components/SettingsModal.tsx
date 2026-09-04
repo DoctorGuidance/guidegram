@@ -17,11 +17,15 @@ import {
   Users,
   Bookmark,
   Trash2,
-  CheckCheck,
   Code,
   Zap,
+  CheckCheck,
+  Minimize2,
+  Power,
+  HelpCircle,
+  Download,
 } from 'lucide-react'
-import { AppConfig, AccountInfo } from '../types/telegram'
+import { AppConfig, AccountInfo, CloseAction, UpdateInfo } from '../types/telegram'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -94,6 +98,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [markAllReadEnabled, setMarkAllReadEnabled] = useState(true)
   const [copyCallbackData, setCopyCallbackData] = useState(true)
 
+  // Window Close Action Preference
+  const [closeAction, setCloseAction] = useState<CloseAction>('ask')
+
+  // Updater State
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [updateCheckResult, setUpdateCheckResult] = useState<string | null>(null)
+
   // Log Viewer State
   const [showLogs, setShowLogs] = useState(false)
   const [logText, setLogText] = useState('')
@@ -115,11 +126,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setAlwaysDeleteBoth(cfg.alwaysDeleteBoth ?? true)
         setMarkAllReadEnabled(cfg.markAllReadEnabled ?? true)
         setCopyCallbackData(cfg.copyCallbackData ?? true)
+        setCloseAction(cfg.closeAction || 'ask')
       })
       window.guidegram.getPortableDataPath().then(setPortablePath)
       loadLogs()
     }
   }, [isOpen])
+
+  const handleManualCheckUpdates = async () => {
+    setCheckingUpdate(true)
+    setUpdateCheckResult(null)
+    try {
+      if (window.guidegram?.checkForUpdates) {
+        const res = await window.guidegram.checkForUpdates()
+        if (res && res.hasUpdate) {
+          setUpdateCheckResult(`New update found: v${res.latestVersion}! Click Update in the banner.`)
+        } else {
+          setUpdateCheckResult(`Guidegram is up to date (v${res?.currentVersion || '1.0.0'}).`)
+        }
+      }
+    } catch (e: any) {
+      setUpdateCheckResult('Check failed. Make sure your connection or proxy is active.')
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }
 
   const loadLogs = async () => {
     setLoadingLogs(true)
@@ -143,6 +174,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       apiId: Number(apiId),
       apiHash: apiHash.trim(),
       ghostMode,
+      closeAction,
       showChatId,
       showMessageId,
       showSeconds,
@@ -192,6 +224,96 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Content Body */}
         <div className="p-5 space-y-6 overflow-y-auto flex-1">
+          {/* Window & Application Lifecycle Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
+              <Power className="w-4 h-4 text-primary-400" />
+              <span>Window & Lifecycle Behavior</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-gray-200">When clicking the Close (X) button</div>
+                  <div className="text-[11px] text-gray-400">Control how Guidegram behaves on exit</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCloseAction('ask')}
+                  className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    closeAction === 'ask'
+                      ? 'bg-primary-600/20 text-primary-300 border-primary-500/50 shadow-glow'
+                      : 'bg-dark-850 text-gray-400 border-white/5 hover:text-white'
+                  }`}
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>Ask every time</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCloseAction('minimize')}
+                  className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    closeAction === 'minimize'
+                      ? 'bg-primary-600/20 text-primary-300 border-primary-500/50 shadow-glow'
+                      : 'bg-dark-850 text-gray-400 border-white/5 hover:text-white'
+                  }`}
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>Minimize</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCloseAction('quit')}
+                  className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    closeAction === 'quit'
+                      ? 'bg-accent-rose/20 text-accent-rose border-accent-rose/50 shadow-glow'
+                      : 'bg-dark-850 text-gray-400 border-white/5 hover:text-white'
+                  }`}
+                >
+                  <Power className="w-3.5 h-3.5" />
+                  <span>Quit completely</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Software Updates Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
+              <Download className="w-4 h-4 text-accent-cyan" />
+              <span>Software Updates (Auto-checks hourly)</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-dark-800 border border-white/5 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
+                  <span>Current Version: v1.0.0</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-gray-300 font-mono">
+                    Portable
+                  </span>
+                </div>
+                <div className="text-[11px] text-gray-400 mt-0.5">
+                  {updateCheckResult || 'Checks for new GitHub releases automatically every hour.'}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={checkingUpdate}
+                onClick={handleManualCheckUpdates}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-dark-750 hover:bg-dark-700 disabled:opacity-50 text-white border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
+                <span>{checkingUpdate ? 'Checking...' : 'Check Now'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* 64Gram Fork Power Features Section */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-bold text-gray-200">

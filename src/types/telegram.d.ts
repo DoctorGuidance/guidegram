@@ -14,6 +14,8 @@ import type {
   MessageEntityItem,
   MessageReactionItem,
   PinnedMessageItem,
+  CloseAction,
+  UpdateInfo,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -37,4 +39,6 @@ export type {
   MessageEntityItem,
   MessageReactionItem,
   PinnedMessageItem,
+  CloseAction,
+  UpdateInfo,
 }

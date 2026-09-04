@@ -10,7 +10,9 @@ import { AddAccountModal } from './components/AddAccountModal'
 import { ProxySettingsModal } from './components/ProxySettingsModal'
 import { SettingsModal } from './components/SettingsModal'
 import { UnifiedInbox } from './components/UnifiedInbox'
-import { AccountInfo, DialogItem, MessageItem, AppConfig } from './types/telegram'
+import { CloseConfirmModal } from './components/CloseConfirmModal'
+import { UpdateBanner } from './components/UpdateBanner'
+import { AccountInfo, DialogItem, MessageItem, AppConfig, UpdateInfo } from './types/telegram'
 
 export const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false)
@@ -30,7 +32,11 @@ export const App: React.FC = () => {
   const [isProxyModalOpen, setIsProxyModalOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isUnifiedInboxOpen, setIsUnifiedInboxOpen] = useState(false)
+  const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false)
   const [forwardMessage, setForwardMessage] = useState<MessageItem | null>(null)
+
+  // Auto-Update State
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
 
   // Initial Data Load
   useEffect(() => {
@@ -61,8 +67,11 @@ export const App: React.FC = () => {
     initApp()
 
     // Realtime new-message listener
+    let unsubscribeMsg: (() => void) | undefined
+    let unsubscribeUpdate: (() => void) | undefined
+
     if (window.guidegram?.on) {
-      const unsubscribe = window.guidegram.on('telegram:new-message', (payload: any) => {
+      unsubscribeMsg = window.guidegram.on('telegram:new-message', (payload: any) => {
         const { accountId, chatId, message } = payload
         setMessagesByChat((prev) => ({
           ...prev,
@@ -83,9 +92,15 @@ export const App: React.FC = () => {
         }
       })
 
-      return () => {
-        unsubscribe?.()
-      }
+      // Hourly Auto-Update listener
+      unsubscribeUpdate = window.guidegram.on('app:update-available', (info: UpdateInfo) => {
+        setUpdateInfo(info)
+      })
+    }
+
+    return () => {
+      unsubscribeMsg?.()
+      unsubscribeUpdate?.()
     }
   }, [])
 
@@ -284,10 +299,36 @@ export const App: React.FC = () => {
     )
   }
 
+  // Handle window close request
+  const handleRequestClose = async () => {
+    if (window.guidegram?.requestClose) {
+      const res = await window.guidegram.requestClose()
+      if (res.action === 'ask') {
+        setIsCloseConfirmOpen(true)
+      }
+    } else {
+      window.guidegram?.closeWindow?.()
+    }
+  }
+
+  const handleConfirmClose = async (action: 'minimize' | 'quit', remember: boolean) => {
+    setIsCloseConfirmOpen(false)
+    if (window.guidegram?.confirmClose) {
+      await window.guidegram.confirmClose(action, remember)
+      if (remember && config) {
+        setConfig({ ...config, closeAction: action, rememberCloseAction: true })
+      }
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-dark-950 font-sans">
       {/* 1. Integrated Custom TitleBar */}
-      <TitleBar activeAccount={currentAccount} ghostMode={ghostMode} />
+      <TitleBar
+        activeAccount={currentAccount}
+        ghostMode={ghostMode}
+        onRequestClose={handleRequestClose}
+      />
 
       {/* 2. Main Content: Welcome Screen OR Active Multi-Account Workspace */}
       {accounts.length === 0 ? (
@@ -405,6 +446,19 @@ export const App: React.FC = () => {
         onLogoutAccount={handleLogoutAccount}
         onConfigUpdated={(newCfg) => setConfig(newCfg)}
       />
+
+      <CloseConfirmModal
+        isOpen={isCloseConfirmOpen}
+        onClose={() => setIsCloseConfirmOpen(false)}
+        onConfirm={handleConfirmClose}
+      />
+
+      {updateInfo && updateInfo.hasUpdate && (
+        <UpdateBanner
+          updateInfo={updateInfo}
+          onDismiss={() => setUpdateInfo(null)}
+        />
+      )}
     </div>
   )
 }

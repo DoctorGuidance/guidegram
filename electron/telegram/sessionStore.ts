@@ -34,6 +34,8 @@ export class SessionStore {
       theme: 'dark',
       accounts: [],
       proxies: [],
+      closeAction: 'ask',
+      rememberCloseAction: false,
       showChatId: true,
       showMessageId: true,
       showSeconds: true,

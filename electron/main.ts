@@ -5,6 +5,7 @@ import { SessionStore } from './telegram/sessionStore'
 import { AccountManager } from './telegram/accountManager'
 import { ProxyManager } from './telegram/proxyManager'
 import { Logger } from './telegram/logger'
+import { UpdateManager } from './telegram/updateManager'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -31,6 +32,7 @@ process.on('unhandledRejection', (reason) => {
 let mainWindow: BrowserWindow | null = null
 let sessionStore: SessionStore
 let accountManager: AccountManager
+let updateManager: UpdateManager
 
 function createWindow() {
   Logger.info('[Window] Creating main application window...')
@@ -109,8 +111,25 @@ app.whenReady().then(async () => {
     }
   })
 
+  updateManager = new UpdateManager()
+
   setupIpcHandlers()
   createWindow()
+
+  // Start background hourly check for updates
+  updateManager.startHourlyCheck(
+    (updateInfo) => {
+      Logger.info(`[Main] Update found: v${updateInfo.latestVersion}`)
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-available', updateInfo)
+      }
+    },
+    () => {
+      // Pick first active proxy if available
+      const cfg = sessionStore.getConfig()
+      return cfg.proxies.find((p) => p.enabled)
+    }
+  )
 
   // Non-blocking initialization in the background
   accountManager.initialize().catch((err) => {
@@ -119,6 +138,7 @@ app.whenReady().then(async () => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    else mainWindow?.show()
   })
 })
 
@@ -146,12 +166,55 @@ function setupIpcHandlers() {
     }
   })
 
+  // Window Close Action Handling: Check whether to ask, minimize, or quit
+  ipcMain.handle('window:request-close', () => {
+    const cfg = sessionStore.getConfig()
+    if (cfg.closeAction === 'minimize') {
+      mainWindow?.minimize()
+      return { action: 'minimize' }
+    } else if (cfg.closeAction === 'quit') {
+      mainWindow?.close()
+      return { action: 'quit' }
+    }
+    // Default or 'ask': renderer will show modal
+    return { action: 'ask' }
+  })
+
+  ipcMain.handle('window:confirm-close', (_event, { action, remember }: { action: 'minimize' | 'quit'; remember: boolean }) => {
+    Logger.info(`[IPC] window:confirm-close action=${action} remember=${remember}`)
+    if (remember) {
+      sessionStore.updateConfig({
+        closeAction: action,
+        rememberCloseAction: true,
+      })
+    }
+    if (action === 'minimize') {
+      mainWindow?.minimize()
+    } else {
+      mainWindow?.close()
+    }
+  })
+
   ipcMain.handle('window:close', () => {
     mainWindow?.close()
   })
 
   ipcMain.handle('window:is-maximized', () => {
     return mainWindow?.isMaximized() || false
+  })
+
+  // Update System Handlers
+  ipcMain.handle('system:check-for-updates', async () => {
+    const cfg = sessionStore.getConfig()
+    const activeProxy = cfg.proxies.find((p) => p.enabled)
+    return updateManager.checkForUpdates(activeProxy)
+  })
+
+  ipcMain.handle('system:install-update', async (_event, { downloadUrl }: { downloadUrl: string }) => {
+    const appDir = isDev
+      ? path.resolve(__dirname, '..')
+      : path.dirname(app.getPath('exe'))
+    return updateManager.performPortableUpdate(downloadUrl, appDir, portableDataDir)
   })
 
   // Telegram Accounts

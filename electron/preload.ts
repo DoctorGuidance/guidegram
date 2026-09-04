@@ -1,11 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { ProxyConfig, ForwardOptions, AppConfig, QrTokenPayload, AccountInfo } from './telegram/types'
+import { ProxyConfig, ForwardOptions, AppConfig, QrTokenPayload, AccountInfo, UpdateInfo } from './telegram/types'
 
 const guidegramAPI = {
   // Window Controls
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
   closeWindow: () => ipcRenderer.invoke('window:close'),
+  requestClose: (): Promise<{ action: 'ask' | 'minimize' | 'quit' }> =>
+    ipcRenderer.invoke('window:request-close'),
+  confirmClose: (action: 'minimize' | 'quit', remember: boolean): Promise<void> =>
+    ipcRenderer.invoke('window:confirm-close', { action, remember }),
   isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
 
   // Accounts
@@ -78,6 +82,12 @@ const guidegramAPI = {
   updateConfig: (partial: Partial<AppConfig>) =>
     ipcRenderer.invoke('telegram:update-config', { partial }),
   getPortableDataPath: () => ipcRenderer.invoke('system:get-portable-data-path'),
+
+  // Software Updates
+  checkForUpdates: (): Promise<UpdateInfo | null> =>
+    ipcRenderer.invoke('system:check-for-updates'),
+  installUpdate: (downloadUrl: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('system:install-update', { downloadUrl }),
 
   // Logging & Diagnostics
   getLogs: (maxLines?: number) => ipcRenderer.invoke('system:get-logs', { maxLines }),
