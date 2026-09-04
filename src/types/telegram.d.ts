@@ -12,6 +12,8 @@ import type {
   WebPagePreview,
   ReplyInfo,
   MessageEntityItem,
+  MessageReactionItem,
+  PinnedMessageItem,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -33,4 +35,6 @@ export type {
   WebPagePreview,
   ReplyInfo,
   MessageEntityItem,
+  MessageReactionItem,
+  PinnedMessageItem,
 }

@@ -36,6 +36,18 @@ export interface AccountInfo {
   sessionString?: string
 }
 
+export interface MessageReactionItem {
+  emoji: string
+  count: number
+  chosen?: boolean
+}
+
+export interface PinnedMessageItem {
+  id: number
+  text?: string
+  senderName?: string
+}
+
 export interface DialogItem {
   id: string
   accountId: string
@@ -46,6 +58,9 @@ export interface DialogItem {
   isChannel: boolean
   isBot: boolean
   isPinned: boolean
+  isSavedMessages?: boolean
+  pinnedMessage?: PinnedMessageItem
+  canSendMessages?: boolean
   lastMessageText?: string
   lastMessageDate?: number
   avatarInitials?: string
@@ -73,11 +88,12 @@ export interface ReplyInfo {
 }
 
 export interface MessageEntityItem {
-  type: string // 'bold' | 'italic' | 'code' | 'pre' | 'text_url' | 'url' | 'mention' | 'strike' | 'spoiler' | 'underline' | 'custom_emoji'
+  type: string // 'bold' | 'italic' | 'code' | 'pre' | 'text_url' | 'url' | 'mention' | 'strike' | 'spoiler' | 'underline' | 'custom_emoji' | 'blockquote'
   offset: number
   length: number
   url?: string
   language?: string
+  documentId?: string // for custom emoji
 }
 
 export interface MessageItem {
@@ -94,6 +110,11 @@ export interface MessageItem {
   forwardFromName?: string
   replyToMsgId?: number
   replyTo?: ReplyInfo
+  isSticker?: boolean
+  isVoice?: boolean
+  isRoundVideo?: boolean
+  voiceWaveform?: number[]
+  reactions?: MessageReactionItem[]
   mediaType?: 'photo' | 'video' | 'document' | 'voice' | 'sticker' | 'webpage'
   mediaUrl?: string
   mediaThumbnailUrl?: string
@@ -125,6 +146,8 @@ export interface ChatDetails {
   fake?: boolean
   scam?: boolean
   notificationsEnabled?: boolean
+  pinnedMessage?: PinnedMessageItem
+  canSendMessages?: boolean
 }
 
 export interface ForwardOptions {

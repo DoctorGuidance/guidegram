@@ -18,6 +18,8 @@ import {
   WebPagePreview,
   ReplyInfo,
   MessageEntityItem,
+  PinnedMessageItem,
+  MessageReactionItem,
 } from './types'
 
 export interface ClientHolder {
@@ -656,6 +658,10 @@ export class AccountManager {
         replyToMsgId,
         replyTo,
         mediaType: mediaData.mediaType,
+        isSticker: mediaData.isSticker,
+        isVoice: mediaData.isVoice,
+        isRoundVideo: mediaData.isRoundVideo,
+        voiceWaveform: mediaData.voiceWaveform,
         mediaFileName: mediaData.mediaFileName,
         mediaFileSize: mediaData.mediaFileSize,
         mediaDuration: mediaData.mediaDuration,
@@ -792,6 +798,9 @@ export class AccountManager {
       const scam = entity.scam || false
       const username = entity.username || undefined
 
+      let pinnedMessage: PinnedMessageItem | undefined = undefined
+      let canSendMessages = true
+
       if (isChannel || isGroup) {
         try {
           const full: any = await holder.client.invoke(
@@ -799,6 +808,27 @@ export class AccountManager {
           )
           about = full.fullChat?.about
           membersCount = full.fullChat?.participantsCount
+
+          // Pinned message
+          if (full.fullChat?.pinnedMsgId) {
+            pinnedMessage = {
+              id: full.fullChat.pinnedMsgId,
+            }
+          }
+
+          // Check broadcast posting permissions
+          if (isChannel && !isGroup) {
+            // In a broadcast channel, only admins with post permission or creator can send messages
+            const isCreator = entity.creator === true
+            const adminRights = entity.adminRights
+            const canPost = isCreator || (adminRights && adminRights.postMessages)
+            canSendMessages = !!canPost
+          } else if (entity.defaultBannedRights) {
+            // Group banned rights
+            if (entity.defaultBannedRights.sendMessages) {
+              canSendMessages = false
+            }
+          }
         } catch (e) {
           Logger.warn(`[AccountManager] GetFullChannel warning for ${chatId}:`, e)
         }
@@ -808,6 +838,11 @@ export class AccountManager {
             new Api.users.GetFullUser({ id: entity })
           )
           about = full.fullUser?.about
+          if (full.fullUser?.pinnedMsgId) {
+            pinnedMessage = {
+              id: full.fullUser.pinnedMsgId,
+            }
+          }
         } catch (e) {
           Logger.warn(`[AccountManager] GetFullUser warning for ${chatId}:`, e)
         }
@@ -829,6 +864,8 @@ export class AccountManager {
         verified,
         fake,
         scam,
+        pinnedMessage,
+        canSendMessages,
       }
     } catch (err: any) {
       Logger.warn(`[AccountManager] getChatDetails fallback for ${chatId}:`, err)
@@ -1026,6 +1063,10 @@ export class AccountManager {
           replyToMsgId,
           replyTo,
           mediaType: mediaData.mediaType,
+          isSticker: mediaData.isSticker,
+          isVoice: mediaData.isVoice,
+          isRoundVideo: mediaData.isRoundVideo,
+          voiceWaveform: mediaData.voiceWaveform,
           mediaFileName: mediaData.mediaFileName,
           mediaFileSize: mediaData.mediaFileSize,
           mediaDuration: mediaData.mediaDuration,
@@ -1047,6 +1088,10 @@ export class AccountManager {
    */
   private parseMedia(media: any): {
     mediaType?: 'photo' | 'video' | 'document' | 'voice' | 'sticker' | 'webpage'
+    isSticker?: boolean
+    isVoice?: boolean
+    isRoundVideo?: boolean
+    voiceWaveform?: number[]
     mediaFileName?: string
     mediaFileSize?: number
     mediaDuration?: number
@@ -1086,6 +1131,11 @@ export class AccountManager {
         else if (mime.startsWith('audio/') || mime.includes('ogg')) mediaType = 'voice'
         else if (mime.includes('webp')) mediaType = 'sticker'
 
+        let isVoice = false
+        let isSticker = false
+        let isRoundVideo = false
+        let voiceWaveform: number[] | undefined
+
         if (Array.isArray(doc.attributes)) {
           for (const attr of doc.attributes) {
             const aName = attr.className || attr.constructor?.name || ''
@@ -1094,13 +1144,23 @@ export class AccountManager {
               mediaDuration = attr.duration
               mediaWidth = attr.w
               mediaHeight = attr.h
+              if (attr.roundMessage) isRoundVideo = true
             } else if (aName === 'DocumentAttributeAudio') {
-              if (attr.voice) mediaType = 'voice'
+              if (attr.voice) {
+                mediaType = 'voice'
+                isVoice = true
+              }
               mediaDuration = attr.duration
+              if (attr.waveform) {
+                try {
+                  voiceWaveform = Array.from(Buffer.isBuffer(attr.waveform) ? attr.waveform : Buffer.from(attr.waveform))
+                } catch (_) {}
+              }
             } else if (aName === 'DocumentAttributeFilename') {
               mediaFileName = attr.fileName
             } else if (aName === 'DocumentAttributeSticker') {
               mediaType = 'sticker'
+              isSticker = true
             }
           }
         }
@@ -1108,6 +1168,10 @@ export class AccountManager {
         const mediaFileSize = typeof doc.size === 'bigint' ? Number(doc.size) : (doc.size || 0)
         return {
           mediaType,
+          isSticker,
+          isVoice,
+          isRoundVideo,
+          voiceWaveform,
           mediaFileName,
           mediaFileSize,
           mediaDuration,

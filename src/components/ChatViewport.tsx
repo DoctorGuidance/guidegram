@@ -20,12 +20,15 @@ import {
   Volume2,
   VolumeX,
   Play,
+  Pause,
   FileText,
   Music,
   Download,
   Maximize2,
   ChevronRight,
   CornerUpLeft,
+  Search,
+  Pin,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem } from '../types/telegram'
 import { Avatar } from './Avatar'
@@ -88,6 +91,17 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
 
+  // In-chat search state (Ctrl+F)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Voice playback state
+  const [playingVoiceId, setPlayingVoiceId] = useState<number | null>(null)
+  const [voicePlaybackSpeed, setVoicePlaybackSpeed] = useState<number>(1)
+  const [voiceCurrentTime, setVoiceCurrentTime] = useState<number>(0)
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -95,11 +109,56 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Reset drawer state when active chat changes
+  // Reset drawer state & auto-fetch chat details for header banner & mute button
   useEffect(() => {
     setIsInfoOpen(false)
     setChatDetails(null)
+    setIsSearchOpen(false)
+    setSearchQuery('')
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause()
+      audioPlayerRef.current = null
+    }
+    setPlayingVoiceId(null)
+
+    if (chat && window.guidegram?.getChatDetails) {
+      window.guidegram.getChatDetails(chat.accountId, chat.id).then((details) => {
+        if (details) setChatDetails(details)
+      }).catch(() => {})
+    }
   }, [chat?.id])
+
+  // Ctrl+F hotkey listener for in-chat search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setIsSearchOpen((prev) => !prev)
+      } else if (e.key === 'Escape' && isSearchOpen) {
+        setIsSearchOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isSearchOpen])
+
+  useEffect(() => {
+    if (isSearchOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 50)
+    }
+  }, [isSearchOpen])
+
+  // Filter messages based on search query
+  const filteredMessages = React.useMemo(() => {
+    if (!searchQuery.trim()) return messages
+    const q = searchQuery.toLowerCase()
+    return messages.filter(
+      (m) =>
+        (m.text && m.text.toLowerCase().includes(q)) ||
+        (m.senderName && m.senderName.toLowerCase().includes(q)) ||
+        (m.mediaFileName && m.mediaFileName.toLowerCase().includes(q))
+    )
+  }, [messages, searchQuery])
 
   const showToast = (msg: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
@@ -160,13 +219,94 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           setDownloadedMedia((prev) => ({ ...prev, [msg.id]: dataUrl }))
         }
       } catch (err) {
-        console.warn('Failed to download media for message', msg.id, err)
+        console.warn(`Failed to download media for ${msg.id}:`, err)
       } finally {
-        setLoadingMediaIds((prev) => ({ ...prev, [msg.id]: false }))
+        setLoadingMediaIds((prev) => {
+          const next = { ...prev }
+          delete next[msg.id]
+          return next
+        })
       }
     },
     [downloadedMedia, loadingMediaIds]
   )
+
+  // Audio Playback Controller
+  const handlePlayVoice = async (msg: MessageItem) => {
+    // If clicking on already playing voice, toggle pause/play
+    if (playingVoiceId === msg.id && audioPlayerRef.current) {
+      if (audioPlayerRef.current.paused) {
+        audioPlayerRef.current.play()
+      } else {
+        audioPlayerRef.current.pause()
+        setPlayingVoiceId(null)
+      }
+      return
+    }
+
+    // Stop current playing audio if any
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause()
+      audioPlayerRef.current = null
+    }
+
+    let audioSrc = downloadedMedia[msg.id] || msg.mediaUrl
+    if (!audioSrc && window.guidegram?.downloadMedia) {
+      setLoadingMediaIds((prev) => ({ ...prev, [msg.id]: true }))
+      try {
+        const dl = await window.guidegram.downloadMedia(msg.accountId, msg.chatId, msg.id, false)
+        if (dl) {
+          audioSrc = dl
+          setDownloadedMedia((prev) => ({ ...prev, [msg.id]: dl }))
+        }
+      } catch (err) {
+        console.warn('Failed to load voice audio:', err)
+      } finally {
+        setLoadingMediaIds((prev) => {
+          const next = { ...prev }
+          delete next[msg.id]
+          return next
+        })
+      }
+    }
+
+    if (!audioSrc) {
+      showToast('Could not load voice audio')
+      return
+    }
+
+    const audio = new Audio(audioSrc)
+    audio.playbackRate = voicePlaybackSpeed
+    audio.ontimeupdate = () => {
+      setVoiceCurrentTime(audio.currentTime)
+    }
+    audio.onended = () => {
+      setPlayingVoiceId(null)
+      setVoiceCurrentTime(0)
+    }
+    audio.onerror = () => {
+      setPlayingVoiceId(null)
+      showToast('Error playing audio format')
+    }
+
+    audioPlayerRef.current = audio
+    setPlayingVoiceId(msg.id)
+    setVoiceCurrentTime(0)
+    audio.play().catch(() => {
+      setPlayingVoiceId(null)
+    })
+  }
+
+  const handleToggleVoiceSpeed = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const speeds = [1, 1.5, 2]
+    const nextIdx = (speeds.indexOf(voicePlaybackSpeed) + 1) % speeds.length
+    const nextSpeed = speeds[nextIdx]
+    setVoicePlaybackSpeed(nextSpeed)
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.playbackRate = nextSpeed
+    }
+  }
 
   // 64Gram Keyboard Shortcuts: Alt+F and Alt+C
   useEffect(() => {
@@ -489,6 +629,38 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     const mediaUrl = downloadedMedia[msg.id] || msg.mediaUrl
 
     // 1. Photo Card
+    // 1. Sticker (Transparent, bubbleless image)
+    if (msg.isSticker || msg.mediaType === 'sticker') {
+      if (!mediaUrl) {
+        requestMediaDownload(msg, false)
+      }
+      return (
+        <div className="my-1 max-w-[200px] max-h-[200px] flex items-center justify-center">
+          {mediaUrl ? (
+            <img
+              src={mediaUrl}
+              alt="Telegram Sticker"
+              className="w-44 h-44 object-contain transition-transform duration-150 hover:scale-105 select-none"
+            />
+          ) : (
+            <div
+              onClick={() => requestMediaDownload(msg, false)}
+              className="w-36 h-36 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center justify-center text-gray-400 gap-2 cursor-pointer hover:bg-white/10 transition-colors"
+            >
+              {loadingMediaIds[msg.id] ? (
+                <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Download className="w-6 h-6 text-primary-400" />
+              )}
+              <span className="text-[10px] font-medium">
+                {loadingMediaIds[msg.id] ? 'Loading sticker...' : 'Load sticker'}
+              </span>
+            </div>
+          )}
+        </div>
+      )
+    }
+
     if (msg.mediaType === 'photo') {
       // Trigger lazy download if not present
       if (!mediaUrl) {
@@ -587,27 +759,72 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       )
     }
 
-    // 4. Voice / Audio Card
-    if (msg.mediaType === 'voice') {
-      return (
-        <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-850/80 p-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-accent-emerald/20 text-accent-emerald flex items-center justify-center shrink-0">
-              <Music className="w-5 h-5" />
-            </div>
+    // 4. Voice / Audio Card with Waveform & Speed Switcher
+    if (msg.isVoice || msg.mediaType === 'voice') {
+      const isPlaying = playingVoiceId === msg.id
+      const isLoading = loadingMediaIds[msg.id]
+      const duration = msg.mediaDuration || 0
+      const currentPos = isPlaying ? voiceCurrentTime : 0
+      const progressRatio = duration > 0 ? Math.min(1, currentPos / duration) : 0
 
-            <div className="flex-1">
-              <div className="flex items-center gap-1 h-5">
-                {[40, 70, 30, 90, 60, 45, 80, 55, 35, 65, 85, 40].map((h, i) => (
-                  <div
-                    key={i}
-                    style={{ height: `${h}%` }}
-                    className="w-1 bg-white/20 rounded-full"
-                  />
-                ))}
+      // Normalize waveform bars (up to 32 bars)
+      const rawWaveform = msg.voiceWaveform || [40, 70, 30, 90, 60, 45, 80, 55, 35, 65, 85, 40, 60, 30, 80, 50]
+      const bars = rawWaveform.slice(0, 36)
+
+      return (
+        <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-850/90 p-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            {/* Play / Pause button */}
+            <button
+              type="button"
+              onClick={() => handlePlayVoice(msg)}
+              className="w-10 h-10 rounded-xl bg-accent-emerald/25 hover:bg-accent-emerald text-accent-emerald hover:text-white flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-sm"
+              title={isPlaying ? 'Pause' : 'Play Voice Message'}
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : isPlaying ? (
+                <Pause className="w-5 h-5 fill-current" />
+              ) : (
+                <Play className="w-5 h-5 fill-current ml-0.5" />
+              )}
+            </button>
+
+            {/* Waveform and scrubber */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-0.5 h-6 cursor-pointer">
+                {bars.map((val, i) => {
+                  const barProgress = i / bars.length
+                  const isPassed = barProgress <= progressRatio
+                  const heightPercent = Math.max(15, Math.min(100, Math.round((val / 255) * 100) || val))
+                  return (
+                    <div
+                      key={i}
+                      style={{ height: `${heightPercent}%` }}
+                      className={`w-1 rounded-full transition-colors ${
+                        isPassed ? 'bg-accent-emerald' : 'bg-white/20'
+                      }`}
+                    />
+                  )
+                })}
               </div>
-              <div className="text-[10px] text-gray-400 mt-1">
-                Voice Message • {formatDuration(msg.mediaDuration || 0)}
+
+              <div className="flex items-center justify-between text-[10px] text-gray-400 mt-1">
+                <span>
+                  {isPlaying
+                    ? `${formatDuration(Math.round(voiceCurrentTime))} / ${formatDuration(duration)}`
+                    : `Voice • ${formatDuration(duration)}`}
+                </span>
+
+                {/* 1x / 1.5x / 2x Speed Controller */}
+                <button
+                  type="button"
+                  onClick={handleToggleVoiceSpeed}
+                  title="Toggle playback speed"
+                  className="px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white font-mono text-[9px] transition-colors cursor-pointer"
+                >
+                  {voicePlaybackSpeed}x
+                </button>
               </div>
             </div>
           </div>
@@ -750,6 +967,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             <span className="hidden sm:inline">Ghost: {ghostMode ? 'ON' : 'OFF'}</span>
           </button>
 
+          {/* In-Chat Search Toggle (Ctrl+F) */}
+          <button
+            onClick={() => setIsSearchOpen((prev) => !prev)}
+            title="Search in Chat (Ctrl+F)"
+            className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+              isSearchOpen
+                ? 'bg-primary-500/20 text-primary-300 border-primary-500/40'
+                : 'bg-dark-800 hover:bg-dark-750 text-gray-400 hover:text-white border border-white/10'
+            }`}
+          >
+            <Search className="w-4 h-4" />
+          </button>
+
           {/* Chat Info Drawer Button */}
           <button
             onClick={handleOpenInfo}
@@ -761,6 +991,57 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         </div>
       </div>
 
+      {/* Floating In-Chat Search Bar (Ctrl+F) */}
+      {isSearchOpen && (
+        <div className="shrink-0 px-4 py-2 bg-dark-800/95 border-b border-white/10 flex items-center gap-2 z-20 shadow-md animate-in slide-in-from-top duration-150 backdrop-blur-md">
+          <Search className="w-4 h-4 text-primary-400 shrink-0" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            dir={isRTL(searchQuery) ? 'rtl' : 'ltr'}
+            placeholder="Search messages in this conversation... (Esc to close)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1 bg-dark-750 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary-500/50"
+          />
+          {searchQuery && (
+            <span className="text-[11px] text-gray-400 px-2">
+              {filteredMessages.length} match{filteredMessages.length === 1 ? '' : 'es'}
+            </span>
+          )}
+          <button
+            onClick={() => {
+              setIsSearchOpen(false)
+              setSearchQuery('')
+            }}
+            className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/5"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Pinned Message Banner */}
+      {chatDetails?.pinnedMessage && (
+        <div
+          onClick={() => handleScrollToReply(chatDetails.pinnedMessage!.id)}
+          className="shrink-0 px-4 py-2 bg-dark-850/95 border-b border-white/5 flex items-center justify-between gap-3 cursor-pointer hover:bg-dark-800 transition-colors z-10"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-6 h-6 rounded-lg bg-accent-cyan/15 text-accent-cyan flex items-center justify-center shrink-0">
+              <Pin className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-accent-cyan">Pinned Message</div>
+              <div className="text-[10px] text-gray-400 truncate max-w-xl">
+                {chatDetails.pinnedMessage.text || `Message #${chatDetails.pinnedMessage.id} (Click to jump)`}
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+        </div>
+      )}
+
       {/* 2. Messages Feed */}
       <div
         className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3"
@@ -768,12 +1049,14 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           if (e.target === e.currentTarget) setSelectedMessage(null)
         }}
       >
-        {messages.length === 0 ? (
+        {filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-xs text-gray-500 gap-2">
-            <div>No messages in this chat yet.</div>
+            <div>
+              {searchQuery ? `No messages found matching "${searchQuery}"` : 'No messages in this chat yet.'}
+            </div>
           </div>
         ) : (
-          messages.map((msg) => {
+          filteredMessages.map((msg) => {
             const isSelected = selectedMessage?.id === msg.id
 
             return (
@@ -899,15 +1182,17 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     />
                   )}
 
-                  {/* Message Bubble */}
+                  {/* Message Bubble (Stickers render transparently without bubble frame) */}
                   <div
-                    className={`rounded-2xl px-4 py-2.5 text-xs shadow-sm transition-all ${
-                      isSelected ? 'ring-2 ring-primary-400' : ''
-                    } ${
-                      msg.isOutgoing
-                        ? 'bg-primary-600 text-white rounded-br-sm'
-                        : 'bg-dark-800 text-gray-200 border border-white/5 rounded-bl-sm'
-                    }`}
+                    className={`transition-all ${
+                      msg.isSticker || msg.mediaType === 'sticker'
+                        ? 'bg-transparent p-0'
+                        : `rounded-2xl px-4 py-2.5 text-xs shadow-sm ${
+                            msg.isOutgoing
+                              ? 'bg-primary-600 text-white rounded-br-sm'
+                              : 'bg-dark-800 text-gray-200 border border-white/5 rounded-bl-sm'
+                          }`
+                    } ${isSelected ? 'ring-2 ring-primary-400' : ''}`}
                   >
                     {/* Group Sender Name */}
                     {!msg.isOutgoing && chat.isGroup && msg.senderName && (
@@ -983,14 +1268,12 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                                     }}
                                     title={
                                       btn.data
-                                        ? `Callback data: "${btn.data}" (Click or Right-click to copy)`
+                                        ? `Callback: ${btn.data} (Click/Right-click to copy)`
                                         : btn.url
-                                        ? `Open: ${btn.url}`
+                                        ? `Open ${btn.url}`
                                         : undefined
                                     }
-                                    className={`flex-1 min-w-[80px] px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-medium text-white transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer ${
-                                      btnIsRtl ? 'text-right' : 'text-center'
-                                    }`}
+                                    className="flex-1 min-w-[80px] px-3 py-1.5 rounded-xl bg-dark-750 hover:bg-dark-700 active:scale-98 text-gray-200 hover:text-white text-xs font-medium transition-all border border-white/5 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
                                   >
                                     <span className="truncate">{btn.text}</span>
                                     {btn.url && (
@@ -1008,6 +1291,25 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                           ))}
                         </div>
                       )}
+
+                    {/* Telegram Reactions Pills (❤️ 12, 🔥 5) */}
+                    {msg.reactions && msg.reactions.length > 0 && (
+                      <div className="flex items-center gap-1 flex-wrap mt-2 pt-1">
+                        {msg.reactions.map((rx, rIdx) => (
+                          <div
+                            key={rIdx}
+                            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-transform hover:scale-105 select-none ${
+                              rx.chosen
+                                ? 'bg-primary-500/25 border-primary-400 text-primary-200'
+                                : 'bg-black/30 border-white/10 text-gray-200'
+                            }`}
+                          >
+                            <span>{rx.emoji}</span>
+                            <span className="text-[10px] opacity-80">{rx.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Message Footer: ID + Seconds Timestamp + Status */}
                     <div
@@ -1126,33 +1428,59 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 3. Input Box */}
+      {/* 3. Input Box OR Broadcast Channel Bottom Action Bar */}
       <div className="shrink-0 p-3 bg-dark-850/80 border-t border-white/5 backdrop-blur-md">
-        <form onSubmit={handleSend} className="flex items-center gap-2">
-          <button
-            type="button"
-            className="p-2 text-gray-400 hover:text-gray-200 rounded-xl hover:bg-dark-800 transition-colors cursor-pointer"
-          >
-            <Paperclip className="w-4 h-4" />
-          </button>
+        {chatDetails?.canSendMessages === false || (isChannel && !chatDetails?.canSendMessages) ? (
+          <div className="flex items-center justify-center">
+            <button
+              type="button"
+              onClick={handleToggleNotifications}
+              className={`w-full max-w-sm py-2.5 px-4 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
+                isMuted
+                  ? 'bg-primary-600 hover:bg-primary-500 text-white shadow-glow'
+                  : 'bg-dark-800 hover:bg-dark-750 text-gray-300 hover:text-white border border-white/10'
+              }`}
+            >
+              {isMuted ? (
+                <>
+                  <Volume2 className="w-4 h-4 text-white" />
+                  <span>UNMUTE CHANNEL</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-4 h-4 text-gray-400" />
+                  <span>MUTE CHANNEL</span>
+                </>
+              )}
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSend} className="flex items-center gap-2">
+            <button
+              type="button"
+              className="p-2 text-gray-400 hover:text-gray-200 rounded-xl hover:bg-dark-800 transition-colors cursor-pointer"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
 
-          <input
-            type="text"
-            dir={isRTL(inputText) ? 'rtl' : 'ltr'}
-            placeholder="Write a message... (Alt+F to forward, Alt+C to copy text)"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            className="flex-1 bg-dark-800 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors"
-          />
+            <input
+              type="text"
+              dir={isRTL(inputText) ? 'rtl' : 'ltr'}
+              placeholder="Write a message... (Alt+F to forward, Alt+C to copy text)"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              className="flex-1 bg-dark-800 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors"
+            />
 
-          <button
-            type="submit"
-            disabled={!inputText.trim()}
-            className="p-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 disabled:hover:bg-primary-600 text-white rounded-xl transition-all shadow-glow flex items-center justify-center cursor-pointer"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={!inputText.trim()}
+              className="p-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 disabled:hover:bg-primary-600 text-white rounded-xl transition-all shadow-glow flex items-center justify-center cursor-pointer"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        )}
       </div>
 
       {/* 4. Channel / User Info Drawer */}
