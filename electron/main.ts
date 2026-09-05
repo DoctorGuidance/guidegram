@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, protocol, net, dialog, session } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath, pathToFileURL } from 'url'
@@ -258,6 +258,18 @@ app.whenReady().then(async () => {
   })
 
   sessionStore = new SessionStore(portableDataDir)
+
+  // Auto-grant microphone permission for voice message recording
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true)
+    } else {
+      callback(false)
+    }
+  })
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    return permission === 'media'
+  })
   accountManager = new AccountManager(sessionStore, (event, payload) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(event, payload)
@@ -462,6 +474,78 @@ function setupIpcHandlers() {
       Logger.error(`[IPC] sendMessage failed:`, err)
       throw err
     }
+  })
+
+  ipcMain.handle('telegram:send-media', async (_event, { accountId, chatId, filePath, options }) => {
+    try {
+      return await accountManager.sendMedia(accountId, chatId, filePath, options)
+    } catch (err: any) {
+      Logger.error(`[IPC] sendMedia failed for ${accountId} in ${chatId}:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('dialog:open-file', async (_event, options?: { type?: 'media' | 'document' | 'audio'; allowMultiple?: boolean; title?: string; filters?: Array<{ name: string; extensions: string[] }>; properties?: Array<'openFile' | 'multiSelections'> }) => {
+    const win = BrowserWindow.getFocusedWindow() || mainWindow
+    if (!win) return { canceled: true, filePaths: [] }
+
+    let filters = options?.filters
+    let title = options?.title || 'Select File'
+
+    if (!filters) {
+      const type = options?.type || 'document'
+      if (type === 'media') {
+        title = options?.title || 'Select Photo or Video'
+        filters = [
+          { name: 'Photos & Videos', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'mp4', 'mov', 'avi', 'mkv', 'webm'] },
+          { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'] },
+          { name: 'Videos', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] },
+          { name: 'All Files', extensions: ['*'] },
+        ]
+      } else if (type === 'audio') {
+        title = options?.title || 'Select Audio File'
+        filters = [
+          { name: 'Audio Files', extensions: ['mp3', 'm4a', 'ogg', 'opus', 'flac', 'wav', 'aac', 'wma'] },
+          { name: 'All Files', extensions: ['*'] },
+        ]
+      } else {
+        title = options?.title || 'Select Document or File'
+        filters = [
+          { name: 'All Files', extensions: ['*'] },
+        ]
+      }
+    }
+
+    const properties = options?.properties || (options?.allowMultiple !== false ? ['openFile', 'multiSelections'] : ['openFile'])
+
+    const result = await dialog.showOpenDialog(win, {
+      title,
+      properties: properties as any,
+      filters,
+    })
+
+    return {
+      canceled: result.canceled,
+      filePaths: result.filePaths || [],
+    }
+  })
+
+  ipcMain.handle('system:save-temp-file', async (_event, { buffer, filename }: { buffer: ArrayBuffer | Uint8Array; filename: string }) => {
+    const tempDir = app.getPath('temp')
+    const safeName = (filename || `voice_${Date.now()}.ogg`).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const targetPath = path.join(tempDir, safeName)
+    const nodeBuf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer as any)
+    await fs.promises.writeFile(targetPath, nodeBuf)
+    return targetPath
+  })
+
+  ipcMain.handle('temp:save-file', async (_event, params: { buffer: ArrayBuffer | Uint8Array; filename: string }) => {
+    const tempDir = app.getPath('temp')
+    const safeName = (params.filename || `temp_${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const targetPath = path.join(tempDir, safeName)
+    const nodeBuf = Buffer.isBuffer(params.buffer) ? params.buffer : Buffer.from(params.buffer as any)
+    await fs.promises.writeFile(targetPath, nodeBuf)
+    return targetPath
   })
 
   ipcMain.handle(

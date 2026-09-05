@@ -1267,6 +1267,111 @@ export class AccountManager {
       text: sent.message,
       date: sent.date * 1000,
       isOutgoing: true,
+      replyToMsgId,
+    }
+  }
+
+  /**
+   * Send media (photo, video, document, audio, voice note) with upload progress notification
+   */
+  public async sendMedia(
+    accountId: string,
+    chatId: string,
+    filePath: string,
+    options?: {
+      caption?: string
+      replyToMsgId?: number
+      isVoice?: boolean
+      duration?: number
+      forceDocument?: boolean
+      uploadId?: string
+    }
+  ): Promise<MessageItem> {
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File does not exist: ${filePath}`)
+    }
+
+    const uploadId = options?.uploadId || filePath
+
+    const sendParams: any = {
+      file: filePath,
+      caption: options?.caption || '',
+      replyTo: options?.replyToMsgId,
+      forceDocument: options?.forceDocument ?? false,
+      workers: 2,
+      progressCallback: (progress: number) => {
+        const percent = Math.min(100, Math.max(0, Math.round(progress * 100)))
+        this.onEventCallback?.('telegram:upload-progress', {
+          accountId,
+          chatId,
+          uploadId,
+          progress: percent,
+          filePath,
+        })
+      },
+    }
+
+    if (options?.isVoice) {
+      sendParams.voiceNote = true
+      sendParams.attributes = [
+        new Api.DocumentAttributeAudio({
+          voice: true,
+          duration: options.duration ? Math.max(1, Math.round(options.duration)) : 0,
+        }),
+      ]
+    }
+
+    const sent = await holder.client.sendFile(chatId, sendParams)
+
+    // Handle array if multiple messages were returned
+    const msg: any = Array.isArray(sent) ? sent[0] : sent
+    const mediaData = this.parseMedia(msg.media)
+    const entities = this.parseEntities(msg.entities)
+    const cacheKey = `${accountId}_${chatId}_${msg.id}`
+
+    // Cache local media URL so the chat renders instantly without redownloading
+    this.mediaCache.set(cacheKey, `guidegram-media://${filePath}`)
+    this.mediaCache.set(`${cacheKey}_thumb`, `guidegram-media://${filePath}`)
+
+    // Clean up temporary voice files
+    if (options?.isVoice && filePath.includes('voice_')) {
+      fs.promises.unlink(filePath).catch(() => {})
+    }
+
+    let mediaFileSize: number | undefined = mediaData.mediaFileSize
+    if (!mediaFileSize && fs.existsSync(filePath)) {
+      try {
+        mediaFileSize = fs.statSync(filePath).size
+      } catch (_) {}
+    }
+
+    return {
+      id: msg.id,
+      chatId,
+      accountId,
+      senderId: msg.senderId?.toString() || holder.info.id,
+      senderName: holder.info.firstName || 'Me',
+      text: msg.message || '',
+      date: (msg.date || Math.floor(Date.now() / 1000)) * 1000,
+      isOutgoing: true,
+      replyToMsgId: options?.replyToMsgId,
+      mediaType: mediaData.mediaType || (options?.isVoice ? 'voice' : undefined),
+      isVoice: mediaData.isVoice || options?.isVoice,
+      isSticker: mediaData.isSticker,
+      isRoundVideo: mediaData.isRoundVideo,
+      voiceWaveform: mediaData.voiceWaveform,
+      mediaFileName: mediaData.mediaFileName || path.basename(filePath),
+      mediaFileSize,
+      mediaDuration: mediaData.mediaDuration || options?.duration,
+      mediaWidth: mediaData.mediaWidth,
+      mediaHeight: mediaData.mediaHeight,
+      mediaMimeType: mediaData.mediaMimeType,
+      mediaFilePath: filePath,
+      mediaUrl: `guidegram-media://${filePath}`,
+      entities,
     }
   }
 

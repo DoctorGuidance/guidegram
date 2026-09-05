@@ -219,3 +219,33 @@ export interface AppConfig {
   disableAnimations?: boolean
   suppressLinkWarning?: boolean
 }
+
+export interface OpenFileDialogOptions {
+  type?: 'media' | 'document' | 'audio'
+  allowMultiple?: boolean
+  title?: string
+  filters?: Array<{ name: string; extensions: string[] }>
+  properties?: Array<'openFile' | 'multiSelections'>
+}
+
+export interface OpenFileDialogResult {
+  canceled: boolean
+  filePaths: string[]
+}
+
+export interface SendMediaOptions {
+  caption?: string
+  replyToMsgId?: number
+  isVoice?: boolean
+  duration?: number
+  forceDocument?: boolean
+  uploadId?: string
+}
+
+export interface UploadProgressPayload {
+  accountId: string
+  chatId: string
+  uploadId: string
+  progress: number
+  filePath?: string
+}

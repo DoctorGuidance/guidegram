@@ -246,12 +246,67 @@ export const App: React.FC = () => {
     if (!activeAccountId || !activeChatId || !window.guidegram) return
     try {
       const sent = await window.guidegram.sendMessage(activeAccountId, activeChatId, text, replyToMsgId)
+      const repliedMsg = replyToMsgId
+        ? (messagesByChat[activeChatId] || []).find((m) => m.id === replyToMsgId)
+        : undefined
+
+      const enrichedSent: MessageItem = {
+        ...sent,
+        replyToMsgId,
+        replyTo: replyToMsgId
+          ? {
+              replyToMsgId,
+              senderName: repliedMsg?.senderName || (repliedMsg?.isOutgoing ? 'You' : 'User'),
+              text: repliedMsg?.text || (repliedMsg?.mediaType ? `[${repliedMsg.mediaType}]` : undefined),
+            }
+          : undefined,
+      }
+
       setMessagesByChat((prev) => ({
         ...prev,
-        [activeChatId]: [...(prev[activeChatId] || []), sent],
+        [activeChatId]: [...(prev[activeChatId] || []), enrichedSent],
       }))
     } catch (err) {
       console.error('Failed to send message:', err)
+    }
+  }
+
+  const handleSendMedia = async (
+    filePath: string,
+    options?: {
+      caption?: string
+      replyToMsgId?: number
+      isVoice?: boolean
+      duration?: number
+      forceDocument?: boolean
+    }
+  ) => {
+    if (!activeAccountId || !activeChatId || !window.guidegram) return
+    try {
+      const sent = await window.guidegram.sendMedia(activeAccountId, activeChatId, filePath, options)
+      const repliedMsg = options?.replyToMsgId
+        ? (messagesByChat[activeChatId] || []).find((m) => m.id === options.replyToMsgId)
+        : undefined
+
+      const enrichedSent: MessageItem = {
+        ...sent,
+        replyToMsgId: options?.replyToMsgId,
+        replyTo: options?.replyToMsgId
+          ? {
+              replyToMsgId: options.replyToMsgId,
+              senderName: repliedMsg?.senderName || (repliedMsg?.isOutgoing ? 'You' : 'User'),
+              text: repliedMsg?.text || (repliedMsg?.mediaType ? `[${repliedMsg.mediaType}]` : undefined),
+            }
+          : undefined,
+      }
+
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [activeChatId]: [...(prev[activeChatId] || []), enrichedSent],
+      }))
+    } catch (err) {
+      console.error('Failed to send media:', err)
+      throw err
     }
   }
 

@@ -42,6 +42,13 @@ import {
   Mic,
   Image,
   FileUp,
+  Bold,
+  Italic,
+  Code as CodeIcon,
+  Strikethrough,
+  Link as LinkIcon,
+  Eye,
+  Calendar,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem } from '../types/telegram'
 import { Avatar } from './Avatar'
@@ -62,11 +69,28 @@ interface ChatViewportProps {
   copyCallbackData?: boolean
   suppressLinkWarning?: boolean
   onSendMessage: (text: string, replyToMsgId?: number) => void
+  onSendMedia?: (
+    filePath: string,
+    options?: {
+      caption?: string
+      replyToMsgId?: number
+      isVoice?: boolean
+      duration?: number
+      forceDocument?: boolean
+    }
+  ) => Promise<void> | void
   onOpenDirectForward: (message: MessageItem) => void
   onQuickForwardToSaved?: (message: MessageItem) => Promise<boolean> | void
   onDeleteMessage?: (message: MessageItem) => Promise<boolean> | void
   onToggleGhostMode: () => void
   onSelectUserOrChat?: (target: string) => void
+}
+
+interface StagedAttachment {
+  path: string
+  name: string
+  size?: number
+  type: 'media' | 'document' | 'audio'
 }
 
 export const ChatViewport: React.FC<ChatViewportProps> = ({
@@ -82,6 +106,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   copyCallbackData = true,
   suppressLinkWarning = false,
   onSendMessage,
+  onSendMedia,
   onOpenDirectForward,
   onQuickForwardToSaved,
   onDeleteMessage,
@@ -131,28 +156,132 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   // Reply bar state
   const [replyMessage, setReplyMessage] = useState<MessageItem | null>(null)
 
-  // Attachment popover menu state
+  // Attachment popover menu & staging state
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false)
+  const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([])
+  const [uploadProgress, setUploadProgress] = useState<{
+    isUploading: boolean
+    percent: number
+    fileName?: string
+  }>({ isUploading: false, percent: 0 })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const audioInputRef = useRef<HTMLInputElement>(null)
+
+  // Voice message recording state
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const [recordingWaveform, setRecordingWaveform] = useState<number[]>([30, 45, 60, 40, 70, 55, 80, 50, 40, 60, 45, 30])
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false)
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const recordingChunksRef = useRef<Blob[]>([])
+  const analyserIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Floating "Scroll to Bottom" state
   const [showScrollBottom, setShowScrollBottom] = useState(false)
   const [unreadScrollCount, setUnreadScrollCount] = useState(0)
+  const isScrollingRef = useRef(false)
+  const previousChatIdRef = useRef<string | null>(null)
 
   // Multi-line input ref
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Handle scroll events to detect if user scrolled up
-  const handleScroll = () => {
-    const el = messagesContainerRef.current
-    if (!el) return
-    const isScrolledUp = el.scrollTop < el.scrollHeight - el.clientHeight - 180
-    setShowScrollBottom(isScrolledUp)
-    if (!isScrolledUp) {
-      setUnreadScrollCount(0)
+  // Floating Contextual Text Formatting Toolbar State (Telegram Desktop v7.0+)
+  const [formatBar, setFormatBar] = useState<{
+    visible: boolean
+    start: number
+    end: number
+    selectedText: string
+  }>({ visible: false, start: 0, end: 0, selectedText: '' })
+
+  // Drag and Drop Overlay State (Telegram Desktop v7.2.6 & v6.8.4)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+
+  // Contextual Text Formatter (Bold, Italic, Code, Strike, Spoiler, Quote)
+  const applyTextFormat = (wrapper: string | ((text: string) => string)) => {
+    const textarea = textareaRef.current
+    if (!textarea || formatBar.start === formatBar.end) return
+    const text = inputText
+    const before = text.slice(0, formatBar.start)
+    const selected = text.slice(formatBar.start, formatBar.end)
+    const after = text.slice(formatBar.end)
+
+    let formatted = ''
+    if (typeof wrapper === 'function') {
+      formatted = wrapper(selected)
+    } else if (wrapper === '`' || wrapper === '```') {
+      formatted = `${wrapper}${selected}${wrapper}`
+    } else {
+      formatted = `${wrapper}${selected}${wrapper}`
+    }
+
+    const newText = `${before}${formatted}${after}`
+    setInputText(newText)
+    setFormatBar({ visible: false, start: 0, end: 0, selectedText: '' })
+    setTimeout(() => {
+      textarea.focus()
+      const newCursor = before.length + formatted.length
+      textarea.setSelectionRange(newCursor, newCursor)
+    }, 50)
+  }
+
+  const handleTextareaSelect = () => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    if (start !== end && end - start > 0) {
+      const selected = textarea.value.slice(start, end)
+      setFormatBar({
+        visible: true,
+        start,
+        end,
+        selectedText: selected,
+      })
+    } else {
+      if (formatBar.visible) {
+        setFormatBar({ visible: false, start: 0, end: 0, selectedText: '' })
+      }
     }
   }
+
+  // Auto-expanding textarea height adjustment (Feature 16)
+  const adjustTextareaHeight = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    const minHeight = 24
+    const maxHeight = 160
+    const targetHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight)
+    el.style.height = `${targetHeight}px`
+    el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [])
+
+  useEffect(() => {
+    adjustTextareaHeight()
+  }, [inputText, adjustTextareaHeight])
+
+  // Throttled scroll listener detecting > 300px from bottom (Feature 19)
+  const handleScroll = useCallback(() => {
+    if (isScrollingRef.current) return
+    isScrollingRef.current = true
+    requestAnimationFrame(() => {
+      const el = messagesContainerRef.current
+      if (el) {
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+        const isScrolledUp = distanceFromBottom > 300
+        setShowScrollBottom(isScrolledUp)
+        if (distanceFromBottom <= 50) {
+          setUnreadScrollCount(0)
+        }
+      }
+      isScrollingRef.current = false
+    })
+  }, [])
 
   const handleScrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -160,14 +289,37 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     setUnreadScrollCount(0)
   }
 
+  // Handle new incoming/outgoing messages and chat switching (Feature 19)
   useEffect(() => {
+    // 1. Detect Chat Switch
+    if (chat?.id !== previousChatIdRef.current) {
+      previousChatIdRef.current = chat?.id || null
+      setShowScrollBottom(false)
+      setUnreadScrollCount(0)
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+      }, 50)
+      return
+    }
+
+    // 2. Outgoing Message by Current User
+    const lastMsg = messages[messages.length - 1]
+    if (lastMsg?.isOutgoing) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setShowScrollBottom(false)
+      setUnreadScrollCount(0)
+      return
+    }
+
+    // 3. Incoming Message: Check scroll position
     const el = messagesContainerRef.current
     if (!el) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
       return
     }
-    const isNearBottom = el.scrollTop >= el.scrollHeight - el.clientHeight - 200
-    if (isNearBottom) {
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distanceFromBottom <= 300) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
       setShowScrollBottom(false)
       setUnreadScrollCount(0)
@@ -175,7 +327,27 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       setUnreadScrollCount((prev) => prev + 1)
       setShowScrollBottom(true)
     }
-  }, [messages])
+  }, [chat?.id, messages])
+
+  // Listen for real-time Telegram upload progress events
+  useEffect(() => {
+    if (!window.guidegram?.on) return
+    const cleanup = window.guidegram.on('telegram:upload-progress', (data: any) => {
+      if (data && (!chat || data.chatId === chat.id)) {
+        setUploadProgress({
+          isUploading: data.progress < 100,
+          percent: data.progress,
+          fileName: data.filePath ? data.filePath.split(/[\\/]/).pop() : undefined,
+        })
+        if (data.progress >= 100) {
+          setTimeout(() => {
+            setUploadProgress({ isUploading: false, percent: 0 })
+          }, 600)
+        }
+      }
+    })
+    return cleanup
+  }, [chat?.id])
 
   // Active video message playing in-app
   const [activeVideoId, setActiveVideoId] = useState<number | null>(null)
@@ -215,6 +387,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     setSearchSenderFilter(null)
     setMemberSearchQuery('')
     setPendingExternalUrl(null)
+    setReplyMessage(null)
+    setStagedAttachments([])
+    setIsAttachMenuOpen(false)
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause()
       audioPlayerRef.current = null
@@ -594,9 +769,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
     // Helper to render inline tokens (links, mentions, code, bold, italic)
     const renderInlineTokens = (str: string, keyPrefix: string) => {
-      // Token regex for URLs, Telegram links, mentions, markdown bold/italic/code
+      // Token regex for URLs, Telegram links, mentions, markdown bold/italic/code/strike/spoiler
       const tokenRegex =
-        /(```[\s\S]*?```|`[^`\n]+`|\*\*[^*]+\*\*|__[^_]+__|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s]+|tg:\/\/[^\s]+|\bt\.me\/[a-zA-Z0-9_]+(?:\/[0-9]+)?|@[a-zA-Z0-9_]{3,32})/g
+        /(```[\s\S]*?```|`[^`\n]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\|\|[^|]+\|\||\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s]+|tg:\/\/[^\s]+|\bt\.me\/[a-zA-Z0-9_]+(?:\/[0-9]+)?|@[a-zA-Z0-9_]{3,32})/g
 
       const parts = str.split(tokenRegex)
 
@@ -646,6 +821,33 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             <em key={partKey} className="italic text-gray-200">
               {part.slice(2, -2)}
             </em>
+          )
+        }
+
+        // Strikethrough: ~~text~~
+        if (part.startsWith('~~') && part.endsWith('~~') && part.length > 4) {
+          return (
+            <span key={partKey} className="line-through text-gray-400">
+              {part.slice(2, -2)}
+            </span>
+          )
+        }
+
+        // Spoiler: ||text|| (Telegram Desktop click-to-reveal)
+        if (part.startsWith('||') && part.endsWith('||') && part.length > 4) {
+          return (
+            <span
+              key={partKey}
+              onClick={(e) => {
+                e.stopPropagation()
+                e.currentTarget.classList.toggle('bg-white/15')
+                e.currentTarget.classList.toggle('blur-[4px]')
+              }}
+              title="Click to reveal spoiler"
+              className="rounded px-1 bg-white/15 blur-[4px] hover:blur-[2px] transition-all cursor-pointer select-none active:blur-none"
+            >
+              {part.slice(2, -2)}
+            </span>
           )
         }
 
@@ -1139,7 +1341,42 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const isBot = chat.isBot
 
   return (
-    <div className="relative flex-1 min-w-0 bg-dark-900 flex flex-col h-full overflow-hidden titlebar-no-drag">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!isDraggingOver) setIsDraggingOver(true)
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return
+        setIsDraggingOver(false)
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDraggingOver(false)
+        const droppedFiles = Array.from(e.dataTransfer.files)
+        if (droppedFiles.length > 0) {
+          showToast(`Uploading ${droppedFiles.length} file(s) to ${chat.title}`)
+        }
+      }}
+      className="relative flex-1 min-w-0 bg-dark-900 flex flex-col h-full overflow-hidden titlebar-no-drag"
+    >
+      {/* Telegram Desktop Drag & Drop Overlay (v7.2.6 & v6.8.4) */}
+      {isDraggingOver && (
+        <div className="absolute inset-0 z-50 bg-dark-900/90 backdrop-blur-md flex flex-col items-center justify-center p-8 animate-in fade-in duration-150 border-2 border-dashed border-primary-500 rounded-2xl m-4">
+          <div className="w-20 h-20 rounded-3xl bg-primary-600/20 text-primary-400 flex items-center justify-center mb-4 shadow-glow">
+            <FileUp className="w-10 h-10" />
+          </div>
+          <h3 className="text-base font-bold text-white mb-1">Drop files here to send</h3>
+          <p className="text-xs text-gray-400 text-center max-w-sm">
+            Files will be sent without compression or as photos/videos to this conversation.
+          </p>
+        </div>
+      )}
+
       {/* Toast Notification */}
       {toast && (
         <div className="absolute top-16 right-6 z-50 px-4 py-2.5 rounded-2xl bg-dark-800/95 border border-primary-500/30 text-xs font-semibold text-white shadow-glow flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-md">
@@ -1885,7 +2122,86 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
               </button>
 
               {/* Multi-line Auto-expanding Textarea with Telegram Desktop Shortcuts */}
-              <div className="flex-1 bg-dark-800 border border-white/5 focus-within:border-primary-500/50 rounded-2xl px-3.5 py-2 transition-colors flex items-center">
+              <div className="flex-1 bg-dark-800 border border-white/5 focus-within:border-primary-500/50 rounded-2xl px-3.5 py-2 transition-colors flex items-center relative">
+                {/* Floating Contextual Formatting Toolbar (Telegram Desktop v7.0+) */}
+                {formatBar.visible && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-full left-0 mb-2 bg-dark-850/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md px-2 py-1 flex items-center gap-1 z-40 animate-in fade-in zoom-in-95 duration-100 select-none text-xs"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => applyTextFormat('**')}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                      title="Bold (Ctrl+B)"
+                    >
+                      <Bold className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyTextFormat('__')}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                      title="Italic (Ctrl+I)"
+                    >
+                      <Italic className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyTextFormat('`')}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-accent-cyan hover:bg-white/10 transition-colors"
+                      title="Monospace Code"
+                    >
+                      <CodeIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyTextFormat('~~')}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                      title="Strikethrough"
+                    >
+                      <Strikethrough className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyTextFormat('||')}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-amber-300 hover:bg-white/10 transition-colors"
+                      title="Spoiler"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyTextFormat((s) => `> ${s}\n`)}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-primary-400 hover:bg-white/10 transition-colors"
+                      title="Quote"
+                    >
+                      <Quote className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = window.prompt('Enter link URL (https://...):')
+                        if (url && url.trim()) {
+                          applyTextFormat((s) => `[${s}](${url.trim()})`)
+                        }
+                      }}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-accent-cyan hover:bg-white/10 transition-colors"
+                      title="Insert Link"
+                    >
+                      <LinkIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="w-px h-4 bg-white/10 mx-0.5" />
+                    <button
+                      type="button"
+                      onClick={() => setFormatBar({ visible: false, start: 0, end: 0, selectedText: '' })}
+                      className="p-1 text-gray-400 hover:text-white rounded-lg transition-colors"
+                      title="Close"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
                 <textarea
                   ref={textareaRef}
                   dir={isRTL(inputText) ? 'rtl' : 'ltr'}
@@ -1899,7 +2215,29 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     e.target.style.height = 'auto'
                     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
                   }}
+                  onSelect={handleTextareaSelect}
+                  onKeyUp={handleTextareaSelect}
+                  onMouseUp={handleTextareaSelect}
                   onKeyDown={(e) => {
+                    // Keyboard shortcuts for formatting (Ctrl+B, Ctrl+I, Ctrl+K)
+                    if (e.ctrlKey || e.metaKey) {
+                      if (e.key === 'b' || e.key === 'B') {
+                        e.preventDefault()
+                        applyTextFormat('**')
+                        return
+                      }
+                      if (e.key === 'i' || e.key === 'I') {
+                        e.preventDefault()
+                        applyTextFormat('__')
+                        return
+                      }
+                      if (e.key === 'u' || e.key === 'U') {
+                        e.preventDefault()
+                        applyTextFormat('__')
+                        return
+                      }
+                    }
+
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
                       handleSend()

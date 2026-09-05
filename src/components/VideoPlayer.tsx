@@ -68,12 +68,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     video.addEventListener('timeupdate', handleTimeUpdate)
     video.addEventListener('ended', handleEnded)
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) return
+
+      if (e.code === 'Space') {
+        e.preventDefault()
+        togglePlay()
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault()
+        if (video) video.currentTime = Math.min(video.currentTime + 5, video.duration || 0)
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault()
+        if (video) video.currentTime = Math.max(video.currentTime - 5, 0)
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault()
+        toggleFullscreen()
+      } else if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault()
+        copyCurrentFrame()
+      } else if (e.key === 'Escape') {
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.().catch(() => {})
+        } else if (onClose) {
+          onClose()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
     return () => {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata)
       video.removeEventListener('timeupdate', handleTimeUpdate)
       video.removeEventListener('ended', handleEnded)
+      window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [])
+  }, [playbackSpeed, volume, isMuted, onClose])
 
   const togglePlay = () => {
     const video = videoRef.current

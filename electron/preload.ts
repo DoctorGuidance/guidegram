@@ -1,5 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { ProxyConfig, ForwardOptions, AppConfig, QrTokenPayload, AccountInfo, UpdateInfo, ChatDetails } from './telegram/types'
+import {
+  ProxyConfig,
+  ForwardOptions,
+  AppConfig,
+  QrTokenPayload,
+  AccountInfo,
+  UpdateInfo,
+  ChatDetails,
+  MessageItem,
+  OpenFileDialogOptions,
+  OpenFileDialogResult,
+  SendMediaOptions,
+} from './telegram/types'
 
 const guidegramAPI = {
   // Window Controls
@@ -36,6 +48,17 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:get-messages', { accountId, chatId, limit }),
   sendMessage: (accountId: string, chatId: string, text: string, replyToMsgId?: number) =>
     ipcRenderer.invoke('telegram:send-message', { accountId, chatId, text, replyToMsgId }),
+  sendMedia: (
+    accountId: string,
+    chatId: string,
+    filePath: string,
+    options?: SendMediaOptions
+  ): Promise<MessageItem> =>
+    ipcRenderer.invoke('telegram:send-media', { accountId, chatId, filePath, options }),
+  openFileDialog: (options?: OpenFileDialogOptions): Promise<OpenFileDialogResult> =>
+    ipcRenderer.invoke('dialog:open-file', options),
+  saveTempFile: (params: { buffer: ArrayBuffer | Uint8Array; filename: string }): Promise<string> =>
+    ipcRenderer.invoke('system:save-temp-file', params),
   forwardMessages: (
     accountId: string,
     toChatId: string | string[],

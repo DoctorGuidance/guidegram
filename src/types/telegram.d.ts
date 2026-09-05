@@ -16,6 +16,10 @@ import type {
   PinnedMessageItem,
   CloseAction,
   UpdateInfo,
+  OpenFileDialogOptions,
+  OpenFileDialogResult,
+  SendMediaOptions,
+  UploadProgressPayload,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -41,4 +45,8 @@ export type {
   PinnedMessageItem,
   CloseAction,
   UpdateInfo,
+  OpenFileDialogOptions,
+  OpenFileDialogResult,
+  SendMediaOptions,
+  UploadProgressPayload,
 }
