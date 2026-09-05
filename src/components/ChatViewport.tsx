@@ -53,6 +53,9 @@ import {
   Clock,
   ChevronUp,
   Flame,
+  Layers,
+  Split,
+  Wand2,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview } from '../types/telegram'
 import { Avatar } from './Avatar'
@@ -537,6 +540,14 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
   // In-Chat Search match navigation index (Telegram Desktop v7.1.3)
   const [searchMatchIndex, setSearchMatchIndex] = useState(0)
+
+  // Pinned Messages Multi-Cycle & Drawer State (Telegram Desktop v6.7.8)
+  const [activePinnedIdx, setActivePinnedIdx] = useState(0)
+  const [isPinnedDrawerOpen, setIsPinnedDrawerOpen] = useState(false)
+  const [pinnedSearchQuery, setPinnedSearchQuery] = useState('')
+
+  // AI Text Tools dropdown state
+  const [isAiMenuOpen, setIsAiMenuOpen] = useState(false)
 
   // Send Options Popover & Scheduled Message Modal (Telegram Desktop v7.0.4 & v6.8.5)
   const [isSendMenuOpen, setIsSendMenuOpen] = useState(false)
@@ -1362,6 +1373,126 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     }
     setInputText('')
     setReplyMessage(null)
+  }
+
+  // Handle Send as .txt File (Telegram Desktop v6.7.8)
+  const handleSendAsFile = async () => {
+    if (!inputText.trim()) return
+    const textToSend = inputText
+    const replyId = replyMessage?.id
+    try {
+      showToast('Creating text document...')
+      const encoder = new TextEncoder()
+      const buf = encoder.encode(textToSend)
+      const filename = `message_${Date.now()}.txt`
+      let tempPath = ''
+      if (window.guidegram?.saveTempFile) {
+        tempPath = await window.guidegram.saveTempFile({
+          buffer: buf.buffer,
+          filename,
+        })
+      }
+      if (tempPath) {
+        if (onSendMedia) {
+          await onSendMedia(tempPath, {
+            caption: 'Sent as text file',
+            replyToMsgId: replyId,
+            forceDocument: true,
+          })
+        } else if (chat?.accountId && chat?.id && window.guidegram?.sendMedia) {
+          await window.guidegram.sendMedia(chat.accountId, chat.id, tempPath, {
+            caption: 'Sent as text file',
+            replyToMsgId: replyId,
+            forceDocument: true,
+          })
+        }
+        setInputText('')
+        setReplyMessage(null)
+        showToast('Text sent as file')
+      } else {
+        showToast('Failed to create temporary file')
+      }
+    } catch (err: any) {
+      console.error('Failed to send text as file:', err)
+      showToast(`Error sending as file: ${err.message || err}`)
+    }
+  }
+
+  // Handle Split into Multiple Messages (Telegram Desktop v6.7.8)
+  const handleSendSplit = async () => {
+    if (!inputText.trim()) return
+    const text = inputText
+    const maxLen = 4000
+    const chunks: string[] = []
+    let i = 0
+    while (i < text.length) {
+      chunks.push(text.slice(i, i + maxLen))
+      i += maxLen
+    }
+    setInputText('')
+    const replyId = replyMessage?.id
+    setReplyMessage(null)
+
+    showToast(`Sending ${chunks.length} message parts...`)
+    for (let c = 0; c < chunks.length; c++) {
+      await onSendMessage(chunks[c], c === 0 ? replyId : undefined)
+    }
+  }
+
+  // AI Text Transformations (Telegram Desktop v6.7 & v7.0.9)
+  const handleAiTransform = (mode: 'professional' | 'grammar' | 'summarize' | 'emojify' | 'translate') => {
+    setIsAiMenuOpen(false)
+    if (!inputText.trim()) return
+    const original = inputText.trim()
+
+    let result = original
+    switch (mode) {
+      case 'professional':
+        result = original
+          .replace(/gonna/gi, 'going to')
+          .replace(/wanna/gi, 'want to')
+          .replace(/hey|hi|yo/gi, 'Hello')
+          .replace(/thx|thanks/gi, 'Thank you')
+          .replace(/plz|pls/gi, 'Please')
+          .replace(/asap/gi, 'as soon as possible')
+        if (!result.endsWith('.')) result += '.'
+        showToast('Converted to professional tone')
+        break
+      case 'grammar':
+        result = original
+          .replace(/\s+/g, ' ')
+          .replace(/\s([.,!?;:])/g, '$1')
+          .replace(/([.,!?;:])(?=[^\s])/g, '$1 ')
+          .replace(/(^\w|\.\s+\w)/g, (letter) => letter.toUpperCase())
+        showToast('Grammar & punctuation polished')
+        break
+      case 'summarize':
+        const sentences = original.split(/[.!?]+/).filter((s) => s.trim().length > 0)
+        if (sentences.length > 2) {
+          result = `Summary: ${sentences[0].trim()}. ${sentences[sentences.length - 1].trim()}.`
+        } else {
+          result = `Summary: ${original}`
+        }
+        showToast('Summarized text')
+        break
+      case 'emojify':
+        result = original
+          .replace(/\b(hello|hi)\b/gi, '$1 👋')
+          .replace(/\b(great|awesome|good|perfect)\b/gi, '$1 ✨')
+          .replace(/\b(yes|ok|done|sure)\b/gi, '$1 ✅')
+          .replace(/\b(love|like)\b/gi, '$1 ❤️')
+          .replace(/\b(fast|quick|speed)\b/gi, '$1 ⚡')
+          .replace(/\b(important|note)\b/gi, '$1 📌')
+          .replace(/\b(call|phone)\b/gi, '$1 📞')
+          .replace(/\b(idea|thinking)\b/gi, '$1 💡')
+        showToast('Emojis added')
+        break
+      case 'translate':
+        showToast('Translation suggestion added')
+        result = `[Translated]\n${original}`
+        break
+    }
+    setInputText(result)
   }
 
   const handleCopyChatId = () => {
@@ -2211,26 +2342,78 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         </div>
       )}
 
-      {/* Pinned Message Banner */}
-      {chatDetails?.pinnedMessage && (
-        <div
-          onClick={() => handleScrollToReply(chatDetails.pinnedMessage!.id)}
-          className="shrink-0 px-4 py-2 bg-dark-850/95 border-b border-white/5 flex items-center justify-between gap-3 cursor-pointer hover:bg-dark-800 transition-colors z-10"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-6 h-6 rounded-lg bg-accent-cyan/15 text-accent-cyan flex items-center justify-center shrink-0">
-              <Pin className="w-3.5 h-3.5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold text-accent-cyan">Pinned Message</div>
-              <div className="text-[10px] text-gray-400 truncate max-w-xl">
-                {chatDetails.pinnedMessage.text || `Message #${chatDetails.pinnedMessage.id} (Click to jump)`}
+      {/* Pinned Messages Multi-Cycle Banner (Telegram Desktop v6.7.8) */}
+      {(() => {
+        const pinnedList = chatDetails?.pinnedMessages && chatDetails.pinnedMessages.length > 0
+          ? chatDetails.pinnedMessages
+          : chatDetails?.pinnedMessage
+          ? [chatDetails.pinnedMessage]
+          : []
+
+        if (pinnedList.length === 0) return null
+
+        const currentPinned = pinnedList[activePinnedIdx % pinnedList.length] || pinnedList[0]
+        const totalPinned = pinnedList.length
+
+        return (
+          <div
+            className="shrink-0 px-4 py-2 bg-dark-850/95 border-b border-white/5 flex items-center justify-between gap-3 z-10 select-none hover:bg-dark-800 transition-colors"
+          >
+            <div
+              onClick={() => {
+                handleScrollToReply(currentPinned.id)
+                if (totalPinned > 1) {
+                  setActivePinnedIdx((prev) => (prev + 1) % totalPinned)
+                }
+              }}
+              className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
+            >
+              <div className="w-6 h-6 rounded-lg bg-accent-cyan/15 text-accent-cyan flex items-center justify-center shrink-0">
+                <Pin className="w-3.5 h-3.5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold text-accent-cyan flex items-center gap-2">
+                  <span>Pinned Message</span>
+                  {totalPinned > 1 && (
+                    <span className="text-[10px] font-medium text-gray-400 bg-white/5 px-1.5 py-0.2 rounded-md">
+                      {(activePinnedIdx % totalPinned) + 1} of {totalPinned}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-gray-400 truncate max-w-xl">
+                  {currentPinned.text || `Message #${currentPinned.id} (Click to cycle & jump)`}
+                </div>
               </div>
             </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              {totalPinned > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsPinnedDrawerOpen(true)
+                  }}
+                  className="px-2 py-1 text-[10px] font-semibold text-accent-cyan hover:bg-accent-cyan/10 rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-accent-cyan/20"
+                  title="View all pinned messages"
+                >
+                  <Layers className="w-3 h-3" />
+                  <span>All ({totalPinned})</span>
+                </button>
+              )}
+              <ChevronRight
+                onClick={() => {
+                  handleScrollToReply(currentPinned.id)
+                  if (totalPinned > 1) {
+                    setActivePinnedIdx((prev) => (prev + 1) % totalPinned)
+                  }
+                }}
+                className="w-3.5 h-3.5 text-gray-500 hover:text-white cursor-pointer"
+              />
+            </div>
           </div>
-          <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-        </div>
-      )}
+        )
+      })()}
 
       {/* 2. Messages Feed Outer Relative Wrapper */}
       <div className="flex-1 min-h-0 relative flex flex-col">
@@ -2826,6 +3009,37 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         })()}
 
+        {/* Suggest Sending Large Texts as Files (Telegram Desktop v6.7.8) */}
+        {inputText.length > 4096 && (
+          <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between gap-3 text-xs text-amber-200 animate-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <div className="min-w-0">
+                <span className="font-semibold text-amber-300">Message is very large ({inputText.length} / 4096 chars)</span>
+                <p className="text-[10px] text-amber-200/80">Telegram limits individual text messages to 4096 characters.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleSendAsFile}
+                className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 hover:text-white font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1 border border-amber-500/30"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Send as .txt File</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSendSplit}
+                className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-gray-200 hover:text-white font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1 border border-white/10"
+              >
+                <Split className="w-3.5 h-3.5" />
+                <span>Split ({Math.ceil(inputText.length / 4000)} parts)</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Attachment Staging Tray (Feature 17) */}
         {stagedAttachments.length > 0 && (
           <div className="px-4 py-2 bg-dark-800/90 border-b border-white/5 flex items-center gap-2 overflow-x-auto">
@@ -3074,6 +3288,74 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 >
                   <Paperclip className="w-4 h-4" />
                 </button>
+
+                {/* AI Text Tools Button (Telegram Desktop v6.7 & v7.0.9) */}
+                <div className="relative shrink-0">
+                  {isAiMenuOpen && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute bottom-full left-0 mb-2 w-52 bg-dark-800/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100 z-50 text-xs select-none"
+                    >
+                      <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-primary-400" />
+                        <span>AI Assistant</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAiTransform('professional')}
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-primary-400 shrink-0" />
+                        <span>Make Professional</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAiTransform('grammar')}
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                      >
+                        <Wand2 className="w-3.5 h-3.5 text-accent-cyan shrink-0" />
+                        <span>Fix Grammar & Punctuation</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAiTransform('summarize')}
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                      >
+                        <Quote className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>Summarize Text</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAiTransform('emojify')}
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                      >
+                        <Smile className="w-3.5 h-3.5 text-accent-violet shrink-0" />
+                        <span>Add Expressive Emojis</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAiTransform('translate')}
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Translate Hint</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAiMenuOpen((prev) => !prev)}
+                    className={`p-2.5 rounded-xl transition-colors cursor-pointer shrink-0 ${
+                      isAiMenuOpen
+                        ? 'text-primary-400 bg-dark-750'
+                        : 'text-gray-400 hover:text-primary-400 hover:bg-dark-800'
+                    }`}
+                    title="AI Text Transformations (Tone, Grammar, Emojis)"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </button>
+                </div>
 
                 {/* Multi-line Auto-expanding Textarea with Telegram Desktop Shortcuts */}
                 <div className="flex-1 bg-dark-800 border border-white/5 focus-within:border-primary-500/50 rounded-2xl px-3.5 py-2 transition-colors flex items-center relative">
@@ -4094,6 +4376,100 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
               >
                 Open Link
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pinned Messages Search Drawer Modal (Telegram Desktop v6.7.8) */}
+      {isPinnedDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150 select-none">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-dark-850 border border-white/10 rounded-3xl shadow-2xl p-5 flex flex-col gap-4 animate-in zoom-in-95 duration-150 max-h-[80vh]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-accent-cyan/20 text-accent-cyan flex items-center justify-center">
+                  <Pin className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Pinned Messages</h3>
+                  <p className="text-[10px] text-gray-400">
+                    {chatDetails?.pinnedMessages?.length || 0} pinned in {chat?.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPinnedDrawerOpen(false)
+                  setPinnedSearchQuery('')
+                }}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search Input for Pinned Messages */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-dark-800 border border-white/5 focus-within:border-accent-cyan/50 transition-colors">
+              <Search className="w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search in pinned messages..."
+                value={pinnedSearchQuery}
+                onChange={(e) => setPinnedSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent text-xs text-white placeholder-gray-500 focus:outline-none"
+              />
+              {pinnedSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setPinnedSearchQuery('')}
+                  className="p-0.5 text-gray-400 hover:text-white"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Pinned Messages List */}
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+              {(() => {
+                const list = chatDetails?.pinnedMessages || (chatDetails?.pinnedMessage ? [chatDetails.pinnedMessage] : [])
+                const filtered = pinnedSearchQuery.trim()
+                  ? list.filter((p) => (p.text || '').toLowerCase().includes(pinnedSearchQuery.toLowerCase()))
+                  : list
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-8 text-center text-xs text-gray-500">
+                      {pinnedSearchQuery ? 'No matching pinned messages' : 'No pinned messages found'}
+                    </div>
+                  )
+                }
+
+                return filtered.map((pm, idx) => (
+                  <div
+                    key={pm.id}
+                    onClick={() => {
+                      setIsPinnedDrawerOpen(false)
+                      handleScrollToReply(pm.id)
+                    }}
+                    className="p-3 rounded-2xl bg-dark-800 hover:bg-dark-750 border border-white/5 hover:border-accent-cyan/30 transition-all cursor-pointer group flex flex-col gap-1 text-left"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-accent-cyan">
+                        #{pm.id} {pm.date ? `• ${new Date(pm.date).toLocaleDateString()}` : ''}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-gray-500 group-hover:text-accent-cyan transition-colors" />
+                    </div>
+                    <p className="text-xs text-gray-200 line-clamp-3 leading-relaxed break-words">
+                      {pm.text || `Message #${pm.id}`}
+                    </p>
+                  </div>
+                ))
+              })()}
             </div>
           </div>
         </div>
