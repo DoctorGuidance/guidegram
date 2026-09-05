@@ -34,8 +34,8 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:get-dialogs', { accountId }),
   getMessages: (accountId: string, chatId: string, limit?: number) =>
     ipcRenderer.invoke('telegram:get-messages', { accountId, chatId, limit }),
-  sendMessage: (accountId: string, chatId: string, text: string) =>
-    ipcRenderer.invoke('telegram:send-message', { accountId, chatId, text }),
+  sendMessage: (accountId: string, chatId: string, text: string, replyToMsgId?: number) =>
+    ipcRenderer.invoke('telegram:send-message', { accountId, chatId, text, replyToMsgId }),
   forwardMessages: (
     accountId: string,
     toChatId: string | string[],

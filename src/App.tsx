@@ -242,10 +242,10 @@ export const App: React.FC = () => {
     }
   }
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, replyToMsgId?: number) => {
     if (!activeAccountId || !activeChatId || !window.guidegram) return
     try {
-      const sent = await window.guidegram.sendMessage(activeAccountId, activeChatId, text)
+      const sent = await window.guidegram.sendMessage(activeAccountId, activeChatId, text, replyToMsgId)
       setMessagesByChat((prev) => ({
         ...prev,
         [activeChatId]: [...(prev[activeChatId] || []), sent],

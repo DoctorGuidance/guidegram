@@ -1242,13 +1242,23 @@ export class AccountManager {
   }
 
   /**
-   * Send a text message
+   * Send a text message with optional replyToMsgId
    */
-  public async sendMessage(accountId: string, chatId: string, text: string): Promise<MessageItem> {
+  public async sendMessage(
+    accountId: string,
+    chatId: string,
+    text: string,
+    replyToMsgId?: number
+  ): Promise<MessageItem> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
 
-    const sent = await holder.client.sendMessage(chatId, { message: text })
+    const sendParams: any = { message: text }
+    if (replyToMsgId) {
+      sendParams.replyTo = replyToMsgId
+    }
+
+    const sent = await holder.client.sendMessage(chatId, sendParams)
 
     return {
       id: sent.id,

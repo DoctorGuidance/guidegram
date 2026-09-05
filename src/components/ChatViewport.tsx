@@ -37,6 +37,11 @@ import {
   ShieldCheck,
   AlertTriangle,
   MessageSquare,
+  ChevronDown,
+  Smile,
+  Mic,
+  Image,
+  FileUp,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem } from '../types/telegram'
 import { Avatar } from './Avatar'
@@ -56,7 +61,7 @@ interface ChatViewportProps {
   alwaysDeleteBoth?: boolean
   copyCallbackData?: boolean
   suppressLinkWarning?: boolean
-  onSendMessage: (text: string) => void
+  onSendMessage: (text: string, replyToMsgId?: number) => void
   onOpenDirectForward: (message: MessageItem) => void
   onQuickForwardToSaved?: (message: MessageItem) => Promise<boolean> | void
   onDeleteMessage?: (message: MessageItem) => Promise<boolean> | void
@@ -121,6 +126,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Reply bar state
+  const [replyMessage, setReplyMessage] = useState<MessageItem | null>(null)
+
+  // Attachment popover menu state
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false)
+
+  // Floating "Scroll to Bottom" state
+  const [showScrollBottom, setShowScrollBottom] = useState(false)
+  const [unreadScrollCount, setUnreadScrollCount] = useState(0)
+
+  // Multi-line input ref
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -608,7 +626,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                window.guidegram?.openExternal?.(url)
+                handleSafeOpenUrl(url)
               }}
               className="text-accent-cyan underline hover:text-cyan-300 transition-colors font-medium cursor-pointer"
               title={`Open ${url}`}
@@ -689,7 +707,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  window.guidegram?.openExternal?.(cleanPart)
+                  handleSafeOpenUrl(cleanPart)
                 }}
                 className="text-accent-cyan underline hover:text-cyan-300 transition-colors break-all inline cursor-pointer"
                 title={`Open ${cleanPart}`}
@@ -1198,11 +1216,29 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       {isSearchOpen && (
         <div className="shrink-0 px-4 py-2 bg-dark-800/95 border-b border-white/10 flex items-center gap-2 z-20 shadow-md animate-in slide-in-from-top duration-150 backdrop-blur-md">
           <Search className="w-4 h-4 text-primary-400 shrink-0" />
+          {searchSenderFilter && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/30 text-xs font-semibold shrink-0">
+              <User className="w-3 h-3" />
+              <span>From: {searchSenderFilter.name || searchSenderFilter.id}</span>
+              <button
+                type="button"
+                onClick={() => setSearchSenderFilter(null)}
+                className="p-0.5 hover:bg-accent-cyan/20 rounded-md transition-colors cursor-pointer"
+                title="Clear sender filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
           <input
             ref={searchInputRef}
             type="text"
             dir={isRTL(searchQuery) ? 'rtl' : 'ltr'}
-            placeholder="Search messages in this conversation... (Esc to close)"
+            placeholder={
+              searchSenderFilter
+                ? "Search in this user's messages..."
+                : "Search messages in this conversation... (Esc to close)"
+            }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="flex-1 bg-dark-750 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary-500/50"
@@ -1408,10 +1444,31 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                           }`
                     } ${isSelected ? 'ring-2 ring-primary-400' : ''}`}
                   >
-                    {/* Group Sender Name */}
+                    {/* Group Sender Name with 64Gram Admin Badges */}
                     {!msg.isOutgoing && chat.isGroup && msg.senderName && (
-                      <div className="text-[11px] font-bold text-accent-cyan mb-1">
-                        {msg.senderName}
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSearchFromUser(msg.senderId, msg.senderName)
+                          }}
+                          title={`Click to search messages from ${msg.senderName}`}
+                          className="text-[11px] font-bold text-accent-cyan hover:underline cursor-pointer"
+                        >
+                          {msg.senderName}
+                        </span>
+                        {getSenderAdminTitle(msg) && (
+                          <span
+                            className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-md border flex items-center gap-0.5 select-none ${
+                              getSenderRole(msg) === 'creator'
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                : 'bg-accent-cyan/15 text-accent-cyan border-accent-cyan/30'
+                            }`}
+                          >
+                            <ShieldCheck className="w-2.5 h-2.5 shrink-0" />
+                            <span>{getSenderAdminTitle(msg)}</span>
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -1466,7 +1523,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       if (btn.url) {
-                                        window.guidegram?.openExternal?.(btn.url)
+                                        handleSafeOpenUrl(btn.url)
                                       } else if (btn.data && copyCallbackData) {
                                         navigator.clipboard.writeText(btn.data)
                                         showToast(`Copied callback data: "${btn.data}"`)
@@ -1822,11 +1879,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 </div>
               )}
 
-              {/* Chat ID Card */}
+              {/* Chat ID / User ID Card */}
               <div className="p-3 rounded-2xl bg-dark-850/90 border border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs text-gray-400">
                   <Hash className="w-4 h-4 text-primary-400" />
-                  <span>Numeric Chat ID</span>
+                  <span>{chat.isUser ? 'Numeric User ID' : 'Numeric Chat ID'}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="font-mono text-xs font-bold text-gray-200">{chat.id}</span>
@@ -1834,12 +1891,228 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     type="button"
                     onClick={handleCopyChatId}
                     className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-dark-750 transition-colors cursor-pointer"
-                    title="Copy numeric ID"
+                    title={chat.isUser ? 'Copy User ID' : 'Copy numeric ID'}
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
+
+              {/* 64Gram Power Feature: Chat Permissions Matrix */}
+              {(chat.isGroup || chat.isChannel) && (
+                <div className="p-3.5 rounded-2xl bg-dark-850/90 border border-white/5 space-y-2.5">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Chat Permissions</span>
+                    <span className="text-[9px] text-gray-500 font-mono">64Gram Matrix</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      { key: 'sendMessages', label: 'Send Messages' },
+                      { key: 'sendMedia', label: 'Send Media' },
+                      { key: 'sendStickers', label: 'Stickers & GIFs' },
+                      { key: 'sendPolls', label: 'Send Polls' },
+                      { key: 'embedLinks', label: 'Embed Links' },
+                      { key: 'inviteUsers', label: 'Add Members' },
+                      { key: 'pinMessages', label: 'Pin Messages' },
+                      { key: 'changeInfo', label: 'Change Info' },
+                    ].map((perm) => {
+                      const allowed = chatDetails?.permissionsMatrix
+                        ? chatDetails.permissionsMatrix[perm.key as keyof typeof chatDetails.permissionsMatrix] !== false
+                        : chatDetails?.canSendMessages !== false
+
+                      return (
+                        <div
+                          key={perm.key}
+                          className="flex items-center justify-between p-1.5 rounded-lg bg-dark-800/80 border border-white/5"
+                        >
+                          <span className="text-[11px] text-gray-300 truncate">{perm.label}</span>
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${
+                              allowed
+                                ? 'bg-accent-emerald/15 text-accent-emerald border-accent-emerald/30'
+                                : 'bg-accent-rose/15 text-accent-rose border-accent-rose/30'
+                            }`}
+                          >
+                            {allowed ? 'Allowed' : 'Restricted'}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 64Gram Power Feature: Bot Privacy Mode & Commands */}
+              {(chat.isBot || chatDetails?.isBot) && (
+                <div className="p-3.5 rounded-2xl bg-dark-850/90 border border-white/5 space-y-2.5">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-accent-violet" />
+                    <span>Bot Privacy & Commands</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-dark-800/90 border border-white/5 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-300 font-semibold">Privacy Mode</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                          chatDetails?.botInfo?.privacyMode !== false
+                            ? 'bg-accent-emerald/15 text-accent-emerald border-accent-emerald/30'
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                        }`}
+                      >
+                        {chatDetails?.botInfo?.privacyMode !== false ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 leading-normal">
+                      {chatDetails?.botInfo?.privacyMode !== false
+                        ? 'Bot only sees messages starting with /, replies, and mentions.'
+                        : 'Bot has direct access to all messages in groups.'}
+                    </p>
+                  </div>
+                  {chatDetails?.botInfo?.commands && chatDetails.botInfo.commands.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] font-semibold text-gray-400">Available Commands</div>
+                      <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                        {chatDetails.botInfo.commands.map((cmd) => (
+                          <div
+                            key={cmd.command}
+                            onClick={() => {
+                              setInputText(`/${cmd.command} `)
+                              setIsInfoOpen(false)
+                            }}
+                            className="p-1.5 rounded-lg bg-dark-800/80 hover:bg-dark-750 flex items-center justify-between cursor-pointer transition-colors"
+                            title={`Click to use /${cmd.command}`}
+                          >
+                            <span className="font-mono text-xs font-bold text-accent-cyan">
+                              /{cmd.command}
+                            </span>
+                            <span className="text-[10px] text-gray-400 truncate max-w-[160px]">
+                              {cmd.description}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 64Gram Power Feature: Group Members List with Admin Badges & 1-Click Copy User ID Pills */}
+              {chat.isGroup && (
+                <div className="p-3.5 rounded-2xl bg-dark-850/90 border border-white/5 space-y-2.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    <span className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-primary-400" />
+                      <span>Members & Administrators</span>
+                    </span>
+                    {chatDetails?.participants && (
+                      <span className="font-mono text-gray-400">{chatDetails.participants.length}</span>
+                    )}
+                  </div>
+
+                  {/* Local member search input */}
+                  {chatDetails?.participants && chatDetails.participants.length > 5 && (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search members..."
+                        value={memberSearchQuery}
+                        onChange={(e) => setMemberSearchQuery(e.target.value)}
+                        className="w-full bg-dark-800 border border-white/10 rounded-xl px-2.5 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary-500/50"
+                      />
+                    </div>
+                  )}
+
+                  {/* Participants Scroll List */}
+                  <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                    {chatDetails?.participants && chatDetails.participants.length > 0 ? (
+                      chatDetails.participants
+                        .filter((p) => {
+                          if (!memberSearchQuery.trim()) return true
+                          const q = memberSearchQuery.toLowerCase()
+                          return (
+                            p.name.toLowerCase().includes(q) ||
+                            (p.username && p.username.toLowerCase().includes(q)) ||
+                            p.id.includes(q)
+                          )
+                        })
+                        .map((p) => (
+                          <div
+                            key={p.id}
+                            className="p-2 rounded-xl bg-dark-800/80 hover:bg-dark-750 flex items-center justify-between gap-2 border border-white/5 transition-colors group"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Avatar
+                                accountId={chat.accountId}
+                                peerId={p.id}
+                                title={p.name}
+                                avatarUrl={p.avatarUrl}
+                                size="sm"
+                              />
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs font-semibold text-gray-100 truncate">
+                                    {p.name}
+                                  </span>
+                                  {p.role === 'creator' ? (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                      {p.customTitle || 'Owner'}
+                                    </span>
+                                  ) : p.role === 'admin' ? (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/30">
+                                      {p.customTitle || 'Admin'}
+                                    </span>
+                                  ) : p.customTitle ? (
+                                    <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-accent-violet/15 text-accent-violet border border-accent-violet/30">
+                                      {p.customTitle}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {p.username && (
+                                  <div className="text-[10px] text-gray-400 truncate">@{p.username}</div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right side: 1-Click Copy User ID Pill + Search button */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  navigator.clipboard.writeText(p.id)
+                                  showToast(`Copied User ID: ${p.id}`)
+                                }}
+                                title={`Copy User ID (${p.id})`}
+                                className="px-1.5 py-0.5 rounded-lg bg-black/40 hover:bg-black/60 text-gray-300 hover:text-white font-mono text-[10px] flex items-center gap-1 border border-white/5 transition-colors cursor-pointer"
+                              >
+                                <Hash className="w-2.5 h-2.5 text-accent-cyan" />
+                                <span>{p.id}</span>
+                                <Copy className="w-2.5 h-2.5 opacity-60" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setIsInfoOpen(false)
+                                  handleSearchFromUser(p.id, p.name)
+                                }}
+                                title={`Search messages from ${p.name}`}
+                                className="p-1 rounded-lg text-gray-400 hover:text-accent-cyan hover:bg-white/5 transition-colors cursor-pointer"
+                              >
+                                <Search className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                    ) : (
+                      <div className="text-center py-3 text-xs text-gray-500">
+                        {chatDetails ? 'No members visible' : 'Loading participants...'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Notifications Toggle */}
               <div className="p-3 rounded-2xl bg-dark-850/90 border border-white/5 flex items-center justify-between">
@@ -1936,6 +2209,20 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           onClick={(e) => e.stopPropagation()}
           className="fixed z-50 w-52 bg-dark-850/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100 select-none text-xs"
         >
+          {/* Reply to message */}
+          <button
+            type="button"
+            onClick={() => {
+              setReplyMessage(contextMenu.message)
+              setContextMenu(null)
+              setTimeout(() => textareaRef.current?.focus(), 50)
+            }}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-primary-300 hover:text-white hover:bg-primary-600/30 transition-colors text-left cursor-pointer"
+          >
+            <Reply className="w-3.5 h-3.5 shrink-0 text-primary-400" />
+            <span>Reply</span>
+          </button>
+
           {/* Quote Selection into Input (if text selected) */}
           {contextMenu.selectedText && (
             <button
@@ -2002,6 +2289,53 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             <span>Copy Message Link</span>
           </button>
 
+          {/* 64Gram Copy Message ID */}
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(contextMenu.message.id.toString())
+              setContextMenu(null)
+              showToast(`Copied Message ID #${contextMenu.message.id}`)
+            }}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+          >
+            <Hash className="w-3.5 h-3.5 shrink-0 text-primary-400" />
+            <span>Copy Message ID (#{contextMenu.message.id})</span>
+          </button>
+
+          {/* 64Gram Copy User ID */}
+          {contextMenu.message.senderId && (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(contextMenu.message.senderId!)
+                setContextMenu(null)
+                showToast(`Copied User ID: ${contextMenu.message.senderId}`)
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+            >
+              <User className="w-3.5 h-3.5 shrink-0 text-accent-cyan" />
+              <span>Copy User ID ({contextMenu.message.senderId})</span>
+            </button>
+          )}
+
+          {/* 64Gram Search Messages from this User (in group chats) */}
+          {chat.isGroup && (contextMenu.message.senderId || contextMenu.message.senderName) && (
+            <button
+              type="button"
+              onClick={() => {
+                const senderId = contextMenu.message.senderId
+                const senderName = contextMenu.message.senderName
+                setContextMenu(null)
+                handleSearchFromUser(senderId, senderName)
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-accent-cyan hover:text-white hover:bg-accent-cyan/15 transition-colors text-left cursor-pointer"
+            >
+              <Search className="w-3.5 h-3.5 shrink-0 text-accent-cyan" />
+              <span>Search messages from {contextMenu.message.senderName || 'this user'}</span>
+            </button>
+          )}
+
           {/* Direct Forward without quote (Alt+F) */}
           <button
             type="button"
@@ -2064,6 +2398,48 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
               <span>{alwaysDeleteBoth ? 'Delete for Everyone' : 'Delete Message'}</span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* 64Gram External Link Security Modal */}
+      {pendingExternalUrl && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-modal w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-white/10 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-300 flex items-center justify-center border border-amber-500/20 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Open External Link?</h3>
+                <p className="text-[11px] text-gray-400">Telegram Desktop security check</p>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-dark-800 border border-white/5 font-mono text-xs text-accent-cyan break-all max-h-24 overflow-y-auto">
+              {pendingExternalUrl}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setPendingExternalUrl(null)}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-gray-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = pendingExternalUrl
+                  setPendingExternalUrl(null)
+                  window.guidegram?.openExternal?.(url)
+                }}
+                className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-500 text-white transition-all shadow-glow cursor-pointer"
+              >
+                Open Link
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
