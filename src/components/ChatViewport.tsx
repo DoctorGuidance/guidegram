@@ -1845,19 +1845,53 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                if (e.shiftKey) {
+                  handlePrevSearchMatch()
+                } else {
+                  handleNextSearchMatch()
+                }
+              } else if (e.key === 'Escape') {
+                setIsSearchOpen(false)
+                setSearchQuery('')
+              }
+            }}
             className="flex-1 bg-dark-750 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary-500/50"
           />
           {searchQuery && (
-            <span className="text-[11px] text-gray-400 px-2">
-              {filteredMessages.length} match{filteredMessages.length === 1 ? '' : 'es'}
-            </span>
+            <div className="flex items-center gap-1 text-[11px] text-gray-300 font-mono shrink-0 bg-dark-750 px-2 py-0.5 rounded-lg border border-white/5">
+              <span>
+                {filteredMessages.length > 0 ? `${searchMatchIndex + 1} of ${filteredMessages.length}` : '0 of 0'}
+              </span>
+              <button
+                type="button"
+                onClick={handlePrevSearchMatch}
+                disabled={filteredMessages.length === 0}
+                title="Previous match (Shift+Enter)"
+                className="p-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-white disabled:opacity-30 cursor-pointer"
+              >
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleNextSearchMatch}
+                disabled={filteredMessages.length === 0}
+                title="Next match (Enter)"
+                className="p-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-white disabled:opacity-30 cursor-pointer"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
           <button
             onClick={() => {
               setIsSearchOpen(false)
               setSearchQuery('')
             }}
-            className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/5"
+            className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 cursor-pointer"
+            title="Close Search (Esc)"
           >
             <X className="w-4 h-4" />
           </button>
@@ -2227,6 +2261,24 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                           <Hash className="w-2.5 h-2.5" />
                           <span>{msg.id}</span>
                         </button>
+                      )}
+
+                      {/* Ephemeral / Self-Destruct Timer Badge (TDesktop v7.1) */}
+                      {msg.ttlSeconds && (
+                        <span
+                          title={`Self-destruct timer: ${msg.ttlSeconds}s`}
+                          className="flex items-center gap-0.5 text-amber-300 font-mono bg-amber-500/20 px-1 py-0.2 rounded"
+                        >
+                          <Flame className="w-2.5 h-2.5" />
+                          <span>{msg.ttlSeconds}s</span>
+                        </span>
+                      )}
+
+                      {/* Silent Message Icon (TDesktop v6.8.5) */}
+                      {msg.isSilent && (
+                        <span title="Sent without sound" className="opacity-75">
+                          <BellOff className="w-2.5 h-2.5" />
+                        </span>
                       )}
 
                       <span>{formatMessageTime(msg.date)}</span>
@@ -2815,14 +2867,74 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 </div>
 
                 {/* Send or Voice Record Trigger */}
+                {/* Send or Voice Record Trigger */}
                 {inputText.trim() || stagedAttachments.length > 0 ? (
-                  <button
-                    type="submit"
-                    className="p-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-2xl transition-all shadow-glow flex items-center justify-center cursor-pointer shrink-0"
-                    title="Send message (Enter)"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
+                  <div className="relative flex items-center shrink-0">
+                    {/* Send Options Popover (Send Without Sound, Schedule Message) */}
+                    {isSendMenuOpen && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute bottom-full right-0 mb-2 w-56 bg-dark-800/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100 z-50 text-xs select-none"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSendMenuOpen(false)
+                            handleSend(undefined, { silent: true })
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-accent-cyan/15 text-accent-cyan flex items-center justify-center shrink-0 group-hover:bg-accent-cyan/25 transition-colors">
+                            <BellOff className="w-4 h-4" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-100">Send Without Sound</span>
+                            <span className="text-[10px] text-gray-400">Silent notification</span>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSendMenuOpen(false)
+                            setIsScheduleModalOpen(true)
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-accent-violet/15 text-accent-violet flex items-center justify-center shrink-0 group-hover:bg-accent-violet/25 transition-colors">
+                            <Clock className="w-4 h-4" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-100">Schedule Message...</span>
+                            <span className="text-[10px] text-gray-400">Send at specific time</span>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        setIsSendMenuOpen((prev) => !prev)
+                      }}
+                      className="p-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-l-2xl transition-all shadow-glow flex items-center justify-center cursor-pointer"
+                      title="Send message (Enter) • Right click for Send Without Sound / Schedule"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsSendMenuOpen((prev) => !prev)
+                      }}
+                      className="p-2.5 bg-primary-700 hover:bg-primary-600 text-primary-200 hover:text-white rounded-r-2xl border-l border-white/10 transition-colors cursor-pointer flex items-center justify-center"
+                      title="More send options (Silent / Schedule)"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -2838,6 +2950,126 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           </div>
         )}
       </div>
+
+      {/* Schedule Message Modal (Telegram Desktop v7.0.4 & v6.8.5) */}
+      {isScheduleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150 select-none">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-dark-850 border border-white/10 rounded-3xl shadow-2xl p-5 flex flex-col gap-4 animate-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-accent-violet/20 text-accent-violet flex items-center justify-center">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-bold text-white">Schedule Message</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400">
+              Select when you would like this message to be sent automatically:
+            </p>
+
+            {/* Quick Presets */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const targetTime = Date.now() + 30 * 60 * 1000
+                  setIsScheduleModalOpen(false)
+                  handleSend(undefined, { scheduleDate: targetTime })
+                }}
+                className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 border border-white/5 hover:border-accent-violet/40 text-left transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-semibold text-gray-200 group-hover:text-accent-violet">In 30 minutes</div>
+                <div className="text-[10px] text-gray-400 font-mono">
+                  {new Date(Date.now() + 30 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const targetTime = Date.now() + 2 * 60 * 60 * 1000
+                  setIsScheduleModalOpen(false)
+                  handleSend(undefined, { scheduleDate: targetTime })
+                }}
+                className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 border border-white/5 hover:border-accent-violet/40 text-left transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-semibold text-gray-200 group-hover:text-accent-violet">In 2 hours</div>
+                <div className="text-[10px] text-gray-400 font-mono">
+                  {new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const tomorrow = new Date()
+                  tomorrow.setDate(tomorrow.getDate() + 1)
+                  tomorrow.setHours(9, 0, 0, 0)
+                  setIsScheduleModalOpen(false)
+                  handleSend(undefined, { scheduleDate: tomorrow.getTime() })
+                }}
+                className="p-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 border border-white/5 hover:border-accent-violet/40 text-left transition-all cursor-pointer group col-span-2"
+              >
+                <div className="text-xs font-semibold text-gray-200 group-hover:text-accent-violet">Tomorrow at 09:00 AM</div>
+                <div className="text-[10px] text-gray-400 font-mono">
+                  {new Date(Date.now() + 86400000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} • 09:00
+                </div>
+              </button>
+            </div>
+
+            {/* Custom Date & Time Input */}
+            <div className="space-y-1.5 pt-1 border-t border-white/5">
+              <label className="text-[11px] font-medium text-gray-300">Or choose custom date & time:</label>
+              <input
+                type="datetime-local"
+                value={customScheduleTime}
+                onChange={(e) => setCustomScheduleTime(e.target.value)}
+                min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                className="w-full bg-dark-750 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-accent-violet/50 font-mono"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!customScheduleTime}
+                onClick={() => {
+                  if (!customScheduleTime) return
+                  const time = new Date(customScheduleTime).getTime()
+                  if (isNaN(time) || time <= Date.now()) {
+                    showToast('Please select a future time')
+                    return
+                  }
+                  setIsScheduleModalOpen(false)
+                  handleSend(undefined, { scheduleDate: time })
+                }}
+                className="px-4 py-2 rounded-xl bg-accent-violet hover:bg-violet-600 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-white shadow-glow transition-all cursor-pointer"
+              >
+                Schedule Message
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. Channel / User Info Drawer */}
       {isInfoOpen && (
