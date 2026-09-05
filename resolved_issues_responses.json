@@ -54,5 +54,109 @@
     "status": "fixed",
     "fix_summary": "Created an embedded ProxyManager supporting SOCKS5, HTTP, and MTProto proxies with an in-app ping latency test and per-session proxy binding.",
     "response_markdown": "### Status: Resolved via Integrated Multi-Proxy Routing\n\nHello @author,\n\nRegional network restrictions and connection drops are handled seamlessly in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Solution:\n- **Built-in Proxy Engine**: Configure SOCKS5, HTTP, or custom proxy nodes directly in the app.\n- **Real-Time Latency Meter**: Test connection ping (ms) before connecting to ensure high-speed data flow.\n- **Per-Account Routing**: Assign dedicated proxies per account so restricted endpoints are automatically bypassed.\n\nCheck out the implementation here: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-006",
+    "issue_title": "Voice notes lack interactive scrubber player and speed controller",
+    "category": "Rich Media & Audio",
+    "status": "fixed",
+    "fix_summary": "Built VoicePlayer component with animated waveform progression (voiceWaveform byte array), timeline dragging, and instant speed multiplier toggling (1x, 1.5x, 2x).",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe have added a modern interactive voice player in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Voice playback features:\n- **Waveform scrubbing**: Visual representation of audio levels with click-to-seek support.\n- **Speed multipliers**: Toggle between 1x, 1.5x, and 2x audio speed with 1 click.\n- **Clean audio cards**: Integrated directly into chat bubbles with duration indicators.\n\nCheck out the implementation on [GitHub](https://github.com/DoctorGuidance/guidegram)!"
+  },
+  {
+    "id": "GG-007",
+    "issue_title": "Top custom titlebar overlaps channel/chat header causing dead black space",
+    "category": "Layout & UI",
+    "status": "fixed",
+    "fix_summary": "Decoupled Electron frameless titlebar with CSS drag regions (-webkit-app-region), adjusted viewport margins, and established fluid flex layout eliminating black voids.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe completely fixed this viewport overlap and dark dead space issue in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Improvements:\n- **Clean TitleBar Separation**: The top titlebar has an exact 40px height with dedicated non-draggable control hitboxes.\n- **Fluid Layout**: Sidebar and ChatViewport maintain strict flex-1 bounds with zero overlay conflicts.\n\nTest the updated build at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-008",
+    "issue_title": "Sticky pinned message bar missing from groups and broadcast channels",
+    "category": "Chat Navigation",
+    "status": "fixed",
+    "fix_summary": "Added PinnedMessageBar pinned to top of ChatViewport showing sender name, message snippet, and click-to-scroll navigation to the exact message ID.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nSupport for pinned message bars is now built into **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Features:\n- Displays the current pinned announcement at the top of any group or channel.\n- Clicking the pinned bar smoothly scrolls the chat directly to the target message.\n\nCheck out the source code at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-009",
+    "issue_title": "Broadcast channels allow typing in input bar instead of displaying Mute/Unmute action",
+    "category": "Channel Management",
+    "status": "fixed",
+    "fix_summary": "Inspected chat permissions (canSendMessages); if read-only, replaced message input bar with full-width MUTE / UNMUTE CHANNEL button with toggle API.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe addressed this in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Solution:\n- When opening a broadcast channel or read-only group, the bottom input bar is replaced with a sleek MUTE / UNMUTE button.\n- Clicking it toggles channel notifications immediately via MTProto account.updateNotifySettings.\n\nRepository: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-010",
+    "issue_title": "In-chat message search (Ctrl + F) is absent",
+    "category": "Chat Navigation",
+    "status": "fixed",
+    "fix_summary": "Integrated keyboard shortcut Ctrl+F to open animated search bar in ChatViewport with real-time text matching, result counter, and quick navigation.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nIn-chat search (Ctrl + F) is fully operational in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Highlights:\n- Press Ctrl + F to slide out the in-chat search bar.\n- Matches words in loaded messages instantaneously with match counts and highlight focus.\n\nGrab the latest release at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-011",
+    "issue_title": "No way to inspect or copy inline button callback data",
+    "category": "64Gram Power Features",
+    "status": "fixed",
+    "fix_summary": "Added copyCallbackData preference in Settings; clicking or right-clicking bot inline buttons displays and copies raw callback_data string to clipboard.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nWe ported the popular 64Gram feature for inspecting bot callback data into **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### How it works:\n- Enable Copy Callback Data in Preferences.\n- Clicking or right-clicking any inline keyboard button copies its raw callback_data payload to your clipboard for easy debugging.\n\nSource: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-012",
+    "issue_title": "Message timestamps lack seconds precision (HH:mm:ss)",
+    "category": "64Gram Power Features",
+    "status": "fixed",
+    "fix_summary": "Added showSeconds preference in Settings; formats message timestamp with seconds when enabled, useful for trading, bot updates, and news feeds.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nPrecise timestamps with seconds are now available in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Features:\n- In Preferences > 64Gram Power Features, toggle Message Time with Seconds.\n- Timestamps render as HH:mm:ss for millisecond-critical bot signals and news channels.\n\nCheck out the project: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-013",
+    "issue_title": "Missing quick 1-click forward to Saved Messages",
+    "category": "64Gram Power Features",
+    "status": "fixed",
+    "fix_summary": "Added quickForwardToSaved setting; renders bookmark icon on message hover and supports Ctrl+Click on message bubble to instantly forward to Saved Messages.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe implemented 1-click forwarding to Saved Messages in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Usage:\n- Hover over any message and click the Bookmark icon, or Ctrl+Click the bubble, to instantly forward it to your Saved Messages without extra dialog popups.\n\nDownload at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-014",
+    "issue_title": "Direct message forwarding always includes original author quote header",
+    "category": "Telegraph & Privacy",
+    "status": "fixed",
+    "fix_summary": "Implemented DirectForwardModal with dropAuthor / withoutQuote flag and Alt+F shortcut, forwarding messages without source attribution.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nClean forwarding without quoted author headers is natively supported in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Details:\n- Press Alt + F on any message or click Direct Forward.\n- Toggle Forward Without Quote to strip the original author header entirely before sending.\n\nExplore the repo: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-015",
+    "issue_title": "No quick action to mark all unread dialogs as read at once",
+    "category": "Dialog Management",
+    "status": "fixed",
+    "fix_summary": "Added markAllAsRead MTProto routine advancing max_id across dialogs, exposed via a Mark All Read button in ChatTabs.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe added a Mark All As Read button in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### How it works:\n- A single click in the folder tabs marks all unread conversations, channels, and supergroups as read by advancing their read history pointer.\n\nReleases and source: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-016",
+    "issue_title": "Channel header is non-interactive and links inside messages are not clickable",
+    "category": "Interactivity & Navigation",
+    "status": "fixed",
+    "fix_summary": "Made ChatHeader clickable to open ChannelInfoDrawer with bio, member count, and notification toggles; sanitized and wrapped deep links (tg://user, @username, URLs).",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nInteractive channel headers and clickable deep links are fully implemented in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Highlights:\n- Clicking the channel header opens a slide-out drawer with description, participant count, chat ID, and notification controls.\n- All @mentions, t.me links, and web URLs are clickable and open correctly without breaking the client window.\n\nRepository: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "GG-017",
+    "issue_title": "Missing application icon on Windows taskbar and system tray",
+    "category": "Branding & Desktop",
+    "status": "fixed",
+    "fix_summary": "Generated multi-resolution icon assets (icon.ico, icon16.png, icon32.png, icon256.png) in resources/ and embedded them into win-unpacked Guidegram.exe and Tray.",
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nThis branding and taskbar icon issue is resolved in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### What was added:\n- Custom embedded multi-layer icon.ico in the executable binary and taskbar.\n- Matching system tray icon with context menu actions.\n\nCheck out the release: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+  },
+  {
+    "id": "AM-3384",
+    "issue_title": "Model selection lists all general models instead of account-supported models (Issue #3384)",
+    "category": "Account Capability Filtering",
+    "status": "addressed_by_design",
+    "fix_summary": "In Guidegram, account capabilities (e.g. Premium status, admin rights, channel broadcast permissions) are dynamically evaluated per session via MTProto getChatDetails and client.getMe(), rendering only valid actionable controls per account.",
+    "response_markdown": "### Status: Handled via Dynamic Capability Filtering\n\nHi @author,\n\nIn **[Guidegram](https://github.com/DoctorGuidance/guidegram)**, we solved permission mismatch by dynamically resolving account tier and privileges before rendering UI controls.\n\n#### Architectural Approach:\n- Instead of querying static global catalogs, the client queries the active authenticated session for its exact entitlements (e.g. isPremium, chat permissions canSendMessages, bot commands).\n- The UI selectively renders features based on what the authenticated account actually supports, preventing invalid actions and failed requests.\n\nSee how we filter capabilities: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
   }
 ]
