@@ -1,6 +1,9 @@
 name: Build Multiplatform Releases
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag_name:
@@ -72,7 +75,7 @@ jobs:
   publish-release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event.inputs.tag_name != ''
+    if: github.event.inputs.tag_name != '' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -91,8 +94,8 @@ jobs:
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag_name }}
-          name: ${{ github.event.inputs.release_title || github.event.inputs.tag_name }}
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          name: ${{ github.event.inputs.release_title || github.ref_name }}
           files: final-assets/*
           draft: false
           prerelease: false

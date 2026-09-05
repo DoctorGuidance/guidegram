@@ -26,12 +26,17 @@ import {
   Download,
   Maximize2,
   ChevronRight,
-  CornerUpLeft,
   Search,
   Pin,
+  Camera,
+  Sparkles,
+  CornerUpLeft,
+  Quote,
+  Reply,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem } from '../types/telegram'
 import { Avatar } from './Avatar'
+import { VideoPlayer } from './VideoPlayer'
 import { isRTL, formatFileSize, formatDuration, formatNumber } from '../utils/textUtils'
 
 interface ChatViewportProps {
@@ -78,9 +83,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const [hoveredMessage, setHoveredMessage] = useState<MessageItem | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
-  // Media cache in component state (messageId -> dataUrl)
-  const [downloadedMedia, setDownloadedMedia] = useState<Record<number, string>>({})
-  const [loadingMediaIds, setLoadingMediaIds] = useState<Record<number, boolean>>({})
+  // Media cache in component state (cacheKey -> dataUrl or guidegram-media url)
+  const [downloadedMedia, setDownloadedMedia] = useState<Record<string, string>>({})
+  const [loadingMediaIds, setLoadingMediaIds] = useState<Record<string, boolean>>({})
 
   // Fullscreen image lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -108,6 +113,35 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Active video message playing in-app
+  const [activeVideoId, setActiveVideoId] = useState<number | null>(null)
+
+  // Right-click context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    message: MessageItem
+    selectedText?: string
+  } | null>(null)
+
+  // Close context menu on global click or Escape
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      if (contextMenu) setContextMenu(null)
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && contextMenu) {
+        setContextMenu(null)
+      }
+    }
+    window.addEventListener('click', handleGlobalClick)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('click', handleGlobalClick)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [contextMenu])
 
   // Reset drawer state & auto-fetch chat details for header banner & mute button
   useEffect(() => {
@@ -196,18 +230,33 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     }
   }
 
+  // Check whether current user can delete a message
+  const canDeleteMessage = useCallback(
+    (msg: MessageItem) => {
+      // Outgoing message (sent by me) -> always allow delete
+      if (msg.isOutgoing) return true
+      // In 1-on-1 private chat (not channel, not group) -> allow delete
+      if (!chat?.isChannel && !chat?.isGroup) return true
+      // In supergroup/group/channel -> only allow if user is creator or has canDeleteMessages right
+      if (chatDetails?.isCreator || chatDetails?.canDeleteMessages) return true
+      return false
+    },
+    [chat, chatDetails]
+  )
+
   // Lazy download media (photo thumbnail or full media)
   const requestMediaDownload = useCallback(
     async (msg: MessageItem, thumb = true) => {
+      const cacheKey = thumb ? `${msg.id}_thumb` : `${msg.id}`
       if (
-        downloadedMedia[msg.id] ||
-        loadingMediaIds[msg.id] ||
+        downloadedMedia[cacheKey] ||
+        loadingMediaIds[cacheKey] ||
         !window.guidegram?.downloadMedia
       ) {
-        return
+        return downloadedMedia[cacheKey] || null
       }
 
-      setLoadingMediaIds((prev) => ({ ...prev, [msg.id]: true }))
+      setLoadingMediaIds((prev) => ({ ...prev, [cacheKey]: true }))
       try {
         const dataUrl = await window.guidegram.downloadMedia(
           msg.accountId,
@@ -216,17 +265,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           thumb
         )
         if (dataUrl) {
-          setDownloadedMedia((prev) => ({ ...prev, [msg.id]: dataUrl }))
+          setDownloadedMedia((prev) => ({ ...prev, [cacheKey]: dataUrl }))
+          return dataUrl
         }
       } catch (err) {
         console.warn(`Failed to download media for ${msg.id}:`, err)
       } finally {
         setLoadingMediaIds((prev) => {
           const next = { ...prev }
-          delete next[msg.id]
+          delete next[cacheKey]
           return next
         })
       }
+      return null
     },
     [downloadedMedia, loadingMediaIds]
   )
@@ -703,24 +754,99 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
     // 2. Video Card
     if (msg.mediaType === 'video') {
+      const fullVideoUrl = downloadedMedia[`${msg.id}`] || (msg.mediaFilePath ? `guidegram-media://${encodeURIComponent(msg.mediaFilePath)}` : null)
+      const thumbUrl = downloadedMedia[`${msg.id}_thumb`] || msg.mediaUrl
+      const isThisVideoPlaying = activeVideoId === msg.id
+
+      // Auto-fetch thumbnail if not yet available
+      if (!thumbUrl && !downloadedMedia[`${msg.id}_thumb`]) {
+        requestMediaDownload(msg, true)
+      }
+
+      // If active video is playing and we have the video URL
+      if (isThisVideoPlaying && fullVideoUrl) {
+        return (
+          <div className="mb-2 w-full max-w-md">
+            <VideoPlayer
+              src={fullVideoUrl}
+              poster={thumbUrl}
+              fileName={msg.mediaFileName}
+              duration={msg.mediaDuration}
+              onClose={() => setActiveVideoId(null)}
+              onShowToast={showToast}
+            />
+          </div>
+        )
+      }
+
+      const isLoadingVideo = loadingMediaIds[`${msg.id}`]
+
       return (
-        <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-850/80 p-3">
-          <div className="flex items-center gap-3">
-            <div
-              onClick={() => requestMediaDownload(msg, false)}
-              className="w-12 h-12 rounded-xl bg-primary-600/30 text-primary-400 flex items-center justify-center cursor-pointer hover:bg-primary-600 hover:text-white transition-all shadow-sm shrink-0"
-              title="Play / Download Video"
-            >
-              <Play className="w-5 h-5 fill-current ml-0.5" />
+        <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-850/90 shadow-md group/video">
+          {/* Poster or Thumbnail with Circular Play Button */}
+          <div
+            onClick={async () => {
+              if (fullVideoUrl) {
+                setActiveVideoId(msg.id)
+              } else {
+                showToast('Buffering video...')
+                const videoDataUrl = await requestMediaDownload(msg, false)
+                if (videoDataUrl) {
+                  setActiveVideoId(msg.id)
+                } else {
+                  showToast('Failed to load video stream')
+                }
+              }
+            }}
+            className="relative w-full h-48 bg-dark-900 cursor-pointer overflow-hidden flex items-center justify-center"
+          >
+            {thumbUrl ? (
+              <img
+                src={thumbUrl}
+                alt="Video Thumbnail"
+                className="w-full h-full object-cover group-hover/video:scale-105 transition-transform duration-300"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-linear-to-br from-primary-900/40 via-dark-850 to-dark-900 flex items-center justify-center">
+                <Play className="w-12 h-12 text-white/20" />
+              </div>
+            )}
+
+            {/* Dark Overlay with Blur on Hover */}
+            <div className="absolute inset-0 bg-black/35 group-hover/video:bg-black/20 transition-colors" />
+
+            {/* Play Button or Loading Spinner */}
+            <div className="relative z-10 w-14 h-14 rounded-full bg-primary-600/90 hover:bg-primary-500 text-white flex items-center justify-center shadow-glow group-hover/video:scale-110 active:scale-95 transition-all">
+              {isLoadingVideo ? (
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Play className="w-6 h-6 fill-current ml-0.5" />
+              )}
             </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-bold text-gray-200 truncate">
-                {msg.mediaFileName || 'Video Message'}
+            {/* Duration Badge Bottom Right */}
+            {msg.mediaDuration && (
+              <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-lg bg-black/70 backdrop-blur-md text-[10px] font-mono font-medium text-white flex items-center gap-1">
+                <span>{formatDuration(msg.mediaDuration)}</span>
               </div>
-              <div className="text-[10px] text-gray-400 flex items-center gap-2 mt-0.5">
-                {msg.mediaDuration && <span>{formatDuration(msg.mediaDuration)}</span>}
-                {msg.mediaFileSize && <span>• {formatFileSize(msg.mediaFileSize)}</span>}
+            )}
+
+            {/* File Size Badge Bottom Left */}
+            {msg.mediaFileSize && (
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-lg bg-black/70 backdrop-blur-md text-[10px] font-mono font-medium text-gray-300">
+                {formatFileSize(msg.mediaFileSize)}
+              </div>
+            )}
+          </div>
+
+          {/* Video Footer info */}
+          <div className="p-2.5 flex items-center justify-between gap-2 border-t border-white/5">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-gray-200 truncate">
+                {msg.mediaFileName || 'Video'}
+              </div>
+              <div className="text-[10px] text-gray-400">
+                Click to stream and play with full speed controls
               </div>
             </div>
           </div>
@@ -884,7 +1010,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const isBot = chat.isBot
 
   return (
-    <div className="relative flex-1 min-w-0 bg-dark-900 flex flex-col h-full overflow-hidden select-none titlebar-no-drag">
+    <div className="relative flex-1 min-w-0 bg-dark-900 flex flex-col h-full overflow-hidden titlebar-no-drag">
       {/* Toast Notification */}
       {toast && (
         <div className="absolute top-16 right-6 z-50 px-4 py-2.5 rounded-2xl bg-dark-800/95 border border-primary-500/30 text-xs font-semibold text-white shadow-glow flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-md">
@@ -1065,6 +1191,17 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 id={`msg-${msg.id}`}
                 onMouseEnter={() => setHoveredMessage(msg)}
                 onMouseLeave={() => setHoveredMessage(null)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const selection = window.getSelection()?.toString()
+                  setContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    message: msg,
+                    selectedText: selection && selection.trim() ? selection.trim() : undefined,
+                  })
+                }}
                 onClick={async (e) => {
                   // 64Gram Feature: Quick forward when pressed ctrl
                   if (e.ctrlKey || e.metaKey) {
@@ -1082,7 +1219,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   }
                   setSelectedMessage(isSelected ? null : msg)
                 }}
-                className={`flex flex-col group transition-all ${
+                className={`flex flex-col group transition-all select-text ${
                   msg.isOutgoing ? 'items-end' : 'items-start'
                 }`}
               >
@@ -1144,7 +1281,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         <Copy className="w-3.5 h-3.5" />
                       </button>
 
-                      {onDeleteMessage && (
+                      {onDeleteMessage && canDeleteMessage(msg) && (
                         <button
                           type="button"
                           onClick={async (e) => {
@@ -1395,7 +1532,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         <Copy className="w-3.5 h-3.5" />
                       </button>
 
-                      {onDeleteMessage && (
+                      {onDeleteMessage && canDeleteMessage(msg) && (
                         <button
                           type="button"
                           onClick={async (e) => {
@@ -1709,6 +1846,147 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             onClick={(e) => e.stopPropagation()}
             className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
           />
+        </div>
+      )}
+
+      {/* 6. Telegram Desktop Right-Click Context Menu */}
+      {contextMenu && (
+        <div
+          style={{
+            top: Math.min(contextMenu.y, window.innerHeight - 340),
+            left: Math.min(contextMenu.x, window.innerWidth - 220),
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 w-52 bg-dark-850/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100 select-none text-xs"
+        >
+          {/* Quote Selection into Input (if text selected) */}
+          {contextMenu.selectedText && (
+            <button
+              type="button"
+              onClick={() => {
+                const quoteText = `> ${contextMenu.selectedText}\n`
+                setInputText((prev) => (prev ? `${prev}\n${quoteText}` : quoteText))
+                setContextMenu(null)
+                showToast('Quoted selected text')
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-primary-300 hover:text-white hover:bg-primary-600/30 transition-colors text-left cursor-pointer"
+            >
+              <Quote className="w-3.5 h-3.5 shrink-0 text-primary-400" />
+              <span>Quote Selection</span>
+            </button>
+          )}
+
+          {/* Copy Selected Text */}
+          {contextMenu.selectedText && (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(contextMenu.selectedText!)
+                setContextMenu(null)
+                showToast('Copied selected text')
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+            >
+              <Copy className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+              <span>Copy Selected Text</span>
+            </button>
+          )}
+
+          {/* Copy Entire Message Text */}
+          {contextMenu.message.text && (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(contextMenu.message.text || '')
+                setContextMenu(null)
+                showToast(`Copied message #${contextMenu.message.id} text`)
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+            >
+              <Copy className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+              <span>Copy Message Text</span>
+            </button>
+          )}
+
+          {/* Copy Link to Message */}
+          <button
+            type="button"
+            onClick={() => {
+              const link = chat.username
+                ? `https://t.me/${chat.username}/${contextMenu.message.id}`
+                : `https://t.me/c/${chat.id.replace(/^-100/, '')}/${contextMenu.message.id}`
+              navigator.clipboard.writeText(link)
+              setContextMenu(null)
+              showToast('Copied link to message')
+            }}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+          >
+            <ExternalLink className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+            <span>Copy Message Link</span>
+          </button>
+
+          {/* Direct Forward without quote (Alt+F) */}
+          <button
+            type="button"
+            onClick={() => {
+              const msg = contextMenu.message
+              setContextMenu(null)
+              onOpenDirectForward(msg)
+            }}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+          >
+            <Forward className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+            <span>Forward (Alt+F)</span>
+          </button>
+
+          {/* Quick Forward to Saved Messages */}
+          {quickForwardToSaved && onQuickForwardToSaved && (
+            <button
+              type="button"
+              onClick={async () => {
+                const msg = contextMenu.message
+                setContextMenu(null)
+                const ok = await onQuickForwardToSaved(msg)
+                if (ok !== false) {
+                  showToast('Saved to Saved Messages!')
+                } else {
+                  showToast('Failed to save message')
+                }
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+            >
+              <Bookmark className="w-3.5 h-3.5 shrink-0 text-accent-cyan" />
+              <span>Save to Saved Messages</span>
+            </button>
+          )}
+
+          <div className="h-px bg-white/5 my-1" />
+
+          {/* Delete Message (Permission Checked) */}
+          {onDeleteMessage && canDeleteMessage(contextMenu.message) && (
+            <button
+              type="button"
+              onClick={async () => {
+                const msg = contextMenu.message
+                setContextMenu(null)
+                const confirmMsg = alwaysDeleteBoth
+                  ? `Delete message #${msg.id} for both sides?`
+                  : `Delete message #${msg.id}?`
+                if (window.confirm(confirmMsg)) {
+                  const ok = await onDeleteMessage(msg)
+                  if (ok !== false) {
+                    showToast(`Deleted message #${msg.id}`)
+                  } else {
+                    showToast('Failed to delete message')
+                  }
+                }
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-accent-rose hover:bg-accent-rose/15 transition-colors text-left cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <span>{alwaysDeleteBoth ? 'Delete for Everyone' : 'Delete Message'}</span>
+            </button>
+          )}
         </div>
       )}
     </div>

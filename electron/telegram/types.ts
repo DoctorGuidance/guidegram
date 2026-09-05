@@ -65,6 +65,8 @@ export interface DialogItem {
   lastMessageDate?: number
   avatarInitials?: string
   avatarUrl?: string
+  username?: string
+  folderId?: number
 }
 
 export interface InlineButton {
@@ -124,6 +126,7 @@ export interface MessageItem {
   mediaWidth?: number
   mediaHeight?: number
   mediaMimeType?: string
+  mediaFilePath?: string
   webPage?: WebPagePreview
   entities?: MessageEntityItem[]
   replyMarkup?: {
@@ -148,6 +151,8 @@ export interface ChatDetails {
   notificationsEnabled?: boolean
   pinnedMessage?: PinnedMessageItem
   canSendMessages?: boolean
+  canDeleteMessages?: boolean
+  isCreator?: boolean
 }
 
 export interface ForwardOptions {

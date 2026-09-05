@@ -23,8 +23,8 @@ import {
 } from './types'
 
 export interface ClientHolder {
-  client: TelegramClient
-  session: sessions.StringSession
+  client?: TelegramClient
+  session?: sessions.StringSession
   info: AccountInfo
 }
 
@@ -57,6 +57,102 @@ export class AccountManager {
     } catch (e) {
       Logger.warn('[AccountManager] Cache directories creation warning:', e)
     }
+
+    // Pre-populate saved accounts from SessionStore immediately so UI gets them in frame 0
+    const config = this.store.getConfig()
+    for (const savedAcc of config.accounts) {
+      this.clients.set(savedAcc.id, {
+        info: {
+          ...savedAcc,
+          status: 'connecting',
+        },
+      })
+    }
+  }
+
+  /**
+   * Connect and verify a single saved account
+   */
+  public async connectSavedAccount(savedAcc: AccountInfo): Promise<AccountInfo> {
+    const config = this.store.getConfig()
+    const sessionString = this.store.getSessionString(savedAcc.id)
+    if (!sessionString) {
+      Logger.warn(`[AccountManager] No session file found on disk for account ${savedAcc.id}`)
+      const unauthInfo: AccountInfo = { ...savedAcc, status: 'needs_auth' }
+      this.clients.set(savedAcc.id, { info: unauthInfo })
+      this.onEventCallback?.('telegram:account-updated', { account: unauthInfo })
+      return unauthInfo
+    }
+
+    const session = new sessions.StringSession(sessionString)
+    const proxy = ProxyManager.toGramJsProxy(savedAcc.proxyConfig)
+
+    const client = new TelegramClient(session, config.apiId, config.apiHash, {
+      connectionRetries: 5,
+      proxy: proxy,
+      useWSS: false,
+    })
+
+    try {
+      Logger.info(`[AccountManager] Connecting saved account ${savedAcc.id} (${savedAcc.phone || savedAcc.firstName})...`)
+      await client.connect()
+
+      if (await client.isUserAuthorized()) {
+        const me: any = await client.getMe()
+        const updatedInfo: AccountInfo = {
+          id: me.id.toString(),
+          phone: me.phone ? (me.phone.startsWith('+') ? me.phone : `+${me.phone}`) : savedAcc.phone,
+          firstName: me.firstName || savedAcc.firstName || 'User',
+          lastName: me.lastName || savedAcc.lastName,
+          username: me.username || savedAcc.username,
+          status: 'connected',
+          unreadTotal: savedAcc.unreadTotal || 0,
+          proxyConfig: savedAcc.proxyConfig,
+          isPremium: me.premium || false,
+        }
+
+        this.clients.set(updatedInfo.id, { client, session, info: updatedInfo })
+        this.setupEventListeners(updatedInfo.id, client)
+
+        // Keep config.json updated with fresh details
+        const currentAccounts = this.store.getConfig().accounts.map((a) => (a.id === updatedInfo.id ? updatedInfo : a))
+        this.store.updateConfig({ accounts: currentAccounts })
+
+        Logger.info(`[AccountManager] Account ${updatedInfo.id} connected successfully!`)
+        this.onEventCallback?.('telegram:account-updated', { account: updatedInfo })
+        return updatedInfo
+      } else {
+        Logger.warn(`[AccountManager] Account ${savedAcc.id} is not authorized (session expired).`)
+        const unauthInfo: AccountInfo = { ...savedAcc, status: 'needs_auth' }
+        this.clients.set(savedAcc.id, { client, session, info: unauthInfo })
+        this.onEventCallback?.('telegram:account-updated', { account: unauthInfo })
+        return unauthInfo
+      }
+    } catch (err: any) {
+      Logger.warn(`[AccountManager] Connection failed for account ${savedAcc.id}:`, err?.message || err)
+      const disconnectedInfo: AccountInfo = { ...savedAcc, status: 'disconnected' }
+      this.clients.set(savedAcc.id, { client, session, info: disconnectedInfo })
+      this.onEventCallback?.('telegram:account-updated', { account: disconnectedInfo, error: err?.message })
+      return disconnectedInfo
+    }
+  }
+
+  /**
+   * Reconnect an existing account (useful after proxy change or network restore)
+   */
+  public async reconnectAccount(accountId: string): Promise<AccountInfo> {
+    const config = this.store.getConfig()
+    const savedAcc = config.accounts.find((a) => a.id === accountId)
+    if (!savedAcc) {
+      throw new Error(`Account ${accountId} not found in saved accounts.`)
+    }
+
+    const connectingInfo: AccountInfo = { ...savedAcc, status: 'connecting' }
+    const existing = this.clients.get(accountId)
+    this.clients.set(accountId, { ...existing, info: connectingInfo })
+    this.onEventCallback?.('telegram:account-updated', { account: connectingInfo })
+
+    return this.connectSavedAccount(savedAcc)
   }
 
   /**
@@ -67,52 +163,11 @@ export class AccountManager {
     const loadedAccounts: AccountInfo[] = []
 
     for (const savedAcc of config.accounts) {
-      try {
-        const sessionString = this.store.getSessionString(savedAcc.id)
-        if (!sessionString) continue
-
-        const session = new sessions.StringSession(sessionString)
-        const proxy = ProxyManager.toGramJsProxy(savedAcc.proxyConfig)
-
-        const client = new TelegramClient(session, config.apiId, config.apiHash, {
-          connectionRetries: 5,
-          proxy: proxy,
-          useWSS: false,
-        })
-
-        await client.connect()
-
-        if (await client.isUserAuthorized()) {
-          const me: any = await client.getMe()
-          const info: AccountInfo = {
-            id: me.id.toString(),
-            phone: me.phone || savedAcc.phone,
-            firstName: me.firstName || 'User',
-            lastName: me.lastName || undefined,
-            username: me.username || undefined,
-            status: 'connected',
-            unreadTotal: savedAcc.unreadTotal || 0,
-            proxyConfig: savedAcc.proxyConfig,
-            isPremium: me.premium || false,
-          }
-
-          this.clients.set(info.id, { client, session, info })
-          this.setupEventListeners(info.id, client)
-          loadedAccounts.push(info)
-        } else {
-          this.clients.set(savedAcc.id, {
-            client,
-            session,
-            info: { ...savedAcc, status: 'needs_auth' },
-          })
-          loadedAccounts.push({ ...savedAcc, status: 'needs_auth' })
-        }
-      } catch (err) {
-        console.error(`[AccountManager] Failed to load account ${savedAcc.id}:`, err)
-        loadedAccounts.push({ ...savedAcc, status: 'disconnected' })
-      }
+      const res = await this.connectSavedAccount(savedAcc)
+      loadedAccounts.push(res)
     }
 
+    this.onEventCallback?.('telegram:accounts-loaded', { accounts: loadedAccounts })
     return loadedAccounts
   }
 
@@ -566,7 +621,9 @@ export class AccountManager {
     const holder = this.clients.get(accountId)
     if (holder) {
       try {
-        await holder.client.disconnect()
+        if (holder.client) {
+          await holder.client.disconnect()
+        }
       } catch (err) {
         console.warn(`[AccountManager] Disconnect error on logout:`, err)
       }
@@ -580,7 +637,9 @@ export class AccountManager {
    */
   public async getDialogs(accountId: string, limit = 50): Promise<DialogItem[]> {
     const holder = this.clients.get(accountId)
-    if (!holder) throw new Error(`Account ${accountId} not found or not connected`)
+    if (!holder || !holder.client) {
+      throw new Error(`Account ${accountId} is still connecting or disconnected.`)
+    }
 
     const dialogs = await holder.client.getDialogs({ limit })
     return dialogs.map((d: any) => {
@@ -615,7 +674,9 @@ export class AccountManager {
    */
   public async getMessages(accountId: string, chatId: string, limit = 40): Promise<MessageItem[]> {
     const holder = this.clients.get(accountId)
-    if (!holder) throw new Error(`Account ${accountId} not found`)
+    if (!holder || !holder.client) {
+      throw new Error(`Account ${accountId} is still connecting or disconnected.`)
+    }
 
     const messages = await holder.client.getMessages(chatId, { limit })
 
@@ -728,7 +789,7 @@ export class AccountManager {
     }
 
     const holder = this.clients.get(accountId)
-    if (!holder) return null
+    if (!holder || !holder.client) return null
 
     try {
       const entity = await holder.client.getEntity(peerId)
@@ -762,33 +823,49 @@ export class AccountManager {
       return this.mediaCache.get(cacheKey)!
     }
 
-    const diskPath = path.join(this.mediaDir, `${cacheKey}.jpg`)
-    if (fs.existsSync(diskPath)) {
-      try {
-        const fileBuf = await fs.promises.readFile(diskPath)
-        const dataUrl = `data:image/jpeg;base64,${fileBuf.toString('base64')}`
-        this.mediaCache.set(cacheKey, dataUrl)
-        return dataUrl
-      } catch (_) {}
-    }
-
     const holder = this.clients.get(accountId)
-    if (!holder) return null
+    if (!holder || !holder.client) return null
 
     try {
       const msgs = await holder.client.getMessages(chatId, { ids: [messageId] })
       if (msgs && msgs.length > 0 && msgs[0].media) {
+        const mediaObj = msgs[0].media as any
+        const mime = mediaObj?.document?.mimeType || 'image/jpeg'
+        let ext = '.jpg'
+        if (mime.includes('video/mp4') || mime.includes('video')) ext = '.mp4'
+        else if (mime.includes('audio') || mime.includes('ogg')) ext = '.ogg'
+        else if (mime.includes('webp')) ext = '.webp'
+        else if (mime.includes('png')) ext = '.png'
+        else if (mime.includes('pdf')) ext = '.pdf'
+
+        const diskPath = path.join(this.mediaDir, `${cacheKey}${thumb ? '.jpg' : ext}`)
+        if (fs.existsSync(diskPath)) {
+          if (thumb) {
+            const fileBuf = await fs.promises.readFile(diskPath)
+            const dataUrl = `data:image/jpeg;base64,${fileBuf.toString('base64')}`
+            this.mediaCache.set(cacheKey, dataUrl)
+            return dataUrl
+          } else {
+            const streamUrl = `guidegram-media://${diskPath}`
+            this.mediaCache.set(cacheKey, streamUrl)
+            return streamUrl
+          }
+        }
+
         const buf = await holder.client.downloadMedia(msgs[0].media, {
           thumb: thumb ? -1 : undefined,
         })
         if (buf && buf.length > 0) {
-          const mime = (msgs[0].media as any)?.document?.mimeType || 'image/jpeg'
-          const dataUrl = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`
-          this.mediaCache.set(cacheKey, dataUrl)
-          fs.promises.writeFile(diskPath, buf).catch((err) => {
-            Logger.warn(`[AccountManager] Failed to cache media to disk:`, err)
-          })
-          return dataUrl
+          await fs.promises.writeFile(diskPath, buf)
+          if (thumb) {
+            const dataUrl = `data:image/jpeg;base64,${Buffer.from(buf).toString('base64')}`
+            this.mediaCache.set(cacheKey, dataUrl)
+            return dataUrl
+          } else {
+            const streamUrl = `guidegram-media://${diskPath}`
+            this.mediaCache.set(cacheKey, streamUrl)
+            return streamUrl
+          }
         }
       }
     } catch (err: any) {
@@ -799,11 +876,61 @@ export class AccountManager {
   }
 
   /**
+   * Resolve @username or peer identifier and build DialogItem
+   */
+  public async resolvePeer(accountId: string, target: string): Promise<DialogItem> {
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is still connecting or disconnected.`)
+    const clean = target.replace(/^@/, '').trim()
+    const entity: any = await holder.client.getEntity(clean)
+    const id = entity.id.toString()
+    const title =
+      entity.title ||
+      [entity.firstName, entity.lastName].filter(Boolean).join(' ') ||
+      entity.username ||
+      'Conversation'
+    const initials = title.slice(0, 2).toUpperCase()
+    const isChannel = entity.className === 'Channel' || entity.broadcast === true
+    const isGroup =
+      entity.className === 'Chat' ||
+      (entity.className === 'Channel' && entity.megagroup === true)
+    const isUser = entity.className === 'User'
+    const isBot = isUser && entity.bot === true
+    const avatarUrl = await this.getProfilePhoto(accountId, id)
+
+    const dialogItem: DialogItem = {
+      id,
+      accountId,
+      title,
+      avatarInitials: initials,
+      avatarUrl: avatarUrl || undefined,
+      isChannel,
+      isGroup,
+      isUser,
+      isBot,
+      unreadCount: 0,
+      isPinned: false,
+      folderId: 0,
+    }
+
+    return dialogItem
+  }
+
+  /**
    * Get rich channel, group, or user details for header info drawer
    */
   public async getChatDetails(accountId: string, chatId: string): Promise<ChatDetails> {
     const holder = this.clients.get(accountId)
-    if (!holder) throw new Error(`Account ${accountId} not found`)
+    if (!holder || !holder.client) {
+      return {
+        id: chatId,
+        title: 'Conversation',
+        isChannel: false,
+        isGroup: false,
+        isUser: false,
+        isBot: false,
+      }
+    }
 
     const fallback: ChatDetails = {
       id: chatId,
@@ -832,6 +959,12 @@ export class AccountManager {
 
       let pinnedMessage: PinnedMessageItem | undefined = undefined
       let canSendMessages = true
+      const isCreator = entity.creator === true
+      let canDeleteMessages = isCreator
+
+      if (entity.adminRights) {
+        canDeleteMessages = entity.adminRights.deleteMessages === true
+      }
 
       if (isChannel || isGroup) {
         try {
@@ -850,13 +983,10 @@ export class AccountManager {
 
           // Check broadcast posting permissions
           if (isChannel && !isGroup) {
-            // In a broadcast channel, only admins with post permission or creator can send messages
-            const isCreator = entity.creator === true
             const adminRights = entity.adminRights
             const canPost = isCreator || (adminRights && adminRights.postMessages)
             canSendMessages = !!canPost
           } else if (entity.defaultBannedRights) {
-            // Group banned rights
             if (entity.defaultBannedRights.sendMessages) {
               canSendMessages = false
             }
@@ -898,6 +1028,8 @@ export class AccountManager {
         scam,
         pinnedMessage,
         canSendMessages,
+        canDeleteMessages,
+        isCreator,
       }
     } catch (err: any) {
       Logger.warn(`[AccountManager] getChatDetails fallback for ${chatId}:`, err)
@@ -914,7 +1046,7 @@ export class AccountManager {
     mute: boolean
   ): Promise<boolean> {
     const holder = this.clients.get(accountId)
-    if (!holder) throw new Error(`Account ${accountId} not found`)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
 
     try {
       const peer = await holder.client.getInputEntity(chatId)
@@ -938,7 +1070,7 @@ export class AccountManager {
    */
   public async sendMessage(accountId: string, chatId: string, text: string): Promise<MessageItem> {
     const holder = this.clients.get(accountId)
-    if (!holder) throw new Error(`Account ${accountId} not found`)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
 
     const sent = await holder.client.sendMessage(chatId, { message: text })
 
@@ -965,7 +1097,7 @@ export class AccountManager {
     options: ForwardOptions
   ): Promise<boolean> {
     const holder = this.clients.get(accountId)
-    if (!holder) throw new Error(`Account ${accountId} not found`)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
 
     const targetPeer = (toChatId === 'me' || toChatId === accountId) ? 'me' : toChatId
     const sourcePeer = (fromChatId === 'me' || fromChatId === accountId) ? 'me' : fromChatId
@@ -990,7 +1122,7 @@ export class AccountManager {
     revoke = true
   ): Promise<boolean> {
     const holder = this.clients.get(accountId)
-    if (!holder) throw new Error(`Account ${accountId} not found`)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
 
     await holder.client.deleteMessages(chatId, messageIds, { revoke })
     return true
@@ -1002,7 +1134,7 @@ export class AccountManager {
    */
   public async markAllAsRead(accountId: string): Promise<{ success: boolean; count: number }> {
     const holder = this.clients.get(accountId)
-    if (!holder) throw new Error(`Account ${accountId} not found`)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
 
     const config = this.store.getConfig()
     if (config.ghostMode) return { success: true, count: 0 } // Ghost Mode blocks read receipts
@@ -1034,7 +1166,7 @@ export class AccountManager {
     }
 
     const holder = this.clients.get(accountId)
-    if (!holder) return
+    if (!holder || !holder.client) return
 
     try {
       await holder.client.markAsRead(chatId)
@@ -1258,6 +1390,7 @@ export class AccountManager {
         length: ent.length,
         url: ent.url,
         language: ent.language,
+        documentId: ent.documentId ? ent.documentId.toString() : undefined,
       }
     })
   }
@@ -1275,6 +1408,28 @@ export class AccountManager {
   }
 
   public getAccounts(): AccountInfo[] {
-    return Array.from(this.clients.values()).map((c) => c.info)
+    const config = this.store.getConfig()
+    const result: AccountInfo[] = []
+    const seen = new Set<string>()
+
+    // 1. Current clients in memory
+    for (const holder of this.clients.values()) {
+      result.push(holder.info)
+      seen.add(holder.info.id)
+    }
+
+    // 2. Any accounts saved in config not yet loaded into memory
+    for (const acc of config.accounts) {
+      if (!seen.has(acc.id)) {
+        result.push({
+          ...acc,
+          status: 'connecting',
+        })
+        seen.add(acc.id)
+      }
+    }
+
+    return result
   }
 }
+

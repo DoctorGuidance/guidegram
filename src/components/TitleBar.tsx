@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Minus, Square, X, Shield, Sparkles } from 'lucide-react'
+import { Minus, Square, X, Shield, Sparkles, Menu } from 'lucide-react'
 import { AccountInfo } from '../types/telegram'
 import logoImg from '../assets/logo.png'
 
@@ -7,9 +7,15 @@ interface TitleBarProps {
   activeAccount: AccountInfo | null
   ghostMode: boolean
   onRequestClose?: () => void
+  onToggleMainMenu?: () => void
 }
 
-export const TitleBar: React.FC<TitleBarProps> = ({ activeAccount, ghostMode, onRequestClose }) => {
+export const TitleBar: React.FC<TitleBarProps> = ({
+  activeAccount,
+  ghostMode,
+  onRequestClose,
+  onToggleMainMenu,
+}) => {
   const [isMax, setIsMax] = useState(false)
 
   const handleMinimize = () => {
@@ -33,14 +39,24 @@ export const TitleBar: React.FC<TitleBarProps> = ({ activeAccount, ghostMode, on
 
   return (
     <header className="h-10 bg-dark-950 border-b border-white/5 flex items-center justify-between px-3 select-none titlebar-drag z-50">
-      {/* Left Brand Badge */}
-      <div className="flex items-center gap-2.5 titlebar-no-drag">
-        <div className="w-6 h-6 rounded-lg overflow-hidden shadow-glow flex items-center justify-center border border-accent-cyan/30">
-          <img src={logoImg} alt="Guidegram Logo" className="w-full h-full object-cover" />
-        </div>
-        <span className="text-xs font-bold text-gray-200 tracking-wide">Guidegram</span>
+      {/* Left Brand Badge with Hamburger Menu Trigger */}
+      <div className="flex items-center gap-2 titlebar-no-drag">
+        <button
+          type="button"
+          onClick={onToggleMainMenu}
+          title="Open Main Menu"
+          className="flex items-center gap-2 p-1 -ml-1 rounded-xl hover:bg-white/10 transition-colors cursor-pointer group"
+        >
+          <div className="p-1 rounded-lg text-gray-400 group-hover:text-white transition-colors">
+            <Menu className="w-4 h-4" />
+          </div>
+          <div className="w-6 h-6 rounded-lg overflow-hidden shadow-glow flex items-center justify-center border border-accent-cyan/30">
+            <img src={logoImg} alt="Guidegram Logo" className="w-full h-full object-cover" />
+          </div>
+          <span className="text-xs font-bold text-gray-200 tracking-wide">Guidegram</span>
+        </button>
         <span className="text-[10px] font-semibold px-1.5 py-0.2 bg-primary-600/20 text-primary-300 border border-primary-500/30 rounded-md">
-          v1.0.0
+          v1.0.1
         </span>
         <span className="text-[10px] font-medium px-1.5 py-0.2 bg-white/5 text-gray-400 border border-white/10 rounded-md">
           Portable

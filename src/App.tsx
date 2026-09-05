@@ -10,6 +10,7 @@ import { AddAccountModal } from './components/AddAccountModal'
 import { ProxySettingsModal } from './components/ProxySettingsModal'
 import { SettingsModal } from './components/SettingsModal'
 import { UnifiedInbox } from './components/UnifiedInbox'
+import { MainMenuDrawer } from './components/MainMenuDrawer'
 import { CloseConfirmModal } from './components/CloseConfirmModal'
 import { UpdateBanner } from './components/UpdateBanner'
 import { AccountInfo, DialogItem, MessageItem, AppConfig, UpdateInfo } from './types/telegram'
@@ -34,7 +35,41 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isUnifiedInboxOpen, setIsUnifiedInboxOpen] = useState(false)
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false)
+  const [isMainMenuOpen, setIsMainMenuOpen] = useState(false)
   const [forwardMessage, setForwardMessage] = useState<MessageItem | null>(null)
+
+  // Resizable Sidebar Splitter State (default 320px, min 240px, max 550px)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('guidegram_sidebar_width')
+    return saved ? Math.min(550, Math.max(240, parseInt(saved, 10))) : 320
+  })
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+
+  // Mouse move and mouse up listeners for sidebar dragging
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingSidebar) return
+      // The AccountDock width is 64px (w-16)
+      const newWidth = Math.min(550, Math.max(240, e.clientX - 64))
+      setSidebarWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      if (isResizingSidebar) {
+        setIsResizingSidebar(false)
+        localStorage.setItem('guidegram_sidebar_width', sidebarWidth.toString())
+      }
+    }
+
+    if (isResizingSidebar) {
+      window.addEventListener('mousemove', handleMouseMove)
+      window.addEventListener('mouseup', handleMouseUp)
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isResizingSidebar, sidebarWidth])
 
   // Auto-Update State
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
@@ -48,8 +83,11 @@ export const App: React.FC = () => {
           setAccounts(accs || [])
 
           if (accs && accs.length > 0) {
-            setActiveAccountId(accs[0].id)
-            loadDialogsForAccount(accs[0].id)
+            const firstConnected = (accs as AccountInfo[]).find((a: AccountInfo) => a.status === 'connected') || accs[0]
+            setActiveAccountId(firstConnected.id)
+            if (firstConnected.status === 'connected') {
+              loadDialogsForAccount(firstConnected.id)
+            }
           }
 
           const cfg = await window.guidegram.getConfig()
@@ -67,9 +105,11 @@ export const App: React.FC = () => {
 
     initApp()
 
-    // Realtime new-message listener
+    // Realtime listeners
     let unsubscribeMsg: (() => void) | undefined
     let unsubscribeUpdate: (() => void) | undefined
+    let unsubscribeAccountUpdated: (() => void) | undefined
+    let unsubscribeAccountsLoaded: (() => void) | undefined
 
     if (window.guidegram?.on) {
       unsubscribeMsg = window.guidegram.on('telegram:new-message', (payload: any) => {
@@ -93,6 +133,46 @@ export const App: React.FC = () => {
         }
       })
 
+      // Real-time Account Status and Hydration Listener
+      unsubscribeAccountUpdated = window.guidegram.on('telegram:account-updated', (payload: { account: AccountInfo }) => {
+        const updated = payload.account
+        if (!updated) return
+        setAccounts((prev) => {
+          const exists = prev.some((a) => a.id === updated.id)
+          if (exists) {
+            return prev.map((a) => (a.id === updated.id ? updated : a))
+          }
+          return [...prev, updated]
+        })
+
+        setActiveAccountId((currentActive) => {
+          if (!currentActive || currentActive === updated.id) {
+            if (updated.status === 'connected') {
+              loadDialogsForAccount(updated.id)
+            }
+            return updated.id
+          }
+          return currentActive
+        })
+      })
+
+      // Accounts loaded initial batch
+      unsubscribeAccountsLoaded = window.guidegram.on('telegram:accounts-loaded', (payload: { accounts: AccountInfo[] }) => {
+        if (payload?.accounts && payload.accounts.length > 0) {
+          setAccounts(payload.accounts)
+          const firstConnected = payload.accounts.find((a) => a.status === 'connected')
+          if (firstConnected) {
+            setActiveAccountId((currentActive) => {
+              if (!currentActive) {
+                loadDialogsForAccount(firstConnected.id)
+                return firstConnected.id
+              }
+              return currentActive
+            })
+          }
+        }
+      })
+
       // Hourly Auto-Update listener
       unsubscribeUpdate = window.guidegram.on('app:update-available', (info: UpdateInfo) => {
         setUpdateInfo(info)
@@ -102,6 +182,8 @@ export const App: React.FC = () => {
     return () => {
       unsubscribeMsg?.()
       unsubscribeUpdate?.()
+      unsubscribeAccountUpdated?.()
+      unsubscribeAccountsLoaded?.()
     }
   }, [])
 
@@ -227,7 +309,7 @@ export const App: React.FC = () => {
   }
 
   // 64Gram Feature: Select chat by username or numeric ID
-  const handleSelectUserOrChat = (target: string) => {
+  const handleSelectUserOrChat = async (target: string) => {
     if (!activeAccountId) return
     const dialogs = dialogsByAccount[activeAccountId] || []
     const cleanTarget = target.replace(/^@/, '').trim()
@@ -240,8 +322,46 @@ export const App: React.FC = () => {
     )
     if (found) {
       handleSelectChat(found.id)
-    } else {
-      setSearchQuery(cleanTarget)
+      return
+    }
+
+    // Attempt peer resolution via GramJS if window.guidegram.resolvePeer exists
+    if (window.guidegram?.resolvePeer) {
+      try {
+        const resolved = await window.guidegram.resolvePeer(activeAccountId, cleanTarget)
+        if (resolved) {
+          setDialogsByAccount((prev) => {
+            const list = prev[activeAccountId] || []
+            const exists = list.some((d) => d.id === resolved.id)
+            return exists ? prev : { ...prev, [activeAccountId]: [resolved, ...list] }
+          })
+          handleSelectChat(resolved.id)
+          return
+        }
+      } catch (err) {
+        console.warn('resolvePeer failed, falling back to search query:', err)
+      }
+    }
+
+    setSearchQuery(cleanTarget)
+  }
+
+  // Open Saved Messages for current active account
+  const handleOpenSavedMessages = () => {
+    if (!activeAccountId) return
+    const currentAcc = accounts.find((a) => a.id === activeAccountId)
+    const dialogs = dialogsByAccount[activeAccountId] || []
+    // Look for Saved Messages dialog or self peer
+    const savedChat = dialogs.find(
+      (d) =>
+        d.title.toLowerCase() === 'saved messages' ||
+        (currentAcc?.username && d.username?.toLowerCase() === currentAcc.username.toLowerCase()) ||
+        (currentAcc?.phone && d.id === currentAcc.phone)
+    )
+    if (savedChat) {
+      handleSelectChat(savedChat.id)
+    } else if (currentAcc?.username) {
+      handleSelectUserOrChat(currentAcc.username)
     }
   }
 
@@ -329,6 +449,7 @@ export const App: React.FC = () => {
         activeAccount={currentAccount}
         ghostMode={ghostMode}
         onRequestClose={handleRequestClose}
+        onToggleMainMenu={() => setIsMainMenuOpen(true)}
       />
 
       {/* 2. Main Content: Welcome Screen OR Active Multi-Account Workspace */}
@@ -362,7 +483,7 @@ export const App: React.FC = () => {
           />
         </div>
       ) : (
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className={`flex flex-1 min-h-0 overflow-hidden ${isResizingSidebar ? 'select-none' : ''}`}>
           {/* Vertical Multi-Account Dock */}
           <AccountDock
             accounts={accounts}
@@ -375,8 +496,11 @@ export const App: React.FC = () => {
             onOpenSettings={() => setIsSettingsOpen(true)}
           />
 
-          {/* Chat List Column with Telegraph Tabs */}
-          <div className="w-80 shrink-0 flex flex-col border-r border-white/5 h-full bg-dark-850 overflow-hidden">
+          {/* Resizable Chat List Column with Telegram Tabs */}
+          <div
+            style={{ width: `${sidebarWidth}px` }}
+            className="shrink-0 flex flex-col h-full bg-dark-850 overflow-hidden"
+          >
             <ChatTabs
               activeTab={activeTab}
               onTabChange={setActiveTab}
@@ -394,6 +518,15 @@ export const App: React.FC = () => {
               onSearchChange={setSearchQuery}
               onSelectChat={handleSelectChat}
             />
+          </div>
+
+          {/* Draggable Divider / Splitter between ChatList and ChatViewport */}
+          <div
+            onMouseDown={() => setIsResizingSidebar(true)}
+            title="Drag to resize sidebar"
+            className="w-1.5 hover:w-2 bg-white/5 hover:bg-primary-500/50 active:bg-primary-500 cursor-col-resize shrink-0 transition-all z-20 group relative flex items-center justify-center"
+          >
+            <div className="w-0.5 h-6 bg-white/20 group-hover:bg-white rounded-full transition-colors" />
           </div>
 
           {/* Active Conversation Viewport with 64Gram Fork Enhancements */}
@@ -417,6 +550,33 @@ export const App: React.FC = () => {
           />
         </div>
       )}
+
+      {/* Main Telegram Desktop Drawer */}
+      <MainMenuDrawer
+        isOpen={isMainMenuOpen}
+        onClose={() => setIsMainMenuOpen(false)}
+        accounts={accounts}
+        activeAccount={currentAccount}
+        onSelectAccount={handleSelectAccount}
+        onOpenAddAccount={() => {
+          setIsMainMenuOpen(false)
+          setIsAddAccountOpen(true)
+        }}
+        onOpenSettings={() => {
+          setIsMainMenuOpen(false)
+          setIsSettingsOpen(true)
+        }}
+        onOpenProxyModal={() => {
+          setIsMainMenuOpen(false)
+          setIsProxyModalOpen(true)
+        }}
+        onOpenSavedMessages={() => {
+          setIsMainMenuOpen(false)
+          handleOpenSavedMessages()
+        }}
+        ghostMode={ghostMode}
+        onToggleGhostMode={handleToggleGhostMode}
+      />
 
       {/* Modals */}
       <AddAccountModal

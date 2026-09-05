@@ -1,12 +1,25 @@
-import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, protocol, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { SessionStore } from './telegram/sessionStore'
 import { AccountManager } from './telegram/accountManager'
 import { ProxyManager } from './telegram/proxyManager'
 import { Logger } from './telegram/logger'
 import { UpdateManager } from './telegram/updateManager'
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'guidegram-media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      bypassCSP: true,
+    },
+  },
+])
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -206,6 +219,28 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   Logger.info('[App] Electron app is ready. Initializing SessionStore & AccountManager...')
+
+  // Register local media streaming protocol for videos, voice, audio, and documents
+  protocol.handle('guidegram-media', (request) => {
+    try {
+      let rawPath = request.url.replace(/^guidegram-media:\/\//, '')
+      let decodedPath = decodeURIComponent(rawPath)
+      // Normalize Windows drive letter if prefixed by leading slash, e.g. /D:/... -> D:/...
+      if (process.platform === 'win32') {
+        if (/^\/[a-zA-Z]:/.test(decodedPath)) {
+          decodedPath = decodedPath.slice(1)
+        }
+      }
+      if (!fs.existsSync(decodedPath)) {
+        return new Response('Media file not found', { status: 404 })
+      }
+      return net.fetch(pathToFileURL(decodedPath).toString())
+    } catch (err) {
+      Logger.error('[Protocol] Failed to serve guidegram-media request:', err)
+      return new Response('Media error', { status: 500 })
+    }
+  })
+
   sessionStore = new SessionStore(portableDataDir)
   accountManager = new AccountManager(sessionStore, (event, payload) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -324,6 +359,16 @@ function setupIpcHandlers() {
   ipcMain.handle('telegram:get-accounts', async () => {
     Logger.info('[IPC] telegram:get-accounts')
     return accountManager.getAccounts()
+  })
+
+  ipcMain.handle('telegram:reconnect-account', async (_event, { accountId }: { accountId: string }) => {
+    Logger.info(`[IPC] telegram:reconnect-account for ${accountId}`)
+    try {
+      return await accountManager.reconnectAccount(accountId)
+    } catch (err: any) {
+      Logger.error(`[IPC] reconnectAccount failed for ${accountId}:`, err)
+      throw err
+    }
   })
 
   ipcMain.handle('telegram:start-phone-auth', async (_event, { phone, proxy }) => {
@@ -463,6 +508,15 @@ function setupIpcHandlers() {
       return await accountManager.getChatDetails(accountId, chatId)
     } catch (err: any) {
       Logger.warn(`[IPC] getChatDetails error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:resolve-peer', async (_event, { accountId, target }) => {
+    try {
+      return await accountManager.resolvePeer(accountId, target)
+    } catch (err: any) {
+      Logger.warn(`[IPC] resolvePeer error:`, err)
       throw err
     }
   })

@@ -13,7 +13,7 @@ const guidegramAPI = {
   isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
 
   // Accounts
-  getAccounts: () => ipcRenderer.invoke('telegram:get-accounts'),
+  getAccounts: (): Promise<AccountInfo[]> => ipcRenderer.invoke('telegram:get-accounts'),
   startPhoneAuth: (phone: string, proxy?: ProxyConfig) =>
     ipcRenderer.invoke('telegram:start-phone-auth', { phone, proxy }),
   completePhoneAuth: (phone: string, code: string, password?: string) =>
@@ -26,6 +26,8 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:submit-qr-password', { password }),
   logoutAccount: (accountId: string) =>
     ipcRenderer.invoke('telegram:logout-account', { accountId }),
+  reconnectAccount: (accountId: string): Promise<AccountInfo> =>
+    ipcRenderer.invoke('telegram:reconnect-account', { accountId }),
 
   // Dialogs & Messages
   getDialogs: (accountId: string) =>
@@ -70,6 +72,8 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:download-media', { accountId, chatId, messageId, thumb }),
   getChatDetails: (accountId: string, chatId: string): Promise<any> =>
     ipcRenderer.invoke('telegram:get-chat-details', { accountId, chatId }),
+  resolvePeer: (accountId: string, target: string): Promise<any> =>
+    ipcRenderer.invoke('telegram:resolve-peer', { accountId, target }),
   toggleChatNotifications: (accountId: string, chatId: string, mute: boolean): Promise<boolean> =>
     ipcRenderer.invoke('telegram:toggle-chat-notifications', { accountId, chatId, mute }),
   openExternal: (url: string): Promise<void> =>
