@@ -34,6 +34,13 @@ export interface AccountInfo {
   proxyConfig?: ProxyConfig
   isPremium?: boolean
   sessionString?: string
+  deviceProfile?: {
+    deviceModel: string
+    systemVersion: string
+    appVersion: string
+    systemLangCode?: string
+    langCode?: string
+  }
 }
 
 export interface MessageReactionItem {
@@ -46,6 +53,7 @@ export interface PinnedMessageItem {
   id: number
   text?: string
   senderName?: string
+  date?: number
 }
 
 export interface DialogItem {
@@ -81,7 +89,12 @@ export interface WebPagePreview {
   title?: string
   description?: string
   photoUrl?: string
+  image?: string
+  domain?: string
+  favicon?: string
 }
+
+export type LinkPreviewData = WebPagePreview
 
 export interface ReplyInfo {
   replyToMsgId: number
@@ -154,6 +167,7 @@ export interface ChatDetails {
   scam?: boolean
   notificationsEnabled?: boolean
   pinnedMessage?: PinnedMessageItem
+  pinnedMessages?: PinnedMessageItem[]
   canSendMessages?: boolean
   canDeleteMessages?: boolean
   isCreator?: boolean
@@ -220,6 +234,8 @@ export interface AppConfig {
   copyCallbackData: boolean
   disableAnimations?: boolean
   suppressLinkWarning?: boolean
+  // Device & Privacy Spoofing
+  antiFingerprinting?: boolean
 }
 
 export interface OpenFileDialogOptions {

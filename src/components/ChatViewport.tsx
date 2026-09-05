@@ -54,7 +54,7 @@ import {
   ChevronUp,
   Flame,
 } from 'lucide-react'
-import { DialogItem, MessageItem, ChatDetails, MessageEntityItem } from '../types/telegram'
+import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview } from '../types/telegram'
 import { Avatar } from './Avatar'
 import { VideoPlayer } from './VideoPlayer'
 import { isRTL, formatFileSize, formatDuration, formatNumber } from '../utils/textUtils'
@@ -101,6 +101,253 @@ interface StagedAttachment {
   name: string
   size?: number
   type: 'media' | 'document' | 'audio'
+}
+
+function classifyDroppedFile(file: File): 'media' | 'document' | 'audio' {
+  const mime = file.type?.toLowerCase() || ''
+  const ext = (file.name.split('.').pop() || '').toLowerCase()
+  if (
+    mime.startsWith('image/') ||
+    mime.startsWith('video/') ||
+    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)
+  ) {
+    return 'media'
+  }
+  if (
+    mime.startsWith('audio/') ||
+    ['mp3', 'm4a', 'ogg', 'opus', 'flac', 'wav', 'aac', 'wma'].includes(ext)
+  ) {
+    return 'audio'
+  }
+  return 'document'
+}
+
+function extractFirstUrl(text: string): string | null {
+  if (!text) return null
+  const mdMatch = text.match(/\[[^\]]+\]\((https?:\/\/[^\s)]+)\)/)
+  if (mdMatch) return mdMatch[1]
+
+  const match = text.match(/https?:\/\/[^\s]+/)
+  if (!match) return null
+
+  let url = match[0]
+  const punctMatch = url.match(/([.,!?;:)>\]]+)$/)
+  if (punctMatch) {
+    url = url.slice(0, -punctMatch[1].length)
+  }
+  return url
+}
+
+const rendererPreviewCache = new Map<string, WebPagePreview | null>()
+
+interface LinkPreviewCardProps {
+  url: string
+  existingPreview?: WebPagePreview
+  onSafeOpen: (url: string) => void
+}
+
+const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({ url, existingPreview, onSafeOpen }) => {
+  const [preview, setPreview] = useState<WebPagePreview | null>(
+    existingPreview || rendererPreviewCache.get(url) || null
+  )
+  const [imageFailed, setImageFailed] = useState(false)
+
+  useEffect(() => {
+    if (preview && (preview.image || preview.photoUrl || preview.description || preview.title)) return
+    if (rendererPreviewCache.has(url)) {
+      setPreview(rendererPreviewCache.get(url) || null)
+      return
+    }
+
+    let isMounted = true
+    if (window.guidegram?.getLinkPreview) {
+      window.guidegram
+        .getLinkPreview(url)
+        .then((res) => {
+          if (!isMounted) return
+          rendererPreviewCache.set(url, res)
+          if (res) setPreview(res)
+        })
+        .catch(() => {
+          if (isMounted) rendererPreviewCache.set(url, null)
+        })
+    }
+    return () => {
+      isMounted = false
+    }
+  }, [url])
+
+  if (!preview || (!preview.title && !preview.description && !preview.image && !preview.photoUrl)) {
+    return null
+  }
+
+  const displayImg = !imageFailed ? (preview.image || preview.photoUrl) : undefined
+  let siteName = preview.siteName || preview.domain
+  if (!siteName) {
+    try {
+      siteName = new URL(url).hostname.replace(/^www\./i, '')
+    } catch {
+      siteName = url
+    }
+  }
+
+  return (
+    <div
+      onClick={(e) => {
+        e.stopPropagation()
+        onSafeOpen(preview.url || url)
+      }}
+      dir={isRTL(preview.title || preview.description) ? 'rtl' : 'ltr'}
+      className="mt-2.5 p-3 rounded-2xl bg-black/35 hover:bg-black/50 border-l-[3px] border-accent-cyan/90 border-t border-r border-b border-white/5 transition-all duration-150 cursor-pointer text-left group max-w-lg shadow-sm backdrop-blur-sm"
+      title={`Open ${preview.url || url}`}
+    >
+      {/* Site Badge */}
+      <div className="flex items-center gap-1.5 text-[10px] font-bold text-accent-cyan tracking-wider uppercase mb-1">
+        {preview.favicon ? (
+          <img
+            src={preview.favicon}
+            alt=""
+            className="w-3.5 h-3.5 rounded-sm shrink-0 object-contain"
+            onError={(e) => {
+              ;(e.currentTarget as HTMLElement).style.display = 'none'
+            }}
+          />
+        ) : (
+          <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+        )}
+        <span className="truncate max-w-[200px]">{siteName}</span>
+      </div>
+
+      {/* Title */}
+      {preview.title && (
+        <h4 className="text-xs md:text-sm font-bold text-gray-100 group-hover:text-cyan-200 transition-colors line-clamp-2 leading-snug mb-1">
+          {preview.title}
+        </h4>
+      )}
+
+      {/* Description */}
+      {preview.description && (
+        <p className="text-[11px] text-gray-300 line-clamp-3 leading-relaxed mb-2">
+          {preview.description}
+        </p>
+      )}
+
+      {/* Cover Image */}
+      {displayImg && (
+        <div className="rounded-xl overflow-hidden mt-2 border border-white/10 max-h-56 bg-dark-900/60">
+          <img
+            src={displayImg}
+            alt={preview.title || 'Link preview'}
+            className="w-full max-h-56 object-cover group-hover:scale-[1.01] transition-transform duration-200"
+            onError={() => setImageFailed(true)}
+            loading="lazy"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ComposerLinkPreviewBarProps {
+  url: string
+  onDismiss: () => void
+  onSafeOpen: (url: string) => void
+}
+
+const ComposerLinkPreviewBar: React.FC<ComposerLinkPreviewBarProps> = ({ url, onDismiss, onSafeOpen }) => {
+  const [preview, setPreview] = useState<WebPagePreview | null>(rendererPreviewCache.get(url) || null)
+  const [loading, setLoading] = useState(!rendererPreviewCache.has(url))
+
+  useEffect(() => {
+    if (rendererPreviewCache.has(url)) {
+      setPreview(rendererPreviewCache.get(url) || null)
+      setLoading(false)
+      return
+    }
+
+    let isMounted = true
+    setLoading(true)
+    if (window.guidegram?.getLinkPreview) {
+      window.guidegram
+        .getLinkPreview(url)
+        .then((res) => {
+          if (!isMounted) return
+          rendererPreviewCache.set(url, res)
+          setPreview(res)
+          setLoading(false)
+        })
+        .catch(() => {
+          if (isMounted) {
+            rendererPreviewCache.set(url, null)
+            setLoading(false)
+          }
+        })
+    } else {
+      setLoading(false)
+    }
+    return () => {
+      isMounted = false
+    }
+  }, [url])
+
+  if (!loading && (!preview || (!preview.title && !preview.description && !preview.image && !preview.photoUrl))) {
+    return null
+  }
+
+  let domain = preview?.siteName || preview?.domain
+  if (!domain) {
+    try {
+      domain = new URL(url).hostname.replace(/^www\./i, '')
+    } catch {
+      domain = url
+    }
+  }
+
+  const thumb = preview?.image || preview?.photoUrl
+
+  return (
+    <div className="px-4 py-2 bg-dark-850/95 border-b border-white/5 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-1 duration-150 backdrop-blur-md">
+      <div
+        onClick={() => onSafeOpen(url)}
+        className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer group"
+      >
+        {thumb ? (
+          <img
+            src={thumb}
+            alt=""
+            className="w-9 h-9 rounded-xl object-cover shrink-0 border border-white/10"
+            onError={(e) => {
+              ;(e.currentTarget as HTMLElement).style.display = 'none'
+            }}
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-xl bg-accent-cyan/15 text-accent-cyan flex items-center justify-center shrink-0 border border-accent-cyan/20">
+            <ExternalLink className="w-4 h-4" />
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-accent-cyan uppercase tracking-wider">
+            <span>Link Preview</span>
+            <span className="text-gray-500">•</span>
+            <span className="truncate font-semibold text-gray-400 lowercase">{domain}</span>
+          </div>
+          <div className="text-xs text-gray-200 group-hover:text-cyan-200 transition-colors font-medium truncate">
+            {loading ? 'Generating preview...' : preview?.title || url}
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer shrink-0"
+        title="Remove link preview"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  )
 }
 
 export const ChatViewport: React.FC<ChatViewportProps> = ({
@@ -209,7 +456,84 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   }>({ visible: false, start: 0, end: 0, selectedText: '' })
 
   // Drag and Drop Overlay State (Telegram Desktop v7.2.6 & v6.8.4)
+  const dragDepthRef = useRef(0)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [dismissedComposerUrl, setDismissedComposerUrl] = useState<string | null>(null)
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer?.types?.includes('Files')) {
+      dragDepthRef.current += 1
+      if (dragDepthRef.current === 1) {
+        setIsDraggingOver(true)
+      }
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) {
+      setIsDraggingOver(false)
+    }
+  }
+
+  const handleDrop = async (e: React.DragEvent, forceType?: 'media' | 'document') => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current = 0
+    setIsDraggingOver(false)
+
+    const droppedFiles = Array.from(e.dataTransfer.files)
+    if (droppedFiles.length === 0) return
+
+    const newAttachments: StagedAttachment[] = []
+    for (const file of droppedFiles) {
+      let filePath = ''
+      if (window.guidegram?.getPathForFile) {
+        try {
+          filePath = window.guidegram.getPathForFile(file)
+        } catch {}
+      }
+      if (!filePath && (file as any).path) {
+        filePath = (file as any).path
+      }
+
+      // Fallback for virtual / in-memory files
+      if (!filePath && window.guidegram?.saveTempFile) {
+        try {
+          const buf = await file.arrayBuffer()
+          filePath = await window.guidegram.saveTempFile({
+            buffer: buf,
+            filename: file.name,
+          })
+        } catch {}
+      }
+
+      newAttachments.push({
+        path: filePath || file.name,
+        name: file.name,
+        size: file.size,
+        type: forceType || classifyDroppedFile(file),
+      })
+    }
+
+    if (newAttachments.length > 0) {
+      setStagedAttachments((prev) => [...prev, ...newAttachments])
+      showToast(`Added ${newAttachments.length} file(s) to send tray`)
+      setTimeout(() => textareaRef.current?.focus(), 50)
+    }
+  }
 
   // In-Chat Search match navigation index (Telegram Desktop v7.1.3)
   const [searchMatchIndex, setSearchMatchIndex] = useState(0)
@@ -1622,36 +1946,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       )
     }
 
-    // 5. Web Page Preview Card
-    if (msg.webPage) {
-      const wp = msg.webPage
-      return (
-        <div
-          onClick={(e) => {
-            e.stopPropagation()
-            if (wp.url) window.guidegram?.openExternal?.(wp.url)
-          }}
-          className="mt-2 p-3 rounded-2xl bg-black/30 border-l-2 border-primary-500 hover:bg-black/45 transition-colors cursor-pointer text-left"
-          dir={isRTL(wp.title || wp.description) ? 'rtl' : 'ltr'}
-        >
-          {wp.siteName && (
-            <div className="text-[10px] font-bold text-primary-400 mb-0.5 flex items-center gap-1">
-              <span>{wp.siteName}</span>
-              <ExternalLink className="w-2.5 h-2.5 opacity-60" />
-            </div>
-          )}
-          {wp.title && (
-            <div className="text-xs font-bold text-gray-100 line-clamp-1 mb-0.5">{wp.title}</div>
-          )}
-          {wp.description && (
-            <div className="text-[11px] text-gray-400 line-clamp-2 leading-relaxed">
-              {wp.description}
-            </div>
-          )}
-        </div>
-      )
-    }
-
     return null
   }
 
@@ -1675,38 +1969,57 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
   return (
     <div
-      onDragOver={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        if (!isDraggingOver) setIsDraggingOver(true)
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        if (e.currentTarget.contains(e.relatedTarget as Node)) return
-        setIsDraggingOver(false)
-      }}
-      onDrop={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        setIsDraggingOver(false)
-        const droppedFiles = Array.from(e.dataTransfer.files)
-        if (droppedFiles.length > 0) {
-          showToast(`Uploading ${droppedFiles.length} file(s) to ${chat.title}`)
-        }
-      }}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={(e) => handleDrop(e)}
       className="relative flex-1 min-w-0 bg-dark-900 flex flex-col h-full overflow-hidden titlebar-no-drag"
     >
-      {/* Telegram Desktop Drag & Drop Overlay (v7.2.6 & v6.8.4) */}
+      {/* Feature 20: Agency-Grade Drag & Drop Overlay with Dual Zones */}
       {isDraggingOver && (
-        <div className="absolute inset-0 z-50 bg-dark-900/90 backdrop-blur-md flex flex-col items-center justify-center p-8 animate-in fade-in duration-150 border-2 border-dashed border-primary-500 rounded-2xl m-4">
-          <div className="w-20 h-20 rounded-3xl bg-primary-600/20 text-primary-400 flex items-center justify-center mb-4 shadow-glow">
-            <FileUp className="w-10 h-10" />
+        <div className="absolute inset-0 z-50 bg-dark-950/80 backdrop-blur-xl flex flex-col p-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex-1 border-2 border-dashed border-accent-cyan/60 rounded-3xl p-6 flex flex-col items-center justify-center relative shadow-[0_0_60px_rgba(6,182,212,0.15)] pointer-events-none">
+            {/* Center Pulse Icon */}
+            <div className="w-20 h-20 rounded-3xl bg-accent-cyan/15 text-accent-cyan flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(6,182,212,0.3)] ring-1 ring-accent-cyan/30">
+              <FileUp className="w-10 h-10 animate-bounce" />
+            </div>
+
+            <h3 className="text-lg font-bold text-white mb-1">
+              Drop files to send to <span className="text-accent-cyan">{chat.title}</span>
+            </h3>
+            <p className="text-xs text-gray-400 text-center max-w-sm mb-6">
+              Images, videos, and documents will be added to attachments with automatic media detection.
+            </p>
+
+            {/* Dual Target Drop Zones (Telegram Desktop Parity) */}
+            <div className="grid grid-cols-2 gap-4 w-full max-w-lg pointer-events-auto">
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                onDrop={(e) => handleDrop(e, 'media')}
+                className="p-4 rounded-2xl bg-dark-850/80 hover:bg-accent-cyan/10 border border-white/10 hover:border-accent-cyan/50 transition-all flex flex-col items-center justify-center text-center cursor-pointer group"
+              >
+                <Image className="w-6 h-6 text-primary-400 group-hover:scale-110 transition-transform mb-2" />
+                <span className="text-xs font-semibold text-gray-200 group-hover:text-white">Quick Media</span>
+                <span className="text-[10px] text-gray-400 mt-0.5">Photos & Videos with preview</span>
+              </div>
+
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                onDrop={(e) => handleDrop(e, 'document')}
+                className="p-4 rounded-2xl bg-dark-850/80 hover:bg-accent-emerald/10 border border-white/10 hover:border-accent-emerald/50 transition-all flex flex-col items-center justify-center text-center cursor-pointer group"
+              >
+                <FileText className="w-6 h-6 text-accent-emerald group-hover:scale-110 transition-transform mb-2" />
+                <span className="text-xs font-semibold text-gray-200 group-hover:text-white">Without Compression</span>
+                <span className="text-[10px] text-gray-400 mt-0.5">Original documents & files</span>
+              </div>
+            </div>
           </div>
-          <h3 className="text-base font-bold text-white mb-1">Drop files here to send</h3>
-          <p className="text-xs text-gray-400 text-center max-w-sm">
-            Files will be sent without compression or as photos/videos to this conversation.
-          </p>
         </div>
       )}
 
@@ -2165,6 +2478,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     {/* Formatted Message Body with Markdown & Entities & RTL */}
                     {msg.text && renderFormattedText(msg.text, msg.entities)}
 
+                    {/* Feature 22: Rich Web Link Preview Card */}
+                    {(() => {
+                      const url = msg.webPage?.url || (msg.text ? extractFirstUrl(msg.text) : null)
+                      if (!url) return null
+                      return (
+                        <LinkPreviewCard
+                          url={url}
+                          existingPreview={msg.webPage}
+                          onSafeOpen={handleSafeOpenUrl}
+                        />
+                      )
+                    })()}
+
                     {/* Inline Keyboard Buttons with BiDi / RTL Support */}
                     {msg.replyMarkup &&
                       msg.replyMarkup.rows &&
@@ -2486,6 +2812,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             </button>
           </div>
         )}
+
+        {/* Feature 22: Docked Interactive Composer Link Preview Bar */}
+        {(() => {
+          const detectedUrl = extractFirstUrl(inputText)
+          if (!detectedUrl || detectedUrl === dismissedComposerUrl) return null
+          return (
+            <ComposerLinkPreviewBar
+              url={detectedUrl}
+              onDismiss={() => setDismissedComposerUrl(detectedUrl)}
+              onSafeOpen={handleSafeOpenUrl}
+            />
+          )
+        })()}
 
         {/* Attachment Staging Tray (Feature 17) */}
         {stagedAttachments.length > 0 && (

@@ -7,6 +7,7 @@ import { AccountManager } from './telegram/accountManager'
 import { ProxyManager } from './telegram/proxyManager'
 import { Logger } from './telegram/logger'
 import { UpdateManager } from './telegram/updateManager'
+import type { WebPagePreview } from './telegram/types'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -314,6 +315,218 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+// =========================================================================
+// Feature 22: Rich Web Link Preview Engine (Zero Extra Dependencies)
+// =========================================================================
+
+interface CachedPreview {
+  data: WebPagePreview | null
+  timestamp: number
+}
+
+const linkPreviewCache = new Map<string, CachedPreview>()
+const MAX_PREVIEW_CACHE = 500
+const PREVIEW_CACHE_TTL = 1000 * 60 * 60 * 6 // 6 hours
+
+function isPrivateIpOrHost(hostname: string): boolean {
+  if (!hostname) return true
+  const lower = hostname.toLowerCase().trim()
+  if (lower === 'localhost' || lower === '127.0.0.1' || lower === '::1' || lower === '0.0.0.0') return true
+  if (/^10\./.test(lower)) return true
+  if (/^192\.168\./.test(lower)) return true
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower)) return true
+  if (/^169\.254\./.test(lower)) return true
+  if (lower.endsWith('.local') || lower.endsWith('.internal')) return true
+  return false
+}
+
+function decodeHtml(html: string): string {
+  return html
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, '/')
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&hellip;/g, '…')
+    .replace(/&#(\d+);/g, (_, dec) => {
+      try {
+        return String.fromCharCode(parseInt(dec, 10))
+      } catch {
+        return ''
+      }
+    })
+}
+
+function extractMetaTag(headHtml: string, propertyOrName: string): string | undefined {
+  const escaped = propertyOrName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const p1 = new RegExp(`<meta\\s+[^>]*?(?:property|name)=["']${escaped}["'][^>]*?content=["']([^"']*)["']`, 'i')
+  const m1 = headHtml.match(p1)
+  if (m1 && m1[1]) return decodeHtml(m1[1].trim())
+
+  const p2 = new RegExp(`<meta\\s+[^>]*?content=["']([^"']*)["'][^>]*?(?:property|name)=["']${escaped}["']`, 'i')
+  const m2 = headHtml.match(p2)
+  if (m2 && m2[1]) return decodeHtml(m2[1].trim())
+
+  return undefined
+}
+
+async function scrapeLinkPreview(targetUrl: string): Promise<WebPagePreview | null> {
+  let parsed: URL
+  try {
+    parsed = new URL(targetUrl)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+    if (isPrivateIpOrHost(parsed.hostname)) return null
+  } catch {
+    return null
+  }
+
+  // Check cache
+  const cached = linkPreviewCache.get(targetUrl)
+  if (cached && Date.now() - cached.timestamp < PREVIEW_CACHE_TTL) {
+    return cached.data
+  }
+
+  const cleanDomain = parsed.hostname.replace(/^www\./i, '')
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 6000)
+
+    const res = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Guidegram/1.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      redirect: 'follow',
+    })
+    clearTimeout(timeoutId)
+
+    if (!res.ok) {
+      linkPreviewCache.set(targetUrl, { data: null, timestamp: Date.now() })
+      return null
+    }
+
+    const contentType = res.headers.get('content-type') || ''
+
+    // If direct image URL, return image preview
+    if (contentType.startsWith('image/')) {
+      const imgPreview: WebPagePreview = {
+        url: targetUrl,
+        siteName: cleanDomain,
+        domain: cleanDomain,
+        title: path.basename(parsed.pathname) || cleanDomain,
+        image: targetUrl,
+        photoUrl: targetUrl,
+      }
+      linkPreviewCache.set(targetUrl, { data: imgPreview, timestamp: Date.now() })
+      return imgPreview
+    }
+
+    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+      linkPreviewCache.set(targetUrl, { data: null, timestamp: Date.now() })
+      return null
+    }
+
+    // Read up to 300KB to capture <head>
+    let htmlChunk = ''
+    const reader = res.body?.getReader()
+    if (reader) {
+      let bytesRead = 0
+      const decoder = new TextDecoder('utf-8')
+      while (bytesRead < 300 * 1024) {
+        const { done, value } = await reader.read()
+        if (done || !value) break
+        bytesRead += value.length
+        htmlChunk += decoder.decode(value, { stream: true })
+        if (htmlChunk.includes('</head>')) break
+      }
+      reader.cancel().catch(() => {})
+    } else {
+      htmlChunk = await res.text()
+    }
+
+    // Extract OpenGraph / Meta attributes
+    const ogTitle =
+      extractMetaTag(htmlChunk, 'og:title') ||
+      extractMetaTag(htmlChunk, 'twitter:title') ||
+      (() => {
+        const titleMatch = htmlChunk.match(/<title[^>]*>([^<]+)<\/title>/i)
+        return titleMatch ? decodeHtml(titleMatch[1].trim()) : undefined
+      })()
+
+    const ogDesc =
+      extractMetaTag(htmlChunk, 'og:description') ||
+      extractMetaTag(htmlChunk, 'twitter:description') ||
+      extractMetaTag(htmlChunk, 'description')
+
+    let ogImage =
+      extractMetaTag(htmlChunk, 'og:image') ||
+      extractMetaTag(htmlChunk, 'twitter:image') ||
+      extractMetaTag(htmlChunk, 'image')
+
+    // Resolve relative image URLs
+    if (ogImage) {
+      try {
+        ogImage = new URL(ogImage, res.url || targetUrl).href
+      } catch {
+        ogImage = undefined
+      }
+    }
+
+    const ogSiteName =
+      extractMetaTag(htmlChunk, 'og:site_name') ||
+      cleanDomain
+
+    const faviconMatch = htmlChunk.match(/<link[^>]*?rel=["'](?:shortcut )?icon["'][^>]*?href=["']([^"']*)["']/i)
+    let faviconUrl = faviconMatch ? faviconMatch[1] : undefined
+    if (faviconUrl) {
+      try {
+        faviconUrl = new URL(faviconUrl, res.url || targetUrl).href
+      } catch {
+        faviconUrl = undefined
+      }
+    } else {
+      faviconUrl = `${parsed.origin}/favicon.ico`
+    }
+
+    // If neither title nor description nor image found, don't generate empty card
+    if (!ogTitle && !ogDesc && !ogImage) {
+      linkPreviewCache.set(targetUrl, { data: null, timestamp: Date.now() })
+      return null
+    }
+
+    const preview: WebPagePreview = {
+      url: targetUrl,
+      title: ogTitle,
+      description: ogDesc,
+      image: ogImage,
+      photoUrl: ogImage,
+      siteName: ogSiteName,
+      domain: cleanDomain,
+      favicon: faviconUrl,
+    }
+
+    // Evict oldest if cache limit reached
+    if (linkPreviewCache.size >= MAX_PREVIEW_CACHE) {
+      const firstKey = linkPreviewCache.keys().next().value
+      if (firstKey) linkPreviewCache.delete(firstKey)
+    }
+
+    linkPreviewCache.set(targetUrl, { data: preview, timestamp: Date.now() })
+    return preview
+  } catch (err) {
+    Logger.warn(`[LinkPreview] Failed to scrape preview for ${targetUrl}:`, err)
+    linkPreviewCache.set(targetUrl, { data: null, timestamp: Date.now() })
+    return null
+  }
+}
 
 function setupIpcHandlers() {
   // Window Controls
@@ -639,6 +852,10 @@ function setupIpcHandlers() {
     } catch (err) {
       Logger.warn(`[IPC] Failed to open external URL: ${url}`, err)
     }
+  })
+
+  ipcMain.handle('web:get-link-preview', async (_event, { url }: { url: string }) => {
+    return scrapeLinkPreview(url)
   })
 
   ipcMain.handle('telegram:test-proxy-ping', async (_event, { proxy }) => {

@@ -46,6 +46,7 @@ export class SessionStore {
       copyCallbackData: true,
       disableAnimations: false,
       suppressLinkWarning: false,
+      antiFingerprinting: true,
     }
 
     try {

@@ -25,6 +25,9 @@ import {
   HelpCircle,
   Download,
   Sparkles,
+  ShieldCheck,
+  Laptop,
+  AlertTriangle,
 } from 'lucide-react'
 import { AppConfig, AccountInfo, CloseAction, UpdateInfo } from '../types/telegram'
 
@@ -100,6 +103,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [copyCallbackData, setCopyCallbackData] = useState(true)
   const [disableAnimations, setDisableAnimations] = useState(false)
   const [suppressLinkWarning, setSuppressLinkWarning] = useState(false)
+  const [antiFingerprinting, setAntiFingerprinting] = useState(true)
 
   // Window Close Action Preference
   const [closeAction, setCloseAction] = useState<CloseAction>('ask')
@@ -131,6 +135,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setCopyCallbackData(cfg.copyCallbackData ?? true)
         setDisableAnimations(cfg.disableAnimations ?? false)
         setSuppressLinkWarning(cfg.suppressLinkWarning ?? false)
+        setAntiFingerprinting(cfg.antiFingerprinting ?? true)
         setCloseAction(cfg.closeAction || 'ask')
       })
       window.guidegram.getPortableDataPath().then(setPortablePath)
@@ -190,6 +195,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       copyCallbackData,
       disableAnimations,
       suppressLinkWarning,
+      antiFingerprinting,
     })
     setConfig(updated)
     onConfigUpdated?.(updated)
@@ -408,6 +414,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 checked={suppressLinkWarning}
                 onChange={setSuppressLinkWarning}
               />
+            </div>
+          </div>
+
+          {/* Device Anti-Fingerprinting & Multi-Account Protection */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Multi-Account Anti-Fingerprinting Protection</span>
+            </div>
+
+            <div className="space-y-2">
+              <ToggleItem
+                title="Randomize Device & OS Fingerprint per Account"
+                desc="Generate authentic, diverse hardware models (Dell, ThinkPad, ASUS, etc.) and OS builds (Windows 10/11 up to 25H2) for each account"
+                icon={<Laptop className="w-3.5 h-3.5 text-emerald-400" />}
+                checked={antiFingerprinting}
+                onChange={setAntiFingerprinting}
+              />
+
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-amber-200/90 leading-relaxed">
+                  <span className="font-semibold text-amber-300">Important Note on Active Devices:</span>{' '}
+                  When this protection is enabled, Telegram will see each account as running on an authentic, distinct PC or laptop (e.g. Dell XPS, ThinkPad T14, Windows 11 Pro). Inside your official Telegram app under <span className="font-mono text-[10px] bg-black/40 px-1 py-0.5 rounded text-amber-200">Settings &gt; Devices</span>, the session name will show this simulated hardware profile instead of your exact host PC model. This protects your accounts from being correlated or banned as a single bulk machine.
+                </div>
+              </div>
             </div>
           </div>
 

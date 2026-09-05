@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import {
   ProxyConfig,
   ForwardOptions,
@@ -12,6 +12,7 @@ import {
   OpenFileDialogResult,
   SendMediaOptions,
   SendMessageOptions,
+  WebPagePreview,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -66,6 +67,13 @@ const guidegramAPI = {
     ipcRenderer.invoke('dialog:open-file', options),
   saveTempFile: (params: { buffer: ArrayBuffer | Uint8Array; filename: string }): Promise<string> =>
     ipcRenderer.invoke('system:save-temp-file', params),
+  getPathForFile: (file: File): string => {
+    try {
+      return webUtils.getPathForFile(file)
+    } catch {
+      return (file as any).path || ''
+    }
+  },
   forwardMessages: (
     accountId: string,
     toChatId: string | string[],
@@ -109,6 +117,8 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:toggle-chat-notifications', { accountId, chatId, mute }),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke('system:open-external', { url }),
+  getLinkPreview: (url: string): Promise<WebPagePreview | null> =>
+    ipcRenderer.invoke('web:get-link-preview', { url }),
 
   // Proxy & Settings
   testProxyPing: (proxy: ProxyConfig) =>

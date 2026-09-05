@@ -1,11 +1,12 @@
 import fs from 'fs'
 import path from 'path'
-import { TelegramClient, Api, sessions } from 'telegram'
+import { TelegramClient, Api, sessions, errors, helpers } from 'telegram'
 import { NewMessage } from 'telegram/events/index.js'
 import QRCode from 'qrcode'
 import { SessionStore } from './sessionStore'
 import { ProxyManager } from './proxyManager'
 import { Logger } from './logger'
+import { DeviceProfileManager } from './deviceProfileManager'
 import {
   AccountInfo,
   DialogItem,
@@ -35,18 +36,161 @@ interface PendingQrAuth {
   proxy?: ProxyConfig
   cancelled: boolean
   wakeUp?: () => void
+  profile?: any
+}
+
+export class ProgressThrottler {
+  private lastEmittedPercent = -1
+  private lastEmittedTime = 0
+  private minIntervalMs: number
+  private minDeltaPercent: number
+
+  constructor(
+    private callback: (percent: number, extra?: any) => void,
+    options?: { minIntervalMs?: number; minDeltaPercent?: number }
+  ) {
+    this.minIntervalMs = options?.minIntervalMs ?? 100 // 100ms
+    this.minDeltaPercent = options?.minDeltaPercent ?? 1 // 1%
+  }
+
+  public update(percent: number, extra?: any): void {
+    const now = Date.now()
+    const isComplete = percent >= 100
+    const isFirst = this.lastEmittedPercent === -1
+
+    if (
+      isFirst ||
+      isComplete ||
+      (now - this.lastEmittedTime >= this.minIntervalMs &&
+        Math.abs(percent - this.lastEmittedPercent) >= this.minDeltaPercent)
+    ) {
+      this.lastEmittedPercent = percent
+      this.lastEmittedTime = now
+      this.callback(percent, extra)
+    }
+  }
+}
+
+export interface ParallelDownloadOptions {
+  workers?: number // Default: 4
+  partSizeKB?: number // Default: 512
+  onProgress?: (percent: number, received: number, total: number) => void
+}
+
+export async function parallelDownloadDocument(
+  client: TelegramClient,
+  doc: Api.Document,
+  destinationPath: string,
+  options?: ParallelDownloadOptions
+): Promise<void> {
+  const workers = Math.min(16, Math.max(1, options?.workers ?? 4))
+  const partSize = (options?.partSizeKB ?? 512) * 1024 // 512 KB
+  const fileSize = Number(doc.size)
+
+  if (fileSize <= 0) {
+    throw new Error('Invalid document size')
+  }
+
+  const totalParts = Math.ceil(fileSize / partSize)
+  const tempPath = `${destinationPath}.part`
+  const fileHandle = await fs.promises.open(tempPath, 'w+')
+
+  let targetDcId = doc.dcId || (client.session as any)?.dcId || 2
+  let nextPartIndex = 0
+  let downloadedBytes = 0
+  let abortError: any = null
+
+  const throttler = new ProgressThrottler((percent, extra) => {
+    options?.onProgress?.(percent, extra?.downloadedBytes ?? 0, fileSize)
+  })
+
+  // Initial progress event
+  throttler.update(0, { downloadedBytes: 0 })
+
+  try {
+    const workerPromises = Array.from({ length: workers }, async () => {
+      while (nextPartIndex < totalParts && !abortError) {
+        const partIndex = nextPartIndex++
+        if (partIndex >= totalParts) break
+
+        const offset = partIndex * partSize
+        const expectedBytes = Math.min(partSize, fileSize - offset)
+
+        let chunkBytes: Buffer | null = null
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          if (abortError) break
+          try {
+            const sender = await client.getSender(targetDcId)
+            const req = new Api.upload.GetFile({
+              location: new Api.InputDocumentFileLocation({
+                id: doc.id,
+                accessHash: doc.accessHash,
+                fileReference: doc.fileReference,
+                thumbSize: '',
+              }),
+              offset: helpers.returnBigInt(offset),
+              limit: partSize,
+            })
+
+            const res: any = await client.invokeWithSender(req, sender)
+            if (res && res.bytes) {
+              chunkBytes = Buffer.from(res.bytes).subarray(0, expectedBytes)
+              break
+            }
+          } catch (err: any) {
+            if (err instanceof errors.FileMigrateError) {
+              targetDcId = err.newDc
+              continue
+            }
+            if (err instanceof errors.FloodWaitError) {
+              await helpers.sleep(err.seconds * 1000)
+              continue
+            }
+            if (attempt === 3) {
+              abortError = err
+              throw err
+            }
+            await helpers.sleep(300 * attempt)
+          }
+        }
+
+        if (!chunkBytes) {
+          throw abortError || new Error(`Failed to download part ${partIndex}`)
+        }
+
+        // Random-access disk write at exact byte offset
+        await fileHandle.write(chunkBytes, 0, chunkBytes.length, offset)
+
+        downloadedBytes += chunkBytes.length
+        const currentPercent = Math.min(100, Math.round((downloadedBytes / fileSize) * 100))
+        throttler.update(currentPercent, { downloadedBytes })
+      }
+    })
+
+    await Promise.all(workerPromises)
+    if (abortError) throw abortError
+
+    // Ensure all file buffers are flushed to disk before closing
+    await fileHandle.sync()
+  } finally {
+    await fileHandle.close().catch(() => {})
+  }
+
+  // Atomic rename to finalize download
+  await fs.promises.rename(tempPath, destinationPath)
 }
 
 export class AccountManager {
   private store: SessionStore
   private clients = new Map<string, ClientHolder>()
-  private pendingAuthClients = new Map<string, { client: TelegramClient; phoneCodeHash: string; proxy?: ProxyConfig }>()
+  private pendingAuthClients = new Map<string, { client: TelegramClient; phoneCodeHash: string; proxy?: ProxyConfig; profile?: any }>()
   private pendingQrAuth?: PendingQrAuth
   private onEventCallback?: (event: string, payload: any) => void
   private avatarsDir: string
   private mediaDir: string
   private avatarCache = new Map<string, string>() // `${accountId}_${peerId}` -> data URL
   private mediaCache = new Map<string, string>() // `${accountId}_${chatId}_${msgId}` -> data URL
+  private inFlightDownloads = new Map<string, Promise<string | null>>()
 
   constructor(store: SessionStore, onEvent?: (event: string, payload: any) => void) {
     this.store = store
@@ -89,14 +233,23 @@ export class AccountManager {
     const session = new sessions.StringSession(sessionString)
     const proxy = ProxyManager.toGramJsProxy(savedAcc.proxyConfig)
 
+    // Retrieve persistent device profile or generate a realistic one
+    const antiFingerprinting = config.antiFingerprinting !== false
+    const profile = savedAcc.deviceProfile || DeviceProfileManager.getProfileForAccount(savedAcc.id, antiFingerprinting)
+
     const client = new TelegramClient(session, config.apiId, config.apiHash, {
       connectionRetries: 5,
       proxy: proxy,
       useWSS: false,
+      deviceModel: profile.deviceModel,
+      systemVersion: profile.systemVersion,
+      appVersion: profile.appVersion,
+      systemLangCode: profile.systemLangCode,
+      langCode: profile.langCode,
     })
 
     try {
-      Logger.info(`[AccountManager] Connecting saved account ${savedAcc.id} (${savedAcc.phone || savedAcc.firstName})...`)
+      Logger.info(`[AccountManager] Connecting saved account ${savedAcc.id} (${savedAcc.phone || savedAcc.firstName}) [Device: ${profile.deviceModel}, OS: ${profile.systemVersion}]...`)
       await client.connect()
 
       if (await client.isUserAuthorized()) {
@@ -111,6 +264,7 @@ export class AccountManager {
           unreadTotal: savedAcc.unreadTotal || 0,
           proxyConfig: savedAcc.proxyConfig,
           isPremium: me.premium || false,
+          deviceProfile: profile,
         }
 
         this.clients.set(updatedInfo.id, { client, session, info: updatedInfo })
@@ -182,14 +336,22 @@ export class AccountManager {
     const session = new sessions.StringSession('')
     const gramProxy = ProxyManager.toGramJsProxy(proxy)
 
+    const antiFingerprinting = config.antiFingerprinting !== false
+    const profile = DeviceProfileManager.getProfileForAccount(phone, antiFingerprinting)
+
     const client = new TelegramClient(session, config.apiId, config.apiHash, {
       connectionRetries: 3,
       proxy: gramProxy,
+      deviceModel: profile.deviceModel,
+      systemVersion: profile.systemVersion,
+      appVersion: profile.appVersion,
+      systemLangCode: profile.systemLangCode,
+      langCode: profile.langCode,
     })
 
     try {
       await client.connect()
-      Logger.info(`[AccountManager] Connected to Telegram DC for ${phone}. Sending code...`)
+      Logger.info(`[AccountManager] Connected to Telegram DC for ${phone} [Device: ${profile.deviceModel}]. Sending code...`)
 
       const { phoneCodeHash } = await client.sendCode(
         {
@@ -200,7 +362,7 @@ export class AccountManager {
       )
 
       Logger.info(`[AccountManager] Code sent to ${phone}, phoneCodeHash: ${phoneCodeHash}`)
-      this.pendingAuthClients.set(phone, { client, phoneCodeHash, proxy })
+      this.pendingAuthClients.set(phone, { client, phoneCodeHash, proxy, profile })
       return { phoneCodeHash }
     } catch (err: any) {
       Logger.error(`[AccountManager] startPhoneAuth failed for ${phone}:`, err)
@@ -224,7 +386,7 @@ export class AccountManager {
       throw new Error('No pending authentication found for this phone number.')
     }
 
-    const { client, phoneCodeHash, proxy } = pending
+    const { client, phoneCodeHash, proxy, profile } = pending
     const config = this.store.getConfig()
 
     try {
@@ -274,6 +436,7 @@ export class AccountManager {
       unreadTotal: 0,
       proxyConfig: proxy,
       isPremium: me.premium || false,
+      deviceProfile: profile || DeviceProfileManager.getProfileForAccount(accountId, config.antiFingerprinting !== false),
     }
 
     // Save session to portable disk
@@ -307,16 +470,27 @@ export class AccountManager {
     const session = new sessions.StringSession('')
     const gramProxy = ProxyManager.toGramJsProxy(proxy)
 
+    const antiFingerprinting = config.antiFingerprinting !== false
+    // Generate a temporary seed based on timestamp or random for QR initiation
+    const qrSeed = `qr_${Date.now()}_${Math.random()}`
+    const profile = DeviceProfileManager.getProfileForAccount(qrSeed, antiFingerprinting)
+
     const client = new TelegramClient(session, config.apiId, config.apiHash, {
       connectionRetries: 5,
       proxy: gramProxy,
       useWSS: false,
+      deviceModel: profile.deviceModel,
+      systemVersion: profile.systemVersion,
+      appVersion: profile.appVersion,
+      systemLangCode: profile.systemLangCode,
+      langCode: profile.langCode,
     })
 
     const qrState: PendingQrAuth = {
       client,
       proxy,
       cancelled: false,
+      profile,
     }
     this.pendingQrAuth = qrState
 
@@ -584,6 +758,8 @@ export class AccountManager {
     const accountId = me.id.toString()
     const phoneStr = me.phone ? (me.phone.startsWith('+') ? me.phone : `+${me.phone}`) : 'QR User'
 
+    const qrProfile = this.pendingQrAuth?.profile || DeviceProfileManager.getProfileForAccount(accountId, config.antiFingerprinting !== false)
+
     const info: AccountInfo = {
       id: accountId,
       phone: phoneStr,
@@ -594,6 +770,7 @@ export class AccountManager {
       unreadTotal: 0,
       proxyConfig: proxy,
       isPremium: me.premium || false,
+      deviceProfile: qrProfile,
     }
 
     this.store.saveSessionString(accountId, sessionString)
@@ -814,7 +991,7 @@ export class AccountManager {
   }
 
   /**
-   * Download message media (photo, video thumb, document) with local disk caching
+   * Download message media (photo, video thumb, document) with local disk caching and parallel chunk acceleration
    */
   public async downloadMedia(
     accountId: string,
@@ -827,49 +1004,116 @@ export class AccountManager {
       return this.mediaCache.get(cacheKey)!
     }
 
+    if (this.inFlightDownloads.has(cacheKey)) {
+      return this.inFlightDownloads.get(cacheKey)!
+    }
+
+    const downloadPromise = this.performDownloadMedia(accountId, chatId, messageId, thumb, cacheKey)
+    this.inFlightDownloads.set(cacheKey, downloadPromise)
+
+    try {
+      return await downloadPromise
+    } finally {
+      this.inFlightDownloads.delete(cacheKey)
+    }
+  }
+
+  private async performDownloadMedia(
+    accountId: string,
+    chatId: string,
+    messageId: number,
+    thumb: boolean,
+    cacheKey: string
+  ): Promise<string | null> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) return null
 
     try {
       const msgs = await holder.client.getMessages(chatId, { ids: [messageId] })
-      if (msgs && msgs.length > 0 && msgs[0].media) {
-        const mediaObj = msgs[0].media as any
-        const mime = mediaObj?.document?.mimeType || 'image/jpeg'
-        let ext = '.jpg'
-        if (mime.includes('video/mp4') || mime.includes('video')) ext = '.mp4'
-        else if (mime.includes('audio') || mime.includes('ogg')) ext = '.ogg'
-        else if (mime.includes('webp')) ext = '.webp'
-        else if (mime.includes('png')) ext = '.png'
-        else if (mime.includes('pdf')) ext = '.pdf'
+      if (!msgs || msgs.length === 0 || !msgs[0].media) return null
 
-        const diskPath = path.join(this.mediaDir, `${cacheKey}${thumb ? '.jpg' : ext}`)
-        if (fs.existsSync(diskPath)) {
-          if (thumb) {
-            const fileBuf = await fs.promises.readFile(diskPath)
-            const dataUrl = `data:image/jpeg;base64,${fileBuf.toString('base64')}`
-            this.mediaCache.set(cacheKey, dataUrl)
-            return dataUrl
-          } else {
-            const streamUrl = `guidegram-media://${diskPath}`
-            this.mediaCache.set(cacheKey, streamUrl)
-            return streamUrl
+      const mediaObj = msgs[0].media as any
+      const mime = mediaObj?.document?.mimeType || 'image/jpeg'
+      let ext = '.jpg'
+      if (mime.includes('video/mp4') || mime.includes('video')) ext = '.mp4'
+      else if (mime.includes('audio') || mime.includes('ogg')) ext = '.ogg'
+      else if (mime.includes('webp')) ext = '.webp'
+      else if (mime.includes('png')) ext = '.png'
+      else if (mime.includes('pdf')) ext = '.pdf'
+
+      const diskPath = path.join(this.mediaDir, `${cacheKey}${thumb ? '.jpg' : ext}`)
+      if (fs.existsSync(diskPath)) {
+        if (thumb) {
+          const fileBuf = await fs.promises.readFile(diskPath)
+          const dataUrl = `data:image/jpeg;base64,${fileBuf.toString('base64')}`
+          this.mediaCache.set(cacheKey, dataUrl)
+          return dataUrl
+        } else {
+          const streamUrl = `guidegram-media://${diskPath}`
+          this.mediaCache.set(cacheKey, streamUrl)
+          return streamUrl
+        }
+      }
+
+      const tempDiskPath = `${diskPath}.part`
+      const doc = mediaObj?.document as Api.Document | undefined
+      const fileSize = doc?.size ? Number(doc.size) : 0
+
+      if (!thumb && doc && fileSize > 2 * 1024 * 1024) {
+        // Parallel Chunk Acceleration for large documents / video (> 2MB)
+        try {
+          await parallelDownloadDocument(holder.client, doc, diskPath, {
+            workers: 4,
+            partSizeKB: 512,
+            onProgress: (percent, received, total) => {
+              this.onEventCallback?.('telegram:download-progress', {
+                accountId,
+                chatId,
+                messageId,
+                progress: percent,
+                bytesReceived: received,
+                totalBytes: total,
+              })
+            },
+          })
+        } catch (parallelErr) {
+          Logger.warn(`[AccountManager] Parallel download failed for ${chatId}/${messageId}, falling back:`, parallelErr)
+          await holder.client.downloadMedia(msgs[0].media, {
+            outputFile: tempDiskPath,
+            thumb: undefined,
+          })
+          if (fs.existsSync(tempDiskPath)) {
+            await fs.promises.rename(tempDiskPath, diskPath)
           }
         }
-
-        const buf = await holder.client.downloadMedia(msgs[0].media, {
-          thumb: thumb ? -1 : undefined,
-        })
-        if (buf && buf.length > 0) {
-          await fs.promises.writeFile(diskPath, buf)
-          if (thumb) {
-            const dataUrl = `data:image/jpeg;base64,${Buffer.from(buf).toString('base64')}`
-            this.mediaCache.set(cacheKey, dataUrl)
-            return dataUrl
-          } else {
-            const streamUrl = `guidegram-media://${diskPath}`
-            this.mediaCache.set(cacheKey, streamUrl)
-            return streamUrl
+      } else {
+        // Streamed or thumbnail download
+        if (thumb) {
+          const buf = await holder.client.downloadMedia(msgs[0].media, { thumb: -1 })
+          if (buf && buf.length > 0) {
+            await fs.promises.writeFile(tempDiskPath, buf)
+            await fs.promises.rename(tempDiskPath, diskPath)
           }
+        } else {
+          await holder.client.downloadMedia(msgs[0].media, {
+            outputFile: tempDiskPath,
+          })
+          if (fs.existsSync(tempDiskPath)) {
+            await fs.promises.rename(tempDiskPath, diskPath)
+          }
+        }
+      }
+
+      if (fs.existsSync(diskPath)) {
+        if (thumb) {
+          const fileBuf = await fs.promises.readFile(diskPath)
+          const dataUrl = `data:image/jpeg;base64,${fileBuf.toString('base64')}`
+          this.mediaCache.set(cacheKey, dataUrl)
+          return dataUrl
+        } else {
+          const streamUrl = `guidegram-media://${diskPath}`
+          this.mediaCache.set(cacheKey, streamUrl)
+          return streamUrl
         }
       }
     } catch (err: any) {
@@ -962,6 +1206,7 @@ export class AccountManager {
       const username = entity.username || undefined
 
       let pinnedMessage: PinnedMessageItem | undefined = undefined
+      const pinnedMessagesList: PinnedMessageItem[] = []
       let canSendMessages = true
       const isCreator = entity.creator === true
       let canDeleteMessages = isCreator
@@ -981,11 +1226,30 @@ export class AccountManager {
           about = full.fullChat?.about
           membersCount = full.fullChat?.participantsCount
 
-          // Pinned message
-          if (full.fullChat?.pinnedMsgId) {
+          // Pinned messages list & primary pinned message (TDesktop v6.7.8)
+          try {
+            const pinnedMsgs: any = await holder.client.getMessages(entity, {
+              filter: new Api.InputMessagesFilterPinned(),
+              limit: 25,
+            })
+            if (pinnedMsgs && pinnedMsgs.length > 0) {
+              for (const pm of pinnedMsgs) {
+                pinnedMessagesList.push({
+                  id: pm.id,
+                  text: pm.message || (pm.media ? '[Media]' : undefined),
+                  date: pm.date ? pm.date * 1000 : undefined,
+                })
+              }
+            }
+          } catch (_) {}
+
+          if (pinnedMessagesList.length > 0) {
+            pinnedMessage = pinnedMessagesList[0]
+          } else if (full.fullChat?.pinnedMsgId) {
             pinnedMessage = {
               id: full.fullChat.pinnedMsgId,
             }
+            pinnedMessagesList.push(pinnedMessage)
           }
 
           // Check broadcast posting permissions
@@ -1202,6 +1466,7 @@ export class AccountManager {
         fake,
         scam,
         pinnedMessage,
+        pinnedMessages: pinnedMessagesList.length > 0 ? pinnedMessagesList : undefined,
         canSendMessages,
         canDeleteMessages,
         isCreator,
@@ -1300,16 +1565,8 @@ export class AccountManager {
 
     const uploadId = options?.uploadId || filePath
 
-    const sendParams: any = {
-      file: filePath,
-      caption: options?.caption || '',
-      replyTo: options?.replyToMsgId,
-      forceDocument: options?.forceDocument ?? false,
-      silent: options?.silent ?? false,
-      schedule: options?.scheduleDate ? Math.floor(options.scheduleDate / 1000) : undefined,
-      workers: 2,
-      progressCallback: (progress: number) => {
-        const percent = Math.min(100, Math.max(0, Math.round(progress * 100)))
+    const throttler = new ProgressThrottler(
+      (percent: number) => {
         this.onEventCallback?.('telegram:upload-progress', {
           accountId,
           chatId,
@@ -1317,6 +1574,21 @@ export class AccountManager {
           progress: percent,
           filePath,
         })
+      },
+      { minIntervalMs: 100, minDeltaPercent: 1 }
+    )
+
+    const sendParams: any = {
+      file: filePath,
+      caption: options?.caption || '',
+      replyTo: options?.replyToMsgId,
+      forceDocument: options?.forceDocument ?? false,
+      silent: options?.silent ?? false,
+      schedule: options?.scheduleDate ? Math.floor(options.scheduleDate / 1000) : undefined,
+      workers: 4,
+      progressCallback: (progress: number) => {
+        const percent = Math.min(100, Math.max(0, Math.round(progress * 100)))
+        throttler.update(percent)
       },
     }
 
