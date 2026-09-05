@@ -33,10 +33,18 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   // QR Flow states
   const [qrState, setQrState] = useState<'loading' | 'qr' | 'scanned' | '2fa' | 'success'>('loading')
   const [qrPayload, setQrPayload] = useState<QrTokenPayload | null>(null)
-  const [countdown, setCountdown] = useState<number>(30)
+  const [countdown, setCountdown] = useState<number>(120)
+  const [sessionDeadline, setSessionDeadline] = useState<number>(() => Date.now() + 120 * 1000)
   const [qr2FaHint, setQr2FaHint] = useState<string>('')
   const [qrPassword, setQrPassword] = useState<string>('')
   const [loading2Fa, setLoading2Fa] = useState<boolean>(false)
+
+  // Format seconds to mm:ss
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60)
+    const s = secs % 60
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
 
   // Phone Flow states
   const [step, setStep] = useState<'phone' | 'code' | '2fa' | 'success'>('phone')
@@ -75,6 +83,8 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   const startQr = useCallback(async (customProxy?: ProxyConfig) => {
     setQrState('loading')
     setErrorMessage(null)
+    setSessionDeadline(Date.now() + 120 * 1000)
+    setCountdown(120)
     try {
       const proxy = customProxy !== undefined ? customProxy : getProxyConfig()
       const payload = await window.guidegram.startQrAuth(proxy)
@@ -156,19 +166,19 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
     }
   }, [isOpen, loginMethod, handleSuccess])
 
-  // Countdown timer for QR expiration
+  // 2-minute (120s) countdown timer for QR session
   useEffect(() => {
-    if (qrState !== 'qr' || !qrPayload?.expires) return
+    if (qrState !== 'qr') return
 
     const updateTimer = () => {
-      const diff = Math.max(0, Math.round(qrPayload.expires - Date.now() / 1000))
+      const diff = Math.max(0, Math.round((sessionDeadline - Date.now()) / 1000))
       setCountdown(diff)
     }
 
     updateTimer()
     const interval = setInterval(updateTimer, 1000)
     return () => clearInterval(interval)
-  }, [qrState, qrPayload])
+  }, [qrState, sessionDeadline])
 
   if (!isOpen) return null
 
@@ -361,22 +371,33 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                       className="w-52 h-52 object-contain select-none transition-all duration-300"
                     />
 
-                    {/* Expiration warning overlay if expired */}
+                    {/* Expiration warning overlay if expired after 2 minutes */}
                     {countdown <= 0 && (
-                      <div className="absolute inset-0 bg-white/90 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center p-4">
-                        <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mb-2" />
-                        <span className="text-xs font-bold text-gray-800">Refreshing QR Code...</span>
+                      <div className="absolute inset-0 bg-dark-900/95 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center p-4 text-center z-10">
+                        <div className="w-10 h-10 rounded-full bg-accent-rose/10 text-accent-rose flex items-center justify-center mb-2 border border-accent-rose/20">
+                          <RefreshCw className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs font-bold text-gray-200 mb-1">QR Code Expired</span>
+                        <span className="text-[11px] text-gray-400 mb-3">2 minutes limit reached</span>
+                        <button
+                          type="button"
+                          onClick={() => startQr()}
+                          className="px-3.5 py-1.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-semibold shadow-glow transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Reload QR Code</span>
+                        </button>
                       </div>
                     )}
                   </div>
 
                   {/* Countdown & Refresh Indicator */}
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-dark-800 border border-white/10 text-[11px] text-gray-400">
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-dark-800 border border-white/10 text-[11px] text-gray-300 font-mono">
                       <div
                         className={clsx(
                           'w-2 h-2 rounded-full',
-                          countdown > 10
+                          countdown > 20
                             ? 'bg-accent-emerald animate-pulse'
                             : countdown > 0
                             ? 'bg-amber-400 animate-ping'
@@ -384,15 +405,15 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                         )}
                       />
                       <span>
-                        {countdown > 0 ? `Code expires in ${countdown}s` : 'Refreshing code...'}
+                        {countdown > 0 ? `Code expires in ${formatTime(countdown)}` : 'Expired'}
                       </span>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => startQr()}
-                      title="Force refresh QR code"
-                      className="p-1 rounded-lg bg-dark-800 border border-white/10 hover:bg-dark-700 text-gray-400 hover:text-white transition-colors"
+                      title="Force refresh QR code (restarts 2-minute timer)"
+                      className="p-1 rounded-lg bg-dark-800 border border-white/10 hover:bg-dark-700 text-gray-400 hover:text-white transition-colors cursor-pointer"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                     </button>

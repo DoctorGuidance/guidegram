@@ -301,10 +301,10 @@ export class AccountManager {
 
       this.onEventCallback?.('telegram:qr-token', payload)
 
-      // Run polling loop in background
-      this.runQrLoop(qrState, tokenStr).catch((err) => {
+      // Run polling/event loop in background
+      this.runQrLoop(qrState, tokenStr, res.expires).catch((err) => {
         if (!qrState.cancelled) {
-          console.error('[AccountManager] QR loop error:', err)
+          Logger.error('[AccountManager] QR loop fatal error:', err)
           this.onEventCallback?.('telegram:qr-error', { message: err.message || 'QR login error' })
         }
       })
@@ -327,14 +327,16 @@ export class AccountManager {
    */
   public async cancelQrAuth(): Promise<void> {
     if (this.pendingQrAuth) {
+      Logger.info('[AccountManager] Cancelling active QR auth session...')
       this.pendingQrAuth.cancelled = true
       this.pendingQrAuth.wakeUp?.()
       const client = this.pendingQrAuth.client
       this.pendingQrAuth = undefined
       try {
         await client.disconnect()
+        Logger.info('[AccountManager] Disconnected QR auth client successfully.')
       } catch (err) {
-        console.warn('[AccountManager] Disconnect error during cancelQrAuth:', err)
+        Logger.warn('[AccountManager] Disconnect error during cancelQrAuth:', err)
       }
     }
   }
@@ -347,6 +349,7 @@ export class AccountManager {
       throw new Error('No active QR login session in progress.')
     }
 
+    Logger.info('[AccountManager] Submitting 2FA password for QR login...')
     const { client, proxy } = this.pendingQrAuth
     const config = this.store.getConfig()
 
@@ -367,19 +370,31 @@ export class AccountManager {
   }
 
   /**
-   * Internal loop to poll QR token status or refresh expired QR tokens
+   * Internal loop to listen for MTProto UpdateLoginToken and refresh expired tokens
    */
-  private async runQrLoop(qrState: PendingQrAuth, initialTokenStr: string): Promise<void> {
+  private async runQrLoop(
+    qrState: PendingQrAuth,
+    initialTokenStr: string,
+    initialExpires: number
+  ): Promise<void> {
     const { client, proxy } = qrState
     const config = this.store.getConfig()
     let lastTokenStr = initialTokenStr
+    let currentExpires = initialExpires
 
     let wakeUpTrigger: (() => void) | undefined
     let isFinished = false
 
     const updateHandler = (update: any) => {
       if (isFinished || qrState.cancelled) return
-      if (update?.className === 'UpdateLoginToken' || update instanceof Api.UpdateLoginToken) {
+      const isLoginToken =
+        update instanceof Api.UpdateLoginToken ||
+        update?.className === 'UpdateLoginToken' ||
+        update?.originalUpdate instanceof Api.UpdateLoginToken ||
+        update?.originalUpdate?.className === 'UpdateLoginToken'
+
+      if (isLoginToken) {
+        Logger.info('[AccountManager] Received UpdateLoginToken MTProto update! Waking up QR loop...')
         wakeUpTrigger?.()
       }
     }
@@ -390,7 +405,13 @@ export class AccountManager {
     }
 
     try {
-      while (!qrState.cancelled) {
+      while (!qrState.cancelled && !isFinished) {
+        // Calculate remaining seconds until current token expires
+        const nowSec = Math.floor(Date.now() / 1000)
+        // Wake up 2 seconds before token expires, or wait minimum 3 seconds
+        const secondsToWait = Math.max(3, currentExpires - nowSec - 2)
+        Logger.info(`[AccountManager] QR session waiting ${secondsToWait}s for scan or refresh...`)
+
         await new Promise<void>((resolve) => {
           let timer: NodeJS.Timeout | null = null
           const onWake = () => {
@@ -401,12 +422,13 @@ export class AccountManager {
           timer = setTimeout(() => {
             wakeUpTrigger = undefined
             resolve()
-          }, 3500)
+          }, secondsToWait * 1000)
         })
 
-        if (qrState.cancelled) break
+        if (qrState.cancelled || isFinished) break
 
         try {
+          Logger.info('[AccountManager] Exporting login token to check status or refresh...')
           const res = await client.invoke(
             new Api.auth.ExportLoginToken({
               apiId: config.apiId,
@@ -415,14 +437,15 @@ export class AccountManager {
             })
           )
 
-          if (qrState.cancelled) break
+          if (qrState.cancelled || isFinished) break
 
           if (res instanceof Api.auth.LoginToken) {
+            currentExpires = res.expires
             const tokenStr = Buffer.from(res.token).toString('base64url')
             if (tokenStr !== lastTokenStr) {
               lastTokenStr = tokenStr
               const url = `tg://login?token=${tokenStr}`
-              const expires = res.expires
+              Logger.info(`[AccountManager] Refreshed QR LoginToken from Telegram (expires in: ${currentExpires - Math.floor(Date.now() / 1000)}s).`)
               const qrDataUrl = await QRCode.toDataURL(url, {
                 width: 280,
                 margin: 2,
@@ -431,13 +454,16 @@ export class AccountManager {
                   light: '#ffffff',
                 },
               })
-              this.onEventCallback?.('telegram:qr-token', { url, qrDataUrl, expires })
+              this.onEventCallback?.('telegram:qr-token', { url, qrDataUrl, expires: currentExpires })
             }
           } else if (res instanceof Api.auth.LoginTokenSuccess) {
+            Logger.info('[AccountManager] LoginTokenSuccess received! User approved QR login on phone.')
             this.onEventCallback?.('telegram:qr-scanned', {})
             await this.finalizeQrLogin(client, proxy)
+            isFinished = true
             break
           } else if (res instanceof Api.auth.LoginTokenMigrateTo) {
+            Logger.info(`[AccountManager] LoginTokenMigrateTo DC ${res.dcId}! Migrating DC...`)
             this.onEventCallback?.('telegram:qr-scanned', {})
             await client._switchDC(res.dcId)
             const migrated = await client.invoke(
@@ -446,39 +472,45 @@ export class AccountManager {
               })
             )
             if (migrated instanceof Api.auth.LoginTokenSuccess) {
+              Logger.info('[AccountManager] ImportLoginToken successful after DC migration!')
               await this.finalizeQrLogin(client, proxy)
+              isFinished = true
+              break
             } else {
               throw new Error('Unexpected response during DC migration.')
             }
-            break
           }
         } catch (err: any) {
-          if (qrState.cancelled) break
+          if (qrState.cancelled || isFinished) break
 
           if (
             err.errorMessage === 'SESSION_PASSWORD_NEEDED' ||
             (err.message && err.message.includes('SESSION_PASSWORD_NEEDED'))
           ) {
+            Logger.info('[AccountManager] SESSION_PASSWORD_NEEDED received: 2FA required for account.')
             this.onEventCallback?.('telegram:qr-scanned', {})
             let hint = ''
             try {
               const pwd = await client.invoke(new Api.account.GetPassword())
               hint = pwd.hint || ''
             } catch (e) {
-              console.warn('[AccountManager] Could not get 2FA hint:', e)
+              Logger.warn('[AccountManager] Could not get 2FA hint:', e)
             }
             this.onEventCallback?.('telegram:qr-2fa', { hint })
+            isFinished = true
             break
           }
 
-          console.warn('[AccountManager] Transient error in QR poll iteration:', err?.message || err)
+          Logger.warn('[AccountManager] Transient error in QR poll iteration:', err?.message || err)
+          // Wait 2 seconds before retrying to prevent tight loop
+          await new Promise((r) => setTimeout(r, 2000))
         }
       }
     } finally {
       isFinished = true
       qrState.wakeUp = undefined
       try {
-        (client as any)._eventBuilders = (client as any)._eventBuilders?.filter(
+        ;(client as any)._eventBuilders = (client as any)._eventBuilders?.filter(
           (item: any) => item[1] !== updateHandler
         )
       } catch (_) {}
