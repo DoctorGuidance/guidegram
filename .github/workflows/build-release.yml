@@ -1,0 +1,100 @@
+name: Build Multiplatform Releases
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release Tag (e.g. v1.0.1)"
+        required: false
+        default: ""
+      release_title:
+        description: "Release Title"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Compile and Bundle Frontend & Electron
+        run: pnpm run build
+
+      - name: Build macOS Binaries (dmg & zip for x64 + arm64)
+        if: runner.os == 'macOS'
+        run: pnpm exec electron-builder --mac --publish never
+
+      - name: Build Windows Binaries (dir portable & zip)
+        if: runner.os == 'Windows'
+        run: |
+          pnpm exec electron-builder --win dir --publish never
+          powershell -Command "Compress-Archive -Path 'release/win-unpacked/*' -DestinationPath 'release/Guidegram-Windows-x64-Portable.zip' -Force"
+
+      - name: Build Linux Binaries (AppImage & tar.gz)
+        if: runner.os == 'Linux'
+        run: pnpm exec electron-builder --linux --publish never
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: guidegram-${{ runner.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.tar.gz
+          if-no-files-found: warn
+
+  publish-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event.inputs.tag_name != ''
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Consolidate Release Assets
+        run: |
+          mkdir -p final-assets
+          find release-assets -type f -exec mv -t final-assets/ {} +
+          ls -la final-assets/
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          name: ${{ github.event.inputs.release_title || github.event.inputs.tag_name }}
+          files: final-assets/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

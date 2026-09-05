@@ -28,25 +28,35 @@
     "target": [
       {
         "target": "dmg",
-        "arch": ["x64", "arm64"]
+        "arch": [
+          "x64",
+          "arm64"
+        ]
       },
       {
         "target": "zip",
-        "arch": ["x64", "arm64"]
+        "arch": [
+          "x64",
+          "arm64"
+        ]
       }
     ]
   },
   "linux": {
     "icon": "resources/icon256.png",
-    "category": "Network;Chat;",
+    "category": "Network;Chat",
     "target": [
       {
         "target": "AppImage",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       },
       {
         "target": "tar.gz",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ]
   }
