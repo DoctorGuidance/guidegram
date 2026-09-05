@@ -23,7 +23,7 @@
     ]
   },
   "mac": {
-    "icon": "resources/icon256.png",
+    "icon": "resources/icon512.png",
     "category": "public.app-category.social-networking",
     "target": [
       {
@@ -43,7 +43,7 @@
     ]
   },
   "linux": {
-    "icon": "resources/icon256.png",
+    "icon": "resources/icon512.png",
     "category": "Network;Chat",
     "target": [
       {
