@@ -49,6 +49,10 @@ import {
   Link as LinkIcon,
   Eye,
   Calendar,
+  BellOff,
+  Clock,
+  ChevronUp,
+  Flame,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem } from '../types/telegram'
 import { Avatar } from './Avatar'
@@ -68,7 +72,11 @@ interface ChatViewportProps {
   alwaysDeleteBoth?: boolean
   copyCallbackData?: boolean
   suppressLinkWarning?: boolean
-  onSendMessage: (text: string, replyToMsgId?: number) => void
+  onSendMessage: (
+    text: string,
+    replyToMsgId?: number,
+    options?: { silent?: boolean; scheduleDate?: number }
+  ) => void
   onSendMedia?: (
     filePath: string,
     options?: {
@@ -77,6 +85,8 @@ interface ChatViewportProps {
       isVoice?: boolean
       duration?: number
       forceDocument?: boolean
+      silent?: boolean
+      scheduleDate?: number
     }
   ) => Promise<void> | void
   onOpenDirectForward: (message: MessageItem) => void
@@ -201,6 +211,14 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   // Drag and Drop Overlay State (Telegram Desktop v7.2.6 & v6.8.4)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
 
+  // In-Chat Search match navigation index (Telegram Desktop v7.1.3)
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0)
+
+  // Send Options Popover & Scheduled Message Modal (Telegram Desktop v7.0.4 & v6.8.5)
+  const [isSendMenuOpen, setIsSendMenuOpen] = useState(false)
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
+  const [customScheduleTime, setCustomScheduleTime] = useState<string>('')
+
   // Contextual Text Formatter (Bold, Italic, Code, Strike, Spoiler, Quote)
   const applyTextFormat = (wrapper: string | ((text: string) => string)) => {
     const textarea = textareaRef.current
@@ -296,6 +314,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       previousChatIdRef.current = chat?.id || null
       setShowScrollBottom(false)
       setUnreadScrollCount(0)
+      setReplyMessage(null)
+      setStagedAttachments([])
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
       }, 50)
@@ -346,7 +366,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         }
       }
     })
-    return cleanup
+    return () => {
+      if (typeof cleanup === 'function') cleanup()
+    }
   }, [chat?.id])
 
   // Active video message playing in-app
@@ -360,14 +382,17 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     selectedText?: string
   } | null>(null)
 
-  // Close context menu on global click or Escape
+  // Close context menu & send menu on global click or Escape
   useEffect(() => {
     const handleGlobalClick = () => {
       if (contextMenu) setContextMenu(null)
+      if (isSendMenuOpen) setIsSendMenuOpen(false)
     }
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && contextMenu) {
-        setContextMenu(null)
+      if (e.key === 'Escape') {
+        if (contextMenu) setContextMenu(null)
+        if (isSendMenuOpen) setIsSendMenuOpen(false)
+        if (isScheduleModalOpen) setIsScheduleModalOpen(false)
       }
     }
     window.addEventListener('click', handleGlobalClick)
@@ -376,7 +401,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       window.removeEventListener('click', handleGlobalClick)
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [contextMenu])
+  }, [contextMenu, isSendMenuOpen, isScheduleModalOpen])
 
   // Reset drawer state & auto-fetch chat details for header banner & mute button
   useEffect(() => {
@@ -464,6 +489,30 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
     return result
   }, [messages, searchQuery, searchSenderFilter])
+
+  useEffect(() => {
+    setSearchMatchIndex(0)
+  }, [searchQuery, searchSenderFilter])
+
+  const handleNextSearchMatch = () => {
+    if (filteredMessages.length === 0) return
+    const nextIdx = (searchMatchIndex + 1) % filteredMessages.length
+    setSearchMatchIndex(nextIdx)
+    const targetMsg = filteredMessages[nextIdx]
+    if (targetMsg) {
+      handleScrollToReply(targetMsg.id)
+    }
+  }
+
+  const handlePrevSearchMatch = () => {
+    if (filteredMessages.length === 0) return
+    const prevIdx = (searchMatchIndex - 1 + filteredMessages.length) % filteredMessages.length
+    setSearchMatchIndex(prevIdx)
+    const targetMsg = filteredMessages[prevIdx]
+    if (targetMsg) {
+      handleScrollToReply(targetMsg.id)
+    }
+  }
 
   const handleSearchFromUser = (senderId?: string, senderName?: string) => {
     setSearchSenderFilter({ id: senderId, name: senderName })
@@ -674,6 +723,14 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           setIsInfoOpen(false)
           return
         }
+        if (isAttachMenuOpen) {
+          setIsAttachMenuOpen(false)
+          return
+        }
+        if (replyMessage) {
+          setReplyMessage(null)
+          return
+        }
         setSelectedMessage(null)
         return
       }
@@ -718,12 +775,267 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedMessage, hoveredMessage, messages, onOpenDirectForward, lightboxUrl, isInfoOpen])
+  }, [selectedMessage, hoveredMessage, messages, onOpenDirectForward, lightboxUrl, isInfoOpen, replyMessage, isAttachMenuOpen])
 
-  const handleSend = (e?: React.FormEvent) => {
+  // Attachment picking handlers (Feature 17)
+  const handlePickAttachment = async (category: 'media' | 'document' | 'audio') => {
+    setIsAttachMenuOpen(false)
+    try {
+      if (window.guidegram?.openFileDialog) {
+        const res = await window.guidegram.openFileDialog({ type: category, allowMultiple: true })
+        if (!res.canceled && res.filePaths.length > 0) {
+          const newItems: StagedAttachment[] = res.filePaths.map((p) => ({
+            path: p,
+            name: p.split(/[\\/]/).pop() || 'file',
+            type: category,
+          }))
+          setStagedAttachments((prev) => [...prev, ...newItems])
+          setTimeout(() => textareaRef.current?.focus(), 50)
+        }
+      } else {
+        if (category === 'media') imageInputRef.current?.click()
+        else if (category === 'audio') audioInputRef.current?.click()
+        else fileInputRef.current?.click()
+      }
+    } catch (err: any) {
+      showToast(`File picker failed: ${err.message}`)
+    }
+  }
+
+  const handleRemoveStagedAttachment = (index: number) => {
+    setStagedAttachments((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // Voice message recording handlers (Feature 18)
+  const handleStartRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+
+      let mimeType = 'audio/webm;codecs=opus'
+      if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+        mimeType = 'audio/ogg;codecs=opus'
+      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus'
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType })
+      mediaRecorderRef.current = recorder
+      recordingChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordingChunksRef.current.push(e.data)
+        }
+      }
+
+      // Live Web Audio visualizer
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+        const source = audioCtx.createMediaStreamSource(stream)
+        const analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 64
+        source.connect(analyser)
+        audioContextRef.current = audioCtx
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        analyserIntervalRef.current = setInterval(() => {
+          analyser.getByteFrequencyData(dataArray)
+          const sampled = Array.from(dataArray.slice(0, 16)).map((v) => Math.max(15, Math.round((v / 255) * 100)))
+          setRecordingWaveform(sampled)
+        }, 70)
+      } catch (_) {}
+
+      recorder.start(100)
+      setIsRecordingVoice(true)
+      setRecordingDuration(0)
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1)
+      }, 1000)
+    } catch (err: any) {
+      console.error('Microphone access error:', err)
+      showToast('Microphone access denied or audio device not found')
+    }
+  }
+
+  const handleCancelRecording = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+    if (analyserIntervalRef.current) {
+      clearInterval(analyserIntervalRef.current)
+      analyserIntervalRef.current = null
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.onstop = null
+      mediaRecorderRef.current.stop()
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop())
+      mediaStreamRef.current = null
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(() => {})
+      audioContextRef.current = null
+    }
+    recordingChunksRef.current = []
+    setIsRecordingVoice(false)
+    setRecordingDuration(0)
+    showToast('Recording cancelled')
+  }
+
+  const handleStopAndSendRecording = () => {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return
+    if (recordingDuration < 1) {
+      showToast('Voice message too short')
+      handleCancelRecording()
+      return
+    }
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+    if (analyserIntervalRef.current) {
+      clearInterval(analyserIntervalRef.current)
+      analyserIntervalRef.current = null
+    }
+    setIsUploadingVoice(true)
+
+    const recorder = mediaRecorderRef.current
+    const duration = recordingDuration
+
+    recorder.onstop = async () => {
+      try {
+        const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType })
+        const buffer = await blob.arrayBuffer()
+        const tempPath = await window.guidegram.saveTempFile({
+          buffer,
+          filename: `voice_${Date.now()}.ogg`,
+        })
+
+        if (onSendMedia) {
+          await onSendMedia(tempPath, {
+            isVoice: true,
+            duration,
+            replyToMsgId: replyMessage?.id,
+          })
+        } else if (chat?.accountId && chat?.id && window.guidegram?.sendMedia) {
+          await window.guidegram.sendMedia(chat.accountId, chat.id, tempPath, {
+            isVoice: true,
+            duration,
+            replyToMsgId: replyMessage?.id,
+          })
+        }
+        setReplyMessage(null)
+        showToast('Voice message sent')
+      } catch (err) {
+        console.error('Failed to send voice message:', err)
+        showToast('Failed to send voice message')
+      } finally {
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach((t) => t.stop())
+          mediaStreamRef.current = null
+        }
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+          audioContextRef.current.close().catch(() => {})
+          audioContextRef.current = null
+        }
+        setIsUploadingVoice(false)
+        setIsRecordingVoice(false)
+        setRecordingDuration(0)
+        recordingChunksRef.current = []
+      }
+    }
+
+    recorder.stop()
+  }
+
+  // Cleanup voice recording on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+      if (analyserIntervalRef.current) clearInterval(analyserIntervalRef.current)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.onstop = null
+        mediaRecorderRef.current.stop()
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop())
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {})
+      }
+    }
+  }, [])
+
+  const handleSend = async (
+    e?: React.FormEvent,
+    options?: { silent?: boolean; scheduleDate?: number }
+  ) => {
     if (e) e.preventDefault()
+    if (isRecordingVoice) return
+    setIsSendMenuOpen(false)
+
+    // Handle sending staged attachments (Feature 17)
+    if (stagedAttachments.length > 0) {
+      const itemsToSend = [...stagedAttachments]
+      const caption = inputText.trim()
+      const replyId = replyMessage?.id
+
+      setStagedAttachments([])
+      setInputText('')
+      setReplyMessage(null)
+
+      setUploadProgress({
+        isUploading: true,
+        percent: 5,
+        fileName: itemsToSend[0].name,
+      })
+
+      try {
+        for (let i = 0; i < itemsToSend.length; i++) {
+          const item = itemsToSend[i]
+          const fileCaption = i === 0 ? caption : undefined
+          if (onSendMedia) {
+            await onSendMedia(item.path, {
+              caption: fileCaption,
+              replyToMsgId: replyId,
+              forceDocument: item.type === 'document',
+              silent: options?.silent,
+              scheduleDate: options?.scheduleDate,
+            })
+          } else if (chat?.accountId && chat?.id && window.guidegram?.sendMedia) {
+            await window.guidegram.sendMedia(chat.accountId, chat.id, item.path, {
+              caption: fileCaption,
+              replyToMsgId: replyId,
+              forceDocument: item.type === 'document',
+              silent: options?.silent,
+              scheduleDate: options?.scheduleDate,
+            })
+          }
+        }
+        if (options?.silent) showToast('Attachment sent without sound')
+        else if (options?.scheduleDate) showToast('Attachment scheduled')
+      } catch (err: any) {
+        console.error('Failed to send attachments:', err)
+        showToast(`Failed to send attachment: ${err.message || err}`)
+      } finally {
+        setUploadProgress({ isUploading: false, percent: 0 })
+      }
+      return
+    }
+
+    // Handle standard text message (Feature 15 & 16)
     if (!inputText.trim()) return
-    onSendMessage(inputText.trim(), replyMessage?.id)
+    onSendMessage(inputText.trim(), replyMessage?.id, options)
+    if (options?.silent) {
+      showToast('Message sent without sound')
+    } else if (options?.scheduleDate) {
+      showToast(`Message scheduled for ${new Date(options.scheduleDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`)
+    }
     setInputText('')
     setReplyMessage(null)
   }
@@ -766,6 +1078,27 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
    */
   const renderFormattedText = (text: string, entities?: MessageEntityItem[]) => {
     if (!text) return null
+
+    // Helper to highlight active search query in plain text
+    const highlightQuery = (val: string, keyBase: string): React.ReactNode => {
+      if (!searchQuery.trim() || !val) return val
+      const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(${escaped})`, 'gi')
+      const segments = val.split(regex)
+      if (segments.length <= 1) return val
+      return segments.map((seg, sIdx) =>
+        seg.toLowerCase() === searchQuery.toLowerCase() ? (
+          <mark
+            key={`${keyBase}-hl-${sIdx}`}
+            className="bg-amber-400/40 text-amber-100 rounded px-0.5 font-bold shadow-sm"
+          >
+            {seg}
+          </mark>
+        ) : (
+          seg
+        )
+      )
+    }
 
     // Helper to render inline tokens (links, mentions, code, bold, italic)
     const renderInlineTokens = (str: string, keyPrefix: string) => {
@@ -810,7 +1143,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
           return (
             <strong key={partKey} className="font-bold text-white">
-              {part.slice(2, -2)}
+              {highlightQuery(part.slice(2, -2), partKey)}
             </strong>
           )
         }
@@ -819,7 +1152,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         if (part.startsWith('__') && part.endsWith('__') && part.length > 4) {
           return (
             <em key={partKey} className="italic text-gray-200">
-              {part.slice(2, -2)}
+              {highlightQuery(part.slice(2, -2), partKey)}
             </em>
           )
         }
@@ -828,7 +1161,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         if (part.startsWith('~~') && part.endsWith('~~') && part.length > 4) {
           return (
             <span key={partKey} className="line-through text-gray-400">
-              {part.slice(2, -2)}
+              {highlightQuery(part.slice(2, -2), partKey)}
             </span>
           )
         }
@@ -978,7 +1311,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        return <span key={partKey}>{part}</span>
+        return <span key={partKey}>{highlightQuery(part, partKey)}</span>
       })
     }
 
@@ -1552,15 +1885,16 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         </div>
       )}
 
-      {/* 2. Messages Feed */}
-      <div
-        ref={messagesContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 relative"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setSelectedMessage(null)
-        }}
-      >
+      {/* 2. Messages Feed Outer Relative Wrapper */}
+      <div className="flex-1 min-h-0 relative flex flex-col">
+        <div
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedMessage(null)
+          }}
+        >
         {filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-xs text-gray-500 gap-2">
             <div>
@@ -1605,6 +1939,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   }
                   setSelectedMessage(isSelected ? null : msg)
                 }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  setReplyMessage(msg)
+                  setTimeout(() => textareaRef.current?.focus(), 50)
+                }}
                 className={`flex flex-col group transition-all select-text ${
                   msg.isOutgoing ? 'items-end' : 'items-start'
                 }`}
@@ -1613,6 +1952,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   {/* Outgoing Message Action Bar */}
                   {msg.isOutgoing && (
                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md">
+                      {/* Reply Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setReplyMessage(msg)
+                          setTimeout(() => textareaRef.current?.focus(), 50)
+                        }}
+                        title="Reply to message"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-primary-400 hover:bg-dark-750 transition-colors cursor-pointer"
+                      >
+                        <Reply className="w-3.5 h-3.5" />
+                      </button>
                       {quickForwardToSaved && onQuickForwardToSaved && (
                         <button
                           type="button"
@@ -1885,6 +2237,19 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   {/* Incoming Message Action Bar */}
                   {!msg.isOutgoing && (
                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md">
+                      {/* Reply Button (Feature 15) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setReplyMessage(msg)
+                          setTimeout(() => textareaRef.current?.focus(), 50)
+                        }}
+                        title="Reply to message"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-primary-400 hover:bg-dark-750 transition-colors cursor-pointer"
+                      >
+                        <Reply className="w-3.5 h-3.5" />
+                      </button>
                       {quickForwardToSaved && onQuickForwardToSaved && (
                         <button
                           type="button"
@@ -1970,57 +2335,155 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           })
         )}
         <div ref={messagesEndRef} />
-
-        {/* Floating Scroll to Bottom Button (↓) with Unread Count */}
-        {showScrollBottom && (
-          <button
-            type="button"
-            onClick={handleScrollToBottom}
-            className="absolute bottom-20 right-6 z-30 p-2.5 rounded-full bg-dark-800/95 hover:bg-dark-750 text-gray-300 hover:text-white border border-white/10 shadow-2xl backdrop-blur-md transition-all flex items-center justify-center group cursor-pointer animate-in fade-in zoom-in-95 duration-150"
-            title="Scroll to bottom"
-          >
-            <ChevronDown className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
-            {unreadScrollCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full bg-primary-500 text-white text-[10px] font-bold shadow-glow">
-                {unreadScrollCount}
-              </span>
-            )}
-          </button>
-        )}
       </div>
+
+      {/* Floating Scroll to Bottom Button (↓) with Unread Count (Pinned to Outer Wrapper) */}
+      {showScrollBottom && (
+        <button
+          type="button"
+          onClick={handleScrollToBottom}
+          className="absolute bottom-4 right-5 z-30 w-11 h-11 rounded-full bg-dark-800/95 hover:bg-dark-750 text-gray-200 hover:text-white border border-white/10 shadow-2xl backdrop-blur-md transition-all flex items-center justify-center group cursor-pointer animate-in fade-in zoom-in-90 duration-150 active:scale-95"
+          title="Scroll to bottom"
+        >
+          <ChevronDown className="w-5 h-5 group-hover:translate-y-0.5 transition-transform text-gray-300 group-hover:text-white" />
+          {unreadScrollCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-primary-500 text-white text-[10px] font-bold flex items-center justify-center shadow-glow border-2 border-dark-900">
+              {unreadScrollCount > 99 ? '99+' : unreadScrollCount}
+            </span>
+          )}
+        </button>
+      )}
+    </div>
 
       {/* 3. Input Box OR Broadcast Channel Bottom Action Bar */}
       <div className="shrink-0 bg-dark-850/90 border-t border-white/5 backdrop-blur-md relative">
-        {/* Docked Reply Bar above Input */}
+        {/* Docked Reply Bar above Input (Feature 15) */}
         {replyMessage && (
-          <div className="px-4 py-2 bg-dark-800/80 border-b border-white/5 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-2 duration-150">
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <div className="w-1 self-stretch bg-primary-500 rounded-full" />
+          <div className="px-4 py-2 bg-dark-800/90 border-b border-white/10 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-2 duration-150 backdrop-blur-md">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              {/* Vertical Accent Line */}
+              <div className="w-1 self-stretch bg-primary-500 rounded-full shrink-0" />
+
+              {/* Mini Thumbnail or Media Icon */}
+              {(() => {
+                const thumbUrl = downloadedMedia[`${replyMessage.id}_thumb`] || downloadedMedia[replyMessage.id] || replyMessage.mediaUrl
+                if (replyMessage.mediaType === 'photo' || replyMessage.mediaType === 'video' || replyMessage.mediaType === 'sticker') {
+                  if (!thumbUrl) requestMediaDownload(replyMessage, true)
+                  return (
+                    <div className="w-9 h-9 rounded-lg overflow-hidden bg-black/40 border border-white/10 shrink-0 flex items-center justify-center">
+                      {thumbUrl ? (
+                        <img src={thumbUrl} alt="Reply preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-3.5 h-3.5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                      )}
+                    </div>
+                  )
+                }
+                if (replyMessage.isVoice || replyMessage.mediaType === 'voice') {
+                  return (
+                    <div className="w-9 h-9 rounded-lg bg-accent-violet/15 text-accent-violet border border-accent-violet/20 shrink-0 flex items-center justify-center">
+                      <Mic className="w-4 h-4" />
+                    </div>
+                  )
+                }
+                if (replyMessage.mediaType === 'document') {
+                  return (
+                    <div className="w-9 h-9 rounded-lg bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/20 shrink-0 flex items-center justify-center">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                  )
+                }
+                return null
+              })()}
+
+              {/* Author & Text Snippet */}
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-semibold text-primary-400 truncate flex items-center gap-1">
-                  <Reply className="w-3 h-3" />
+                <div className="text-[11px] font-semibold text-primary-400 truncate flex items-center gap-1.5">
+                  <Reply className="w-3 h-3 shrink-0" />
                   <span>Reply to {replyMessage.senderName || (replyMessage.isOutgoing ? 'You' : 'User')}</span>
                 </div>
                 <div
                   dir={isRTL(replyMessage.text) ? 'rtl' : 'ltr'}
-                  className="text-xs text-gray-300 truncate"
+                  className="text-xs text-gray-300 truncate font-normal leading-normal"
                 >
-                  {replyMessage.text || (replyMessage.mediaType ? `[${replyMessage.mediaType}]` : 'Media message')}
+                  {replyMessage.text ? (
+                    replyMessage.text
+                  ) : replyMessage.mediaType === 'photo' ? (
+                    'Photo'
+                  ) : replyMessage.mediaType === 'video' ? (
+                    'Video'
+                  ) : replyMessage.isVoice || replyMessage.mediaType === 'voice' ? (
+                    `Voice message${replyMessage.mediaDuration ? ` (${formatDuration(replyMessage.mediaDuration)})` : ''}`
+                  ) : replyMessage.mediaFileName ? (
+                    replyMessage.mediaFileName
+                  ) : (
+                    'Media message'
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* Cancel Dismiss Button */}
             <button
               type="button"
               onClick={() => setReplyMessage(null)}
-              className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
-              title="Cancel reply"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer shrink-0"
+              title="Cancel reply (Esc)"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        {/* Hidden File / Image Native Pickers */}
+        {/* Attachment Staging Tray (Feature 17) */}
+        {stagedAttachments.length > 0 && (
+          <div className="px-4 py-2 bg-dark-800/90 border-b border-white/5 flex items-center gap-2 overflow-x-auto">
+            {stagedAttachments.map((item, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-dark-750 border border-white/10 text-xs text-gray-200 shrink-0 group animate-in fade-in"
+              >
+                {item.type === 'media' ? (
+                  <Image className="w-3.5 h-3.5 text-primary-400 shrink-0" />
+                ) : item.type === 'audio' ? (
+                  <Music className="w-3.5 h-3.5 text-accent-violet shrink-0" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5 text-accent-cyan shrink-0" />
+                )}
+                <span className="max-w-[140px] truncate font-medium">{item.name}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveStagedAttachment(idx)}
+                  className="p-0.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Remove attachment"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Upload Progress Bar (Feature 17) */}
+        {uploadProgress.isUploading && (
+          <div className="px-4 py-2 bg-primary-950/40 border-b border-primary-500/20 flex items-center gap-3 animate-in fade-in">
+            <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin shrink-0" />
+            <div className="flex-1">
+              <div className="flex justify-between text-[11px] text-gray-300 font-medium mb-1">
+                <span>Uploading {uploadProgress.fileName || 'file'}...</span>
+                <span>{uploadProgress.percent}%</span>
+              </div>
+              <div className="w-full bg-dark-900 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-primary-500 h-full transition-all duration-150 rounded-full shadow-glow"
+                  style={{ width: `${Math.min(100, Math.max(5, uploadProgress.percent))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Hidden File / Image / Audio Native Pickers (Fallback) */}
         <input
           type="file"
           ref={fileInputRef}
@@ -2029,7 +2492,13 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           onChange={(e) => {
             const files = e.target.files
             if (files && files.length > 0) {
-              showToast(`Selected ${files.length} document(s) for upload`)
+              const newItems: StagedAttachment[] = Array.from(files).map((f) => ({
+                path: (f as any).path || f.name,
+                name: f.name,
+                size: f.size,
+                type: 'document',
+              }))
+              setStagedAttachments((prev) => [...prev, ...newItems])
             }
             setIsAttachMenuOpen(false)
           }}
@@ -2043,7 +2512,33 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           onChange={(e) => {
             const files = e.target.files
             if (files && files.length > 0) {
-              showToast(`Selected ${files.length} media file(s) for upload`)
+              const newItems: StagedAttachment[] = Array.from(files).map((f) => ({
+                path: (f as any).path || f.name,
+                name: f.name,
+                size: f.size,
+                type: 'media',
+              }))
+              setStagedAttachments((prev) => [...prev, ...newItems])
+            }
+            setIsAttachMenuOpen(false)
+          }}
+        />
+        <input
+          type="file"
+          ref={audioInputRef}
+          accept="audio/*"
+          className="hidden"
+          multiple
+          onChange={(e) => {
+            const files = e.target.files
+            if (files && files.length > 0) {
+              const newItems: StagedAttachment[] = Array.from(files).map((f) => ({
+                path: (f as any).path || f.name,
+                name: f.name,
+                size: f.size,
+                type: 'audio',
+              }))
+              setStagedAttachments((prev) => [...prev, ...newItems])
             }
             setIsAttachMenuOpen(false)
           }}
@@ -2075,198 +2570,271 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           </div>
         ) : (
           <div className="p-3 relative">
-            {/* Attachment Popover Menu */}
+            {/* Attachment Popover Menu (Feature 17) */}
             {isAttachMenuOpen && (
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="absolute bottom-full left-4 mb-2 w-48 bg-dark-800/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100 z-40 text-xs select-none"
+                className="absolute bottom-full left-4 mb-2 w-52 bg-dark-800/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100 z-40 text-xs select-none"
               >
                 <button
                   type="button"
-                  onClick={() => {
-                    imageInputRef.current?.click()
-                    setIsAttachMenuOpen(false)
-                  }}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                  onClick={() => handlePickAttachment('media')}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer group"
                 >
-                  <Image className="w-4 h-4 text-primary-400" />
-                  <span>Photo or Video</span>
+                  <div className="w-7 h-7 rounded-lg bg-primary-500/15 text-primary-400 flex items-center justify-center shrink-0 group-hover:bg-primary-500/25 transition-colors">
+                    <Image className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-gray-100">Photos & Videos</span>
+                    <span className="text-[10px] text-gray-400">JPG, PNG, GIF, MP4</span>
+                  </div>
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    fileInputRef.current?.click()
-                    setIsAttachMenuOpen(false)
-                  }}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                  onClick={() => handlePickAttachment('document')}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer group"
                 >
-                  <FileUp className="w-4 h-4 text-accent-cyan" />
-                  <span>Document / File</span>
+                  <div className="w-7 h-7 rounded-lg bg-accent-cyan/15 text-accent-cyan flex items-center justify-center shrink-0 group-hover:bg-accent-cyan/25 transition-colors">
+                    <FileUp className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-gray-100">Files & Documents</span>
+                    <span className="text-[10px] text-gray-400">Any file up to 2GB</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePickAttachment('audio')}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer group"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-accent-violet/15 text-accent-violet flex items-center justify-center shrink-0 group-hover:bg-accent-violet/25 transition-colors">
+                    <Music className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-gray-100">Audio</span>
+                    <span className="text-[10px] text-gray-400">MP3, M4A, FLAC, WAV</span>
+                  </div>
                 </button>
               </div>
             )}
 
-            <form onSubmit={handleSend} className="flex items-end gap-2">
-              {/* Paperclip Button with Attachment Popover Toggle */}
-              <button
-                type="button"
-                onClick={() => setIsAttachMenuOpen((prev) => !prev)}
-                className={`p-2.5 rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  isAttachMenuOpen
-                    ? 'text-primary-400 bg-dark-750'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-dark-800'
-                }`}
-                title="Attach Photo, Video or Document"
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
+            {isRecordingVoice ? (
+              <div className="flex items-center gap-3 w-full bg-dark-800/95 border border-red-500/30 rounded-2xl px-4 py-2 shadow-lg animate-in fade-in slide-in-from-bottom-1 duration-150">
+                {/* Pulsing red recording indicator & duration */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                  </span>
+                  <span className="font-mono text-xs font-semibold text-red-400 tracking-wider">
+                    {formatDuration(recordingDuration)}
+                  </span>
+                </div>
 
-              {/* Multi-line Auto-expanding Textarea with Telegram Desktop Shortcuts */}
-              <div className="flex-1 bg-dark-800 border border-white/5 focus-within:border-primary-500/50 rounded-2xl px-3.5 py-2 transition-colors flex items-center relative">
-                {/* Floating Contextual Formatting Toolbar (Telegram Desktop v7.0+) */}
-                {formatBar.visible && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-full left-0 mb-2 bg-dark-850/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md px-2 py-1 flex items-center gap-1 z-40 animate-in fade-in zoom-in-95 duration-100 select-none text-xs"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => applyTextFormat('**')}
-                      className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
-                      title="Bold (Ctrl+B)"
-                    >
-                      <Bold className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyTextFormat('__')}
-                      className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
-                      title="Italic (Ctrl+I)"
-                    >
-                      <Italic className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyTextFormat('`')}
-                      className="p-1.5 rounded-lg text-gray-300 hover:text-accent-cyan hover:bg-white/10 transition-colors"
-                      title="Monospace Code"
-                    >
-                      <CodeIcon className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyTextFormat('~~')}
-                      className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
-                      title="Strikethrough"
-                    >
-                      <Strikethrough className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyTextFormat('||')}
-                      className="p-1.5 rounded-lg text-gray-300 hover:text-amber-300 hover:bg-white/10 transition-colors"
-                      title="Spoiler"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyTextFormat((s) => `> ${s}\n`)}
-                      className="p-1.5 rounded-lg text-gray-300 hover:text-primary-400 hover:bg-white/10 transition-colors"
-                      title="Quote"
-                    >
-                      <Quote className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = window.prompt('Enter link URL (https://...):')
-                        if (url && url.trim()) {
-                          applyTextFormat((s) => `[${s}](${url.trim()})`)
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-gray-300 hover:text-accent-cyan hover:bg-white/10 transition-colors"
-                      title="Insert Link"
-                    >
-                      <LinkIcon className="w-3.5 h-3.5" />
-                    </button>
-                    <div className="w-px h-4 bg-white/10 mx-0.5" />
-                    <button
-                      type="button"
-                      onClick={() => setFormatBar({ visible: false, start: 0, end: 0, selectedText: '' })}
-                      className="p-1 text-gray-400 hover:text-white rounded-lg transition-colors"
-                      title="Close"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
+                {/* Live audio level equalizer bars */}
+                <div className="flex-1 flex items-center gap-1 h-6 px-3 overflow-hidden justify-center">
+                  {recordingWaveform.map((lvl, idx) => (
+                    <div
+                      key={idx}
+                      style={{ height: `${Math.max(15, Math.min(100, lvl))}%` }}
+                      className="w-1 bg-red-400/80 rounded-full transition-all duration-75"
+                    />
+                  ))}
+                </div>
 
-                <textarea
-                  ref={textareaRef}
-                  dir={isRTL(inputText) ? 'rtl' : 'ltr'}
-                  placeholder="Write a message... (Enter to send, Shift+Enter for newline, Alt+F to forward)"
-                  value={inputText}
-                  rows={1}
-                  style={{ maxHeight: '160px' }}
-                  onChange={(e) => {
-                    setInputText(e.target.value)
-                    // Auto grow height
-                    e.target.style.height = 'auto'
-                    e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
-                  }}
-                  onSelect={handleTextareaSelect}
-                  onKeyUp={handleTextareaSelect}
-                  onMouseUp={handleTextareaSelect}
-                  onKeyDown={(e) => {
-                    // Keyboard shortcuts for formatting (Ctrl+B, Ctrl+I, Ctrl+K)
-                    if (e.ctrlKey || e.metaKey) {
-                      if (e.key === 'b' || e.key === 'B') {
-                        e.preventDefault()
-                        applyTextFormat('**')
-                        return
-                      }
-                      if (e.key === 'i' || e.key === 'I') {
-                        e.preventDefault()
-                        applyTextFormat('__')
-                        return
-                      }
-                      if (e.key === 'u' || e.key === 'U') {
-                        e.preventDefault()
-                        applyTextFormat('__')
-                        return
-                      }
-                    }
-
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSend()
-                    }
-                  }}
-                  className="w-full bg-transparent text-xs text-gray-100 placeholder-gray-500 resize-none focus:outline-none leading-relaxed"
-                />
-              </div>
-
-              {/* Send or Voice Record Trigger */}
-              {inputText.trim() ? (
-                <button
-                  type="submit"
-                  className="p-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-2xl transition-all shadow-glow flex items-center justify-center cursor-pointer shrink-0"
-                  title="Send message (Enter)"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              ) : (
+                {/* Cancel button */}
                 <button
                   type="button"
-                  onClick={() => showToast('Hold to record voice message (Audio device active)')}
-                  className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-800 rounded-2xl transition-colors cursor-pointer shrink-0"
-                  title="Voice Message"
+                  onClick={handleCancelRecording}
+                  disabled={isUploadingVoice}
+                  className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors cursor-pointer shrink-0"
+                  title="Cancel recording"
                 >
-                  <Mic className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
-              )}
-            </form>
+
+                {/* Send button */}
+                <button
+                  type="button"
+                  onClick={handleStopAndSendRecording}
+                  disabled={isUploadingVoice}
+                  className="p-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl transition-all shadow-glow flex items-center justify-center cursor-pointer shrink-0"
+                  title="Send voice message"
+                >
+                  {isUploadingVoice ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSend} className="flex items-end gap-2">
+                {/* Paperclip Button with Attachment Popover Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setIsAttachMenuOpen((prev) => !prev)}
+                  className={`p-2.5 rounded-xl transition-colors cursor-pointer shrink-0 ${
+                    isAttachMenuOpen
+                      ? 'text-primary-400 bg-dark-750'
+                      : 'text-gray-400 hover:text-gray-200 hover:bg-dark-800'
+                  }`}
+                  title="Attach Photo, Video or Document"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+
+                {/* Multi-line Auto-expanding Textarea with Telegram Desktop Shortcuts */}
+                <div className="flex-1 bg-dark-800 border border-white/5 focus-within:border-primary-500/50 rounded-2xl px-3.5 py-2 transition-colors flex items-center relative">
+                  {/* Floating Contextual Formatting Toolbar (Telegram Desktop v7.0+) */}
+                  {formatBar.visible && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute bottom-full left-0 mb-2 bg-dark-850/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md px-2 py-1 flex items-center gap-1 z-40 animate-in fade-in zoom-in-95 duration-100 select-none text-xs"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => applyTextFormat('**')}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                        title="Bold (Ctrl+B)"
+                      >
+                        <Bold className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyTextFormat('__')}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                        title="Italic (Ctrl+I)"
+                      >
+                        <Italic className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyTextFormat('`')}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-accent-cyan hover:bg-white/10 transition-colors"
+                        title="Monospace Code"
+                      >
+                        <CodeIcon className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyTextFormat('~~')}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                        title="Strikethrough"
+                      >
+                        <Strikethrough className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyTextFormat('||')}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-amber-300 hover:bg-white/10 transition-colors"
+                        title="Spoiler"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyTextFormat((s) => `> ${s}\n`)}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-primary-400 hover:bg-white/10 transition-colors"
+                        title="Quote"
+                      >
+                        <Quote className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = window.prompt('Enter link URL (https://...):')
+                          if (url && url.trim()) {
+                            applyTextFormat((s) => `[${s}](${url.trim()})`)
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-accent-cyan hover:bg-white/10 transition-colors"
+                        title="Insert Link"
+                      >
+                        <LinkIcon className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="w-px h-4 bg-white/10 mx-0.5" />
+                      <button
+                        type="button"
+                        onClick={() => setFormatBar({ visible: false, start: 0, end: 0, selectedText: '' })}
+                        className="p-1 text-gray-400 hover:text-white rounded-lg transition-colors"
+                        title="Close"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  <textarea
+                    ref={textareaRef}
+                    dir={isRTL(inputText) ? 'rtl' : 'ltr'}
+                    placeholder="Write a message... (Enter to send, Shift+Enter for newline, Alt+F to forward)"
+                    value={inputText}
+                    rows={1}
+                    style={{ maxHeight: '160px' }}
+                    onChange={(e) => {
+                      setInputText(e.target.value)
+                    }}
+                    onSelect={handleTextareaSelect}
+                    onKeyUp={handleTextareaSelect}
+                    onMouseUp={handleTextareaSelect}
+                    onKeyDown={(e) => {
+                      // Keyboard shortcuts for formatting (Ctrl+B, Ctrl+I, Ctrl+K)
+                      if (e.ctrlKey || e.metaKey) {
+                        if (e.key === 'b' || e.key === 'B') {
+                          e.preventDefault()
+                          applyTextFormat('**')
+                          return
+                        }
+                        if (e.key === 'i' || e.key === 'I') {
+                          e.preventDefault()
+                          applyTextFormat('__')
+                          return
+                        }
+                        if (e.key === 'u' || e.key === 'U') {
+                          e.preventDefault()
+                          applyTextFormat('__')
+                          return
+                        }
+                      }
+
+                      if (e.key === 'Escape' && replyMessage) {
+                        e.preventDefault()
+                        setReplyMessage(null)
+                        return
+                      }
+
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        if ((e.nativeEvent as any).isComposing) return
+                        e.preventDefault()
+                        handleSend()
+                      }
+                    }}
+                    className="w-full bg-transparent text-xs text-gray-100 placeholder-gray-500 resize-none focus:outline-none leading-relaxed"
+                  />
+                </div>
+
+                {/* Send or Voice Record Trigger */}
+                {inputText.trim() || stagedAttachments.length > 0 ? (
+                  <button
+                    type="submit"
+                    className="p-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-2xl transition-all shadow-glow flex items-center justify-center cursor-pointer shrink-0"
+                    title="Send message (Enter)"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartRecording}
+                    className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-800 rounded-2xl transition-colors cursor-pointer shrink-0"
+                    title="Record Voice Message"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                )}
+              </form>
+            )}
           </div>
         )}
       </div>

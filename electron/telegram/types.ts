@@ -131,6 +131,8 @@ export interface MessageItem {
   entities?: MessageEntityItem[]
   postAuthor?: string
   senderRank?: string
+  ttlSeconds?: number
+  isSilent?: boolean
   replyMarkup?: {
     rows: InlineButton[][]
   }
@@ -233,6 +235,12 @@ export interface OpenFileDialogResult {
   filePaths: string[]
 }
 
+export interface SendMessageOptions {
+  replyToMsgId?: number
+  silent?: boolean
+  scheduleDate?: number // unix timestamp in milliseconds
+}
+
 export interface SendMediaOptions {
   caption?: string
   replyToMsgId?: number
@@ -240,6 +248,8 @@ export interface SendMediaOptions {
   duration?: number
   forceDocument?: boolean
   uploadId?: string
+  silent?: boolean
+  scheduleDate?: number // unix timestamp in milliseconds
 }
 
 export interface UploadProgressPayload {
@@ -249,3 +259,4 @@ export interface UploadProgressPayload {
   progress: number
   filePath?: string
 }
+

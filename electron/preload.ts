@@ -11,6 +11,7 @@ import {
   OpenFileDialogOptions,
   OpenFileDialogResult,
   SendMediaOptions,
+  SendMessageOptions,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -46,8 +47,14 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:get-dialogs', { accountId }),
   getMessages: (accountId: string, chatId: string, limit?: number) =>
     ipcRenderer.invoke('telegram:get-messages', { accountId, chatId, limit }),
-  sendMessage: (accountId: string, chatId: string, text: string, replyToMsgId?: number) =>
-    ipcRenderer.invoke('telegram:send-message', { accountId, chatId, text, replyToMsgId }),
+  sendMessage: (
+    accountId: string,
+    chatId: string,
+    text: string,
+    replyToMsgId?: number,
+    options?: SendMessageOptions
+  ): Promise<MessageItem> =>
+    ipcRenderer.invoke('telegram:send-message', { accountId, chatId, text, replyToMsgId, options }),
   sendMedia: (
     accountId: string,
     chatId: string,
@@ -127,7 +134,9 @@ const guidegramAPI = {
   on: (channel: string, callback: (...args: any[]) => void) => {
     const subscription = (_event: any, ...args: any[]) => callback(...args)
     ipcRenderer.on(channel, subscription)
-    return () => ipcRenderer.removeListener(channel, subscription)
+    return () => {
+      ipcRenderer.removeListener(channel, subscription)
+    }
   },
 }
 

@@ -467,9 +467,9 @@ function setupIpcHandlers() {
     }
   })
 
-  ipcMain.handle('telegram:send-message', async (_event, { accountId, chatId, text, replyToMsgId }) => {
+  ipcMain.handle('telegram:send-message', async (_event, { accountId, chatId, text, replyToMsgId, options }) => {
     try {
-      return await accountManager.sendMessage(accountId, chatId, text, replyToMsgId)
+      return await accountManager.sendMessage(accountId, chatId, text, replyToMsgId, options)
     } catch (err: any) {
       Logger.error(`[IPC] sendMessage failed:`, err)
       throw err

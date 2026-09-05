@@ -19,6 +19,7 @@ import type {
   OpenFileDialogOptions,
   OpenFileDialogResult,
   SendMediaOptions,
+  SendMessageOptions,
   UploadProgressPayload,
 } from '../../electron/telegram/types'
 
@@ -48,5 +49,6 @@ export type {
   OpenFileDialogOptions,
   OpenFileDialogResult,
   SendMediaOptions,
+  SendMessageOptions,
   UploadProgressPayload,
 }

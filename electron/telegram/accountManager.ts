@@ -20,6 +20,8 @@ import {
   MessageEntityItem,
   PinnedMessageItem,
   MessageReactionItem,
+  SendMessageOptions,
+  SendMediaOptions,
 } from './types'
 
 export interface ClientHolder {
@@ -1242,20 +1244,28 @@ export class AccountManager {
   }
 
   /**
-   * Send a text message with optional replyToMsgId
+   * Send a text message with optional replyToMsgId, silent, and scheduled options
    */
   public async sendMessage(
     accountId: string,
     chatId: string,
     text: string,
-    replyToMsgId?: number
+    replyToMsgId?: number,
+    options?: SendMessageOptions
   ): Promise<MessageItem> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
 
     const sendParams: any = { message: text }
-    if (replyToMsgId) {
-      sendParams.replyTo = replyToMsgId
+    const actualReplyTo = options?.replyToMsgId ?? replyToMsgId
+    if (actualReplyTo) {
+      sendParams.replyTo = actualReplyTo
+    }
+    if (options?.silent) {
+      sendParams.silent = true
+    }
+    if (options?.scheduleDate) {
+      sendParams.schedule = Math.floor(options.scheduleDate / 1000)
     }
 
     const sent = await holder.client.sendMessage(chatId, sendParams)
@@ -1267,7 +1277,8 @@ export class AccountManager {
       text: sent.message,
       date: sent.date * 1000,
       isOutgoing: true,
-      replyToMsgId,
+      replyToMsgId: actualReplyTo,
+      isSilent: options?.silent,
     }
   }
 
@@ -1278,14 +1289,7 @@ export class AccountManager {
     accountId: string,
     chatId: string,
     filePath: string,
-    options?: {
-      caption?: string
-      replyToMsgId?: number
-      isVoice?: boolean
-      duration?: number
-      forceDocument?: boolean
-      uploadId?: string
-    }
+    options?: SendMediaOptions
   ): Promise<MessageItem> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
@@ -1301,6 +1305,8 @@ export class AccountManager {
       caption: options?.caption || '',
       replyTo: options?.replyToMsgId,
       forceDocument: options?.forceDocument ?? false,
+      silent: options?.silent ?? false,
+      schedule: options?.scheduleDate ? Math.floor(options.scheduleDate / 1000) : undefined,
       workers: 2,
       progressCallback: (progress: number) => {
         const percent = Math.min(100, Math.max(0, Math.round(progress * 100)))

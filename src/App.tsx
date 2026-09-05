@@ -13,7 +13,15 @@ import { UnifiedInbox } from './components/UnifiedInbox'
 import { MainMenuDrawer } from './components/MainMenuDrawer'
 import { CloseConfirmModal } from './components/CloseConfirmModal'
 import { UpdateBanner } from './components/UpdateBanner'
-import { AccountInfo, DialogItem, MessageItem, AppConfig, UpdateInfo } from './types/telegram'
+import {
+  AccountInfo,
+  DialogItem,
+  MessageItem,
+  AppConfig,
+  UpdateInfo,
+  SendMessageOptions,
+  SendMediaOptions,
+} from './types/telegram'
 import logoImg from './assets/logo.png'
 
 export const App: React.FC = () => {
@@ -242,20 +250,32 @@ export const App: React.FC = () => {
     }
   }
 
-  const handleSendMessage = async (text: string, replyToMsgId?: number) => {
+  const handleSendMessage = async (
+    text: string,
+    replyToMsgId?: number,
+    options?: SendMessageOptions
+  ) => {
     if (!activeAccountId || !activeChatId || !window.guidegram) return
     try {
-      const sent = await window.guidegram.sendMessage(activeAccountId, activeChatId, text, replyToMsgId)
-      const repliedMsg = replyToMsgId
-        ? (messagesByChat[activeChatId] || []).find((m) => m.id === replyToMsgId)
+      const sent = await window.guidegram.sendMessage(
+        activeAccountId,
+        activeChatId,
+        text,
+        replyToMsgId,
+        options
+      )
+      const actualReplyTo = options?.replyToMsgId ?? replyToMsgId
+      const repliedMsg = actualReplyTo
+        ? (messagesByChat[activeChatId] || []).find((m) => m.id === actualReplyTo)
         : undefined
 
       const enrichedSent: MessageItem = {
         ...sent,
-        replyToMsgId,
-        replyTo: replyToMsgId
+        replyToMsgId: actualReplyTo,
+        isSilent: options?.silent,
+        replyTo: actualReplyTo
           ? {
-              replyToMsgId,
+              replyToMsgId: actualReplyTo,
               senderName: repliedMsg?.senderName || (repliedMsg?.isOutgoing ? 'You' : 'User'),
               text: repliedMsg?.text || (repliedMsg?.mediaType ? `[${repliedMsg.mediaType}]` : undefined),
             }
@@ -268,18 +288,13 @@ export const App: React.FC = () => {
       }))
     } catch (err) {
       console.error('Failed to send message:', err)
+      throw err
     }
   }
 
   const handleSendMedia = async (
     filePath: string,
-    options?: {
-      caption?: string
-      replyToMsgId?: number
-      isVoice?: boolean
-      duration?: number
-      forceDocument?: boolean
-    }
+    options?: SendMediaOptions
   ) => {
     if (!activeAccountId || !activeChatId || !window.guidegram) return
     try {
@@ -291,6 +306,7 @@ export const App: React.FC = () => {
       const enrichedSent: MessageItem = {
         ...sent,
         replyToMsgId: options?.replyToMsgId,
+        isSilent: options?.silent,
         replyTo: options?.replyToMsgId
           ? {
               replyToMsgId: options.replyToMsgId,
@@ -646,6 +662,7 @@ export const App: React.FC = () => {
             copyCallbackData={config?.copyCallbackData ?? true}
             suppressLinkWarning={config?.suppressLinkWarning ?? false}
             onSendMessage={handleSendMessage}
+            onSendMedia={handleSendMedia}
             onOpenDirectForward={(msg) => setForwardMessage(msg)}
             onQuickForwardToSaved={handleQuickForwardToSaved}
             onDeleteMessage={handleDeleteMessage}
