@@ -651,6 +651,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       setUnreadScrollCount(0)
       setReplyMessage(null)
       setStagedAttachments([])
+      setDismissedComposerUrl(null)
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
       }, 50)
@@ -1334,6 +1335,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         for (let i = 0; i < itemsToSend.length; i++) {
           const item = itemsToSend[i]
           const fileCaption = i === 0 ? caption : undefined
+          setUploadProgress({
+            isUploading: true,
+            percent: Math.round((i / itemsToSend.length) * 100),
+            fileName: itemsToSend.length > 1 ? `[${i + 1}/${itemsToSend.length}] ${item.name}` : item.name,
+          })
           if (onSendMedia) {
             await onSendMedia(item.path, {
               caption: fileCaption,
@@ -1373,6 +1379,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     }
     setInputText('')
     setReplyMessage(null)
+    setDismissedComposerUrl(null)
   }
 
   // Handle Send as .txt File (Telegram Desktop v6.7.8)
@@ -3968,9 +3975,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                           if (!memberSearchQuery.trim()) return true
                           const q = memberSearchQuery.toLowerCase()
                           return (
-                            p.name.toLowerCase().includes(q) ||
+                            (p.name || '').toLowerCase().includes(q) ||
                             (p.username && p.username.toLowerCase().includes(q)) ||
-                            p.id.includes(q)
+                            (p.id || '').includes(q)
                           )
                         })
                         .map((p) => (

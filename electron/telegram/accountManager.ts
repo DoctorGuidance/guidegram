@@ -1078,10 +1078,14 @@ export class AccountManager {
           })
         } catch (parallelErr) {
           Logger.warn(`[AccountManager] Parallel download failed for ${chatId}/${messageId}, falling back:`, parallelErr)
-          await holder.client.downloadMedia(msgs[0].media, {
+          await fs.promises.unlink(tempDiskPath).catch(() => {})
+          const fallbackRes = await holder.client.downloadMedia(msgs[0].media, {
             outputFile: tempDiskPath,
             thumb: undefined,
           })
+          if (Buffer.isBuffer(fallbackRes)) {
+            await fs.promises.writeFile(tempDiskPath, fallbackRes)
+          }
           if (fs.existsSync(tempDiskPath)) {
             await fs.promises.rename(tempDiskPath, diskPath)
           }
@@ -1610,19 +1614,25 @@ export class AccountManager {
     const entities = this.parseEntities(msg.entities)
     const cacheKey = `${accountId}_${chatId}_${msg.id}`
 
-    // Cache local media URL so the chat renders instantly without redownloading
-    this.mediaCache.set(cacheKey, `guidegram-media://${filePath}`)
-    this.mediaCache.set(`${cacheKey}_thumb`, `guidegram-media://${filePath}`)
-
-    // Clean up temporary voice files
-    if (options?.isVoice && filePath.includes('voice_')) {
-      fs.promises.unlink(filePath).catch(() => {})
+    // Preserve sent voice note in persistent media directory before cleaning up temp
+    let finalFilePath = filePath
+    if (options?.isVoice && (filePath.includes('voice_') || filePath.includes('temp'))) {
+      try {
+        const destPath = path.join(this.mediaDir, `${cacheKey}.ogg`)
+        await fs.promises.copyFile(filePath, destPath)
+        await fs.promises.unlink(filePath).catch(() => {})
+        finalFilePath = destPath
+      } catch (_) {}
     }
 
+    // Cache local media URL so the chat renders instantly without redownloading
+    this.mediaCache.set(cacheKey, `guidegram-media://${finalFilePath}`)
+    this.mediaCache.set(`${cacheKey}_thumb`, `guidegram-media://${finalFilePath}`)
+
     let mediaFileSize: number | undefined = mediaData.mediaFileSize
-    if (!mediaFileSize && fs.existsSync(filePath)) {
+    if (!mediaFileSize && fs.existsSync(finalFilePath)) {
       try {
-        mediaFileSize = fs.statSync(filePath).size
+        mediaFileSize = fs.statSync(finalFilePath).size
       } catch (_) {}
     }
 
@@ -1641,14 +1651,14 @@ export class AccountManager {
       isSticker: mediaData.isSticker,
       isRoundVideo: mediaData.isRoundVideo,
       voiceWaveform: mediaData.voiceWaveform,
-      mediaFileName: mediaData.mediaFileName || path.basename(filePath),
+      mediaFileName: mediaData.mediaFileName || path.basename(finalFilePath),
       mediaFileSize,
       mediaDuration: mediaData.mediaDuration || options?.duration,
       mediaWidth: mediaData.mediaWidth,
       mediaHeight: mediaData.mediaHeight,
       mediaMimeType: mediaData.mediaMimeType,
-      mediaFilePath: filePath,
-      mediaUrl: `guidegram-media://${filePath}`,
+      mediaFilePath: finalFilePath,
+      mediaUrl: `guidegram-media://${finalFilePath}`,
       entities,
     }
   }

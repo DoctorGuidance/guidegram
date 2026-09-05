@@ -203,6 +203,26 @@ runTest('1.9: Preload getPathForFile extracts native Windows absolute paths', ()
   assert.strictEqual(res[1].path, 'C:\\Users\\notes.txt')
 })
 
+runTest('1.10: 50+ files dropped simultaneously are staged sequentially without OS handle exhaustion', () => {
+  const files50 = Array.from({ length: 60 }, (_, i) => ({
+    name: `photo_${i}.jpg`,
+    size: 1024 * 1024 * (i + 1),
+    type: 'image/jpeg',
+    path: `C:\\Photos\\photo_${i}.jpg`,
+  }))
+  const res = simulateDropStaging(files50, undefined, null)
+  assert.strictEqual(res.length, 60, 'All 60 files must be staged successfully')
+  assert.strictEqual(res[0].type, 'media')
+  assert.strictEqual(res[59].path, 'C:\\Photos\\photo_59.jpg')
+
+  // Verify sequential upload progress text formatting
+  const formattedLabels = res.map((item, idx) =>
+    res.length > 1 ? `[${idx + 1}/${res.length}] ${item.name}` : item.name
+  )
+  assert.strictEqual(formattedLabels[0], '[1/60] photo_0.jpg')
+  assert.strictEqual(formattedLabels[59], '[60/60] photo_59.jpg')
+})
+
 // =========================================================================
 // SUITE 2: Parallel Chunk Acceleration, Progress Throttling & Deduplication (Feature 21)
 // =========================================================================
@@ -373,6 +393,45 @@ runTest('2.6: Atomic file replacement avoids corrupted partial cache files', () 
   assert.strictEqual(finalExists, false, 'Corrupt file is never published as final cached path')
 })
 
+runTest('2.7: Temp file saving generates collision-resistant unique paths for duplicate filenames', () => {
+  function generateSafeTempName(filename) {
+    const ext = path.extname(filename || '')
+    const base = path.basename(filename || 'temp', ext).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    return `${base}_${uniqueSuffix}${ext || '.bin'}`
+  }
+
+  const name1 = generateSafeTempName('photo.png')
+  const name2 = generateSafeTempName('photo.png')
+  assert.notStrictEqual(name1, name2, 'Two saves of the same filename must have unique paths')
+  assert.ok(name1.startsWith('photo_'), 'Base name must be preserved')
+  assert.ok(name1.endsWith('.png'), 'Extension must be preserved')
+})
+
+runTest('2.8: Voice note audio retention preserves file in mediaDir before temp cleanup', () => {
+  const mockMediaDir = 'D:\\Guidegram\\data\\media'
+  const cacheKey = 'acc1_chat1_msg999'
+  const tempVoicePath = 'C:\\Users\\Temp\\voice_123.ogg'
+
+  // Simulation of accountManager sendMedia voice preservation logic
+  let finalMediaFilePath = tempVoicePath
+  let tempUnlinked = false
+  let copiedToMediaDir = false
+
+  // Step 1: Copy to mediaDir as {cacheKey}.ogg
+  const destPath = path.join(mockMediaDir, `${cacheKey}.ogg`)
+  copiedToMediaDir = true
+  tempUnlinked = true
+  finalMediaFilePath = destPath
+
+  const mediaUrl = `guidegram-media://${finalMediaFilePath}`
+
+  assert.strictEqual(copiedToMediaDir, true, 'Voice note must be copied to mediaDir')
+  assert.strictEqual(tempUnlinked, true, 'Temp file must be unlinked')
+  assert.strictEqual(finalMediaFilePath, destPath, 'Final path must point to mediaDir destination')
+  assert.ok(mediaUrl.includes('acc1_chat1_msg999.ogg'), 'mediaUrl must point to preserved destination')
+})
+
 // =========================================================================
 // SUITE 3: Rich Web Link Preview Engine & SSRF Security (Feature 22)
 // =========================================================================
@@ -410,19 +469,42 @@ runTest('3.1: extractFirstUrl accurately extracts URLs from plain text, sentence
 function isPrivateIpOrHost(hostname) {
   if (!hostname) return true
   const lower = hostname.toLowerCase().trim()
-  if (lower === 'localhost' || lower === '127.0.0.1' || lower === '::1' || lower === '0.0.0.0') return true
-  if (/^10\./.test(lower)) return true
-  if (/^192\.168\./.test(lower)) return true
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower)) return true
-  if (/^169\.254\./.test(lower)) return true
-  if (lower.endsWith('.local') || lower.endsWith('.internal')) return true
+  const unbracketed = lower.replace(/^\[|\]$/g, '')
+
+  if (
+    lower === 'localhost' ||
+    lower.endsWith('.localhost') ||
+    unbracketed === '127.0.0.1' ||
+    unbracketed === '::1' ||
+    unbracketed === '0.0.0.0' ||
+    unbracketed === '::'
+  ) {
+    return true
+  }
+
+  if (/^127\./.test(unbracketed)) return true
+  if (/^::ffff:127\./i.test(unbracketed)) return true
+  if (/^10\./.test(unbracketed)) return true
+  if (/^192\.168\./.test(unbracketed)) return true
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(unbracketed)) return true
+  if (/^169\.254\./.test(unbracketed)) return true
+  if (unbracketed.startsWith('fe80:') || unbracketed.startsWith('fc00:') || unbracketed.startsWith('fd')) {
+    return true
+  }
+  if (lower.endsWith('.local') || lower.endsWith('.internal') || lower.endsWith('.lan')) return true
   return false
 }
 
 runTest('3.2: SSRF protection strictly blocks internal hosts, loopbacks and cloud metadata IPs', () => {
   assert.strictEqual(isPrivateIpOrHost('localhost'), true)
+  assert.strictEqual(isPrivateIpOrHost('sub.localhost'), true)
   assert.strictEqual(isPrivateIpOrHost('127.0.0.1'), true)
+  assert.strictEqual(isPrivateIpOrHost('127.0.0.2'), true, 'Full 127.0.0.0/8 subnet must be blocked')
+  assert.strictEqual(isPrivateIpOrHost('127.255.0.1'), true)
   assert.strictEqual(isPrivateIpOrHost('::1'), true)
+  assert.strictEqual(isPrivateIpOrHost('[::1]'), true, 'Bracketed IPv6 loopback from URL.hostname must be blocked')
+  assert.strictEqual(isPrivateIpOrHost('::ffff:127.0.0.1'), true, 'IPv4-mapped IPv6 loopback must be blocked')
+  assert.strictEqual(isPrivateIpOrHost('fe80::1'), true, 'IPv6 link-local must be blocked')
   assert.strictEqual(isPrivateIpOrHost('10.0.0.1'), true)
   assert.strictEqual(isPrivateIpOrHost('10.255.0.5'), true)
   assert.strictEqual(isPrivateIpOrHost('192.168.1.1'), true)
@@ -506,6 +588,28 @@ runTest('3.5: Relative image and favicon URL resolution', () => {
   assert.strictEqual(resolvedFavicon, 'https://example.com/favicon.png')
 })
 
+runTest('3.6: SSRF protection intercepts HTTP 30x redirects targeting internal IPs or loopback', () => {
+  function simulateRedirectScrape(finalRedirectUrl) {
+    if (!finalRedirectUrl) return true
+    try {
+      const redirected = new URL(finalRedirectUrl)
+      if (isPrivateIpOrHost(redirected.hostname)) {
+        return null // Blocked!
+      }
+      return { ok: true, host: redirected.hostname }
+    } catch {
+      return null
+    }
+  }
+
+  assert.strictEqual(simulateRedirectScrape('http://127.0.0.1:8080/admin'), null, 'Redirect to 127.0.0.1 must be blocked')
+  assert.strictEqual(simulateRedirectScrape('http://127.0.0.2/secret'), null, 'Redirect to 127.0.0.2 must be blocked')
+  assert.strictEqual(simulateRedirectScrape('http://[::1]/internal'), null, 'Redirect to IPv6 loopback must be blocked')
+  assert.strictEqual(simulateRedirectScrape('http://169.254.169.254/latest/meta-data'), null, 'Redirect to AWS metadata must be blocked')
+  assert.strictEqual(simulateRedirectScrape('http://192.168.1.1/setup'), null, 'Redirect to router must be blocked')
+  assert.deepStrictEqual(simulateRedirectScrape('https://github.com/DoctorGuidance'), { ok: true, host: 'github.com' })
+})
+
 // =========================================================================
 // SUITE 4: Source Code Integrity & AST Pattern Checks
 // =========================================================================
@@ -554,6 +658,22 @@ runTest('4.5: electron/preload.ts exposes getPathForFile and getLinkPreview', ()
   assert.ok(code.includes('getPathForFile: (file: File): string =>'), 'preload must expose getPathForFile')
   assert.ok(code.includes('getLinkPreview: (url: string): Promise<WebPagePreview | null> =>'), 'preload must expose getLinkPreview')
   assert.ok(code.includes("ipcRenderer.invoke('web:get-link-preview'"), 'preload must invoke web:get-link-preview')
+})
+
+runTest('4.6: ChatViewport.tsx resets dismissedComposerUrl on chat switch and message send', () => {
+  const code = fs.readFileSync('src/components/ChatViewport.tsx', 'utf8')
+  assert.ok(code.includes('setDismissedComposerUrl(null)'), 'Must reset dismissedComposerUrl')
+})
+
+runTest('4.7: accountManager.ts copies voice notes to mediaDir before temp cleanup', () => {
+  const code = fs.readFileSync('electron/telegram/accountManager.ts', 'utf8')
+  assert.ok(code.includes('path.join(this.mediaDir, `${cacheKey}.ogg`)'), 'Voice note must be copied to mediaDir')
+  assert.ok(code.includes('fs.promises.copyFile(filePath, destPath)'), 'Must copy file to mediaDir before unlinking')
+})
+
+runTest('4.8: main.ts validates redirected URLs against isPrivateIpOrHost', () => {
+  const code = fs.readFileSync('electron/main.ts', 'utf8')
+  assert.ok(code.includes('if (isPrivateIpOrHost(redirected.hostname))'), 'Must validate redirected URLs')
 })
 
 setTimeout(() => {

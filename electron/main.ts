@@ -332,12 +332,35 @@ const PREVIEW_CACHE_TTL = 1000 * 60 * 60 * 6 // 6 hours
 function isPrivateIpOrHost(hostname: string): boolean {
   if (!hostname) return true
   const lower = hostname.toLowerCase().trim()
-  if (lower === 'localhost' || lower === '127.0.0.1' || lower === '::1' || lower === '0.0.0.0') return true
-  if (/^10\./.test(lower)) return true
-  if (/^192\.168\./.test(lower)) return true
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower)) return true
-  if (/^169\.254\./.test(lower)) return true
-  if (lower.endsWith('.local') || lower.endsWith('.internal')) return true
+  const unbracketed = lower.replace(/^\[|\]$/g, '')
+
+  if (
+    lower === 'localhost' ||
+    lower.endsWith('.localhost') ||
+    unbracketed === '127.0.0.1' ||
+    unbracketed === '::1' ||
+    unbracketed === '0.0.0.0' ||
+    unbracketed === '::'
+  ) {
+    return true
+  }
+
+  // Loopback 127.0.0.0/8 range
+  if (/^127\./.test(unbracketed)) return true
+  // IPv4-mapped IPv6 loopback / private
+  if (/^::ffff:127\./i.test(unbracketed)) return true
+  // Private IPv4 ranges (RFC 1918 & RFC 3927)
+  if (/^10\./.test(unbracketed)) return true
+  if (/^192\.168\./.test(unbracketed)) return true
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(unbracketed)) return true
+  if (/^169\.254\./.test(unbracketed)) return true
+
+  // IPv6 Link-local and Unique Local Addresses (ULA)
+  if (unbracketed.startsWith('fe80:') || unbracketed.startsWith('fc00:') || unbracketed.startsWith('fd')) {
+    return true
+  }
+
+  if (lower.endsWith('.local') || lower.endsWith('.internal') || lower.endsWith('.lan')) return true
   return false
 }
 
@@ -407,6 +430,19 @@ async function scrapeLinkPreview(targetUrl: string): Promise<WebPagePreview | nu
       redirect: 'follow',
     })
     clearTimeout(timeoutId)
+
+    // Defend against SSRF via HTTP 30x redirects to internal IPs
+    if (res.url) {
+      try {
+        const redirected = new URL(res.url)
+        if (isPrivateIpOrHost(redirected.hostname)) {
+          linkPreviewCache.set(targetUrl, { data: null, timestamp: Date.now() })
+          return null
+        }
+      } catch {
+        return null
+      }
+    }
 
     if (!res.ok) {
       linkPreviewCache.set(targetUrl, { data: null, timestamp: Date.now() })
@@ -745,7 +781,10 @@ function setupIpcHandlers() {
 
   ipcMain.handle('system:save-temp-file', async (_event, { buffer, filename }: { buffer: ArrayBuffer | Uint8Array; filename: string }) => {
     const tempDir = app.getPath('temp')
-    const safeName = (filename || `voice_${Date.now()}.ogg`).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const ext = path.extname(filename || '')
+    const base = path.basename(filename || 'temp', ext).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const safeName = `${base}_${uniqueSuffix}${ext || (filename?.includes('voice') ? '.ogg' : '.bin')}`
     const targetPath = path.join(tempDir, safeName)
     const nodeBuf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer as any)
     await fs.promises.writeFile(targetPath, nodeBuf)
@@ -754,7 +793,10 @@ function setupIpcHandlers() {
 
   ipcMain.handle('temp:save-file', async (_event, params: { buffer: ArrayBuffer | Uint8Array; filename: string }) => {
     const tempDir = app.getPath('temp')
-    const safeName = (params.filename || `temp_${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const ext = path.extname(params.filename || '')
+    const base = path.basename(params.filename || 'temp', ext).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const safeName = `${base}_${uniqueSuffix}${ext || '.bin'}`
     const targetPath = path.join(tempDir, safeName)
     const nodeBuf = Buffer.isBuffer(params.buffer) ? params.buffer : Buffer.from(params.buffer as any)
     await fs.promises.writeFile(targetPath, nodeBuf)
