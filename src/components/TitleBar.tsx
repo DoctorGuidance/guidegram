@@ -34,8 +34,11 @@ export const TitleBar: React.FC<TitleBarProps> = ({ activeAccount, ghostMode, on
     <header className="h-10 bg-dark-950 border-b border-white/5 flex items-center justify-between px-3 select-none titlebar-drag z-50">
       {/* Left Brand Badge */}
       <div className="flex items-center gap-2.5 titlebar-no-drag">
-        <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-primary-600 to-accent-cyan flex items-center justify-center shadow-glow">
-          <span className="text-[10px] font-black text-white">G</span>
+        <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-accent-cyan via-primary-600 to-accent-violet flex items-center justify-center shadow-glow overflow-hidden p-0.5">
+          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current text-white transform -translate-x-0.2 translate-y-0.2" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}>
+            <path d="M2.5 11.5L21.5 3.5L14.5 21.5L11 13.5L2.5 11.5Z" fill="white" />
+            <path d="M11 13.5L21.5 3.5L14.5 21.5Z" fill="#CBDDF8" opacity="0.8" />
+          </svg>
         </div>
         <span className="text-xs font-bold text-gray-200 tracking-wide">Guidegram</span>
         <span className="text-[10px] font-semibold px-1.5 py-0.2 bg-primary-600/20 text-primary-300 border border-primary-500/30 rounded-md">
