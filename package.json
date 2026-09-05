@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:portable": "tsc && vite build && electron-builder --win dir",
+    "test": "node tests/m1_stress_verification.mjs && node tests/m2_stress_verification.mjs && node tests/m3_stress_verification.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
