@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Neon Cyber Ribbon 1: Compass Arch / The 'G' Orbit (Cyan to Electric Indigo) -->
+    <linearGradient id="gOrbit" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" />
+      <stop offset="50%" stop-color="#0066FF" />
+      <stop offset="100%" stop-color="#7928CA" />
+    </linearGradient>
+
+    <!-- Glowing Telemetry Arrow: Guidance Vector (Gold/Amber to Electric Cyan) -->
+    <linearGradient id="vectorArrow" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="60%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#00F0FF" />
+    </linearGradient>
+
+    <!-- Neon Glow Filter -->
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#0066FF" flood-opacity="0.6" />
+    </filter>
+
+    <!-- Compass Core Glow -->
+    <filter id="coreGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#00F0FF" flood-opacity="0.9" />
+    </filter>
+  </defs>
+
+  <!-- The "G" Guidance Monogram & Compass Vector -->
+  <g filter="url(#neonGlow)">
+    <!-- 1. The Dynamic Outer "G" Arc (Navigation Horizon Loop) -->
+    <path d="M 330 180
+             C 310 150, 275 130, 230 130
+             C 155 130, 110 185, 110 260
+             C 110 335, 160 382, 236 382
+             C 312 382, 356 335, 356 270
+             L 248 270"
+          fill="none"
+          stroke="url(#gOrbit)"
+          stroke-width="44"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+    <!-- 2. The Guidance Compass Vector Arrow -->
+    <g filter="url(#coreGlow)">
+      <!-- Central Vector Needle / Arrowhead -->
+      <path d="M 235 270
+               L 375 135
+               M 375 135 L 295 135
+               M 375 135 L 375 215"
+            fill="none"
+            stroke="url(#vectorArrow)"
+            stroke-width="36"
+            stroke-linecap="round"
+            stroke-linejoin="round" />
+
+      <!-- North Star / Guidance Telemetry Pulse Point -->
+      <circle cx="395" cy="115" r="14" fill="#00F0FF" />
+      <circle cx="395" cy="115" r="7" fill="#FFFFFF" />
+    </g>
+
+    <!-- 3. Signal Wave Rings (The "gram" / Telegram Protocol Waves) -->
+    <path d="M 175 200 C 190 180, 215 170, 245 170"
+          fill="none"
+          stroke="#00F0FF"
+          stroke-width="12"
+          stroke-linecap="round"
+          opacity="0.75" />
+
+    <path d="M 160 300 C 180 330, 210 345, 250 345"
+          fill="none"
+          stroke="#7928CA"
+          stroke-width="12"
+          stroke-linecap="round"
+          opacity="0.6" />
+  </g>
+</svg>

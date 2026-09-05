@@ -49,31 +49,47 @@ let sessionStore: SessionStore
 let accountManager: AccountManager
 let updateManager: UpdateManager
 
-function getAppIconPath(): string {
-  const isPackaged = app.isPackaged
-  const basePath = isPackaged
+function getResourcesPath(): string {
+  return app.isPackaged
     ? path.join(process.resourcesPath, 'resources')
     : path.resolve(__dirname, '../resources')
-  
-  const iconIco = path.join(basePath, 'icon.ico')
-  const iconPng = path.join(basePath, 'icon32.png')
+}
 
+function getAppIconPath(): string {
+  const base = getResourcesPath()
+  // Prefer ICO for the window titlebar/taskbar on Windows
+  const iconIco = path.join(base, 'icon.ico')
+  const iconPng = path.join(base, 'icon256.png')
   if (fs.existsSync(iconIco)) return iconIco
   if (fs.existsSync(iconPng)) return iconPng
+  return ''
+}
+
+function getTrayIconPath(): string {
+  const base = getResourcesPath()
+  // System tray requires a small PNG with transparent background — never ICO
+  const icon32 = path.join(base, 'icon32.png')
+  const icon16 = path.join(base, 'icon16.png')
+  if (fs.existsSync(icon32)) return icon32
+  if (fs.existsSync(icon16)) return icon16
   return ''
 }
 
 function createTray() {
   if (tray) return
 
-  const iconPath = getAppIconPath()
+  const iconPath = getTrayIconPath()
   let trayIcon: InstanceType<typeof nativeImage> | null = null
 
   if (iconPath) {
     trayIcon = nativeImage.createFromPath(iconPath)
+    // Resize to 16x16 for Windows system tray (high-DPI aware)
+    if (process.platform === 'win32') {
+      trayIcon = trayIcon.resize({ width: 16, height: 16 })
+    }
   }
 
-  // Fallback: create empty 16x16 nativeImage if no file found
+  // Fallback: create empty nativeImage if no file found
   if (!trayIcon || trayIcon.isEmpty()) {
     trayIcon = nativeImage.createEmpty()
   }
@@ -450,9 +466,10 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     'telegram:forward-messages',
-    async (_event, { accountId, toChatId, fromChatId, messageIds, options }) => {
+    async (_event, { accountId, toChatId, toChatIds, fromChatId, messageIds, options }) => {
       try {
-        return await accountManager.forwardMessages(accountId, toChatId, fromChatId, messageIds, options)
+        const target = toChatIds || toChatId
+        return await accountManager.forwardMessages(accountId, target, fromChatId, messageIds, options)
       } catch (err: any) {
         Logger.error(`[IPC] forwardMessages failed:`, err)
         throw err
