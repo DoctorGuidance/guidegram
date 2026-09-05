@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Lock,
 } from 'lucide-react'
+import logoImg from '../assets/logo.png'
 
 interface WelcomeScreenProps {
   onOpenAddAccount: () => void
@@ -31,11 +32,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       {/* Hero Container */}
       <div className="max-w-2xl w-full text-center relative z-10 flex flex-col items-center">
         {/* Glowing Logo Badge */}
-        <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-accent-cyan via-primary-600 to-accent-violet flex items-center justify-center shadow-glow mb-6 transform hover:scale-105 transition-all duration-300 p-4">
-          <svg viewBox="0 0 24 24" className="w-12 h-12 fill-current text-white transform -translate-x-0.5 translate-y-0.5" style={{ filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.5))' }}>
-            <path d="M2.5 11.5L21.5 3.5L14.5 21.5L11 13.5L2.5 11.5Z" fill="white" />
-            <path d="M11 13.5L21.5 3.5L14.5 21.5Z" fill="#CBDDF8" opacity="0.8" />
-          </svg>
+        <div className="w-24 h-24 rounded-3xl overflow-hidden shadow-glow mb-6 border border-accent-cyan/30 transform hover:scale-105 transition-all duration-300">
+          <img src={logoImg} alt="Guidegram Logo" className="w-full h-full object-cover" />
         </div>
 
         {/* Badge */}

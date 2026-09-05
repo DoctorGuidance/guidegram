@@ -13,6 +13,7 @@ import { UnifiedInbox } from './components/UnifiedInbox'
 import { CloseConfirmModal } from './components/CloseConfirmModal'
 import { UpdateBanner } from './components/UpdateBanner'
 import { AccountInfo, DialogItem, MessageItem, AppConfig, UpdateInfo } from './types/telegram'
+import logoImg from './assets/logo.png'
 
 export const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false)
@@ -291,11 +292,8 @@ export const App: React.FC = () => {
   if (!isLoaded) {
     return (
       <div className="h-screen w-screen bg-dark-950 flex flex-col items-center justify-center text-white select-none">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-accent-cyan via-primary-600 to-accent-violet flex items-center justify-center shadow-glow mb-4 animate-pulse p-3">
-          <svg viewBox="0 0 24 24" className="w-9 h-9 fill-current text-white transform -translate-x-0.5 translate-y-0.5" style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.4))' }}>
-            <path d="M2.5 11.5L21.5 3.5L14.5 21.5L11 13.5L2.5 11.5Z" fill="white" />
-            <path d="M11 13.5L21.5 3.5L14.5 21.5Z" fill="#CBDDF8" opacity="0.8" />
-          </svg>
+        <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-glow mb-4 animate-pulse border border-accent-cyan/30">
+          <img src={logoImg} alt="Guidegram Logo" className="w-full h-full object-cover" />
         </div>
         <div className="text-xs font-semibold text-gray-400">Loading Guidegram...</div>
       </div>
