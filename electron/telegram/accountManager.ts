@@ -746,6 +746,8 @@ export class AccountManager {
         text: m.message || '',
         date: m.date * 1000,
         isOutgoing: m.out || false,
+        postAuthor: (m as any).postAuthor || undefined,
+        senderRank: (m as any).postAuthor || undefined,
         isForwarded: !!m.fwdFrom,
         forwardFromName: m.fwdFrom?.fromName || undefined,
         replyToMsgId,
@@ -966,9 +968,12 @@ export class AccountManager {
         canDeleteMessages = entity.adminRights.deleteMessages === true
       }
 
-      if (isChannel || isGroup) {
+      let full: any = null
+      const participantsList: NonNullable<ChatDetails['participants']> = []
+
+      if (entity.className === 'Channel') {
         try {
-          const full: any = await holder.client.invoke(
+          full = await holder.client.invoke(
             new Api.channels.GetFullChannel({ channel: entity })
           )
           about = full.fullChat?.about
@@ -991,12 +996,135 @@ export class AccountManager {
               canSendMessages = false
             }
           }
+
+          // Fetch Admins / Participants for Channel / Megagroup
+          try {
+            const adminsResult: any = await holder.client.invoke(
+              new Api.channels.GetParticipants({
+                channel: entity,
+                filter: new Api.ChannelParticipantsAdmins(),
+                offset: 0,
+                limit: 100,
+                hash: BigInt(0) as any,
+              })
+            )
+
+            const userMap = new Map<string, any>()
+            if (adminsResult.users) {
+              for (const u of adminsResult.users) {
+                userMap.set(u.id.toString(), u)
+              }
+            }
+
+            const seenParticipantIds = new Set<string>()
+
+            if (adminsResult.participants) {
+              for (const p of adminsResult.participants) {
+                const pUserId = p.userId?.toString()
+                if (!pUserId) continue
+                seenParticipantIds.add(pUserId)
+                const u = userMap.get(pUserId)
+                const role = p.className === 'ChannelParticipantCreator' ? 'creator' : 'admin'
+                participantsList.push({
+                  id: pUserId,
+                  name: u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || 'Admin' : 'Admin',
+                  username: u?.username || undefined,
+                  role,
+                  customTitle: p.rank || undefined,
+                })
+              }
+            }
+
+            // If megagroup, fetch recent members too (up to 100)
+            if (isGroup) {
+              try {
+                const recentResult: any = await holder.client.invoke(
+                  new Api.channels.GetParticipants({
+                    channel: entity,
+                    filter: new Api.ChannelParticipantsRecent(),
+                    offset: 0,
+                    limit: 100,
+                    hash: BigInt(0) as any,
+                  })
+                )
+                if (recentResult.users) {
+                  for (const u of recentResult.users) {
+                    userMap.set(u.id.toString(), u)
+                  }
+                }
+                if (recentResult.participants) {
+                  for (const p of recentResult.participants) {
+                    const pUserId = p.userId?.toString()
+                    if (!pUserId || seenParticipantIds.has(pUserId)) continue
+                    seenParticipantIds.add(pUserId)
+                    const u = userMap.get(pUserId)
+                    participantsList.push({
+                      id: pUserId,
+                      name: u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || 'Member' : 'Member',
+                      username: u?.username || undefined,
+                      role: 'member',
+                    })
+                  }
+                }
+              } catch (recErr) {
+                Logger.debug(`[AccountManager] GetParticipants Recent failed:`, recErr)
+              }
+            }
+          } catch (partErr) {
+            Logger.debug(`[AccountManager] GetParticipants failed (may lack admin rights):`, partErr)
+          }
         } catch (e) {
           Logger.warn(`[AccountManager] GetFullChannel warning for ${chatId}:`, e)
         }
+      } else if (entity.className === 'Chat') {
+        // Basic Group
+        try {
+          full = await holder.client.invoke(
+            new Api.messages.GetFullChat({ chatId: entity.id })
+          )
+          about = full.fullChat?.about
+          membersCount = full.fullChat?.participants?.participants?.length || full.fullChat?.participantsCount
+
+          if (full.fullChat?.pinnedMsgId) {
+            pinnedMessage = {
+              id: full.fullChat.pinnedMsgId,
+            }
+          }
+
+          if (entity.defaultBannedRights && entity.defaultBannedRights.sendMessages) {
+            canSendMessages = false
+          }
+
+          // Extract basic group participants
+          if (full.fullChat?.participants?.participants) {
+            const userMap = new Map<string, any>()
+            if (full.users) {
+              for (const u of full.users) {
+                userMap.set(u.id.toString(), u)
+              }
+            }
+            for (const p of full.fullChat.participants.participants) {
+              const pUserId = p.userId?.toString()
+              if (!pUserId) continue
+              const u = userMap.get(pUserId)
+              let role: 'creator' | 'admin' | 'member' = 'member'
+              if (p.className === 'ChatParticipantCreator') role = 'creator'
+              else if (p.className === 'ChatParticipantAdmin') role = 'admin'
+
+              participantsList.push({
+                id: pUserId,
+                name: u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || 'Member' : 'Member',
+                username: u?.username || undefined,
+                role,
+              })
+            }
+          }
+        } catch (e) {
+          Logger.warn(`[AccountManager] GetFullChat warning for basic chat ${chatId}:`, e)
+        }
       } else if (isUser) {
         try {
-          const full: any = await holder.client.invoke(
+          full = await holder.client.invoke(
             new Api.users.GetFullUser({ id: entity })
           )
           about = full.fullUser?.about
@@ -1007,6 +1135,51 @@ export class AccountManager {
           }
         } catch (e) {
           Logger.warn(`[AccountManager] GetFullUser warning for ${chatId}:`, e)
+        }
+      }
+
+      // Permissions matrix
+      let permissionsMatrix: ChatDetails['permissionsMatrix'] = undefined
+      const bannedRights = entity.defaultBannedRights || full?.fullChat?.defaultBannedRights
+      if (isGroup || isChannel) {
+        if (bannedRights) {
+          permissionsMatrix = {
+            sendMessages: !bannedRights.sendMessages,
+            sendMedia: !bannedRights.sendMedia,
+            sendStickers: !bannedRights.sendStickers,
+            sendPolls: !bannedRights.sendPolls,
+            embedLinks: !bannedRights.embedLinks,
+            inviteUsers: !bannedRights.inviteUsers,
+            pinMessages: !bannedRights.pinMessages,
+            changeInfo: !bannedRights.changeInfo,
+          }
+        } else if (isGroup) {
+          permissionsMatrix = {
+            sendMessages: true,
+            sendMedia: true,
+            sendStickers: true,
+            sendPolls: true,
+            embedLinks: true,
+            inviteUsers: true,
+            pinMessages: true,
+            changeInfo: true,
+          }
+        }
+      }
+
+      // Bot Info
+      let botInfo: ChatDetails['botInfo'] = undefined
+      if (isBot) {
+        const commands: Array<{ command: string; description: string }> = []
+        if (full?.fullUser?.botInfo?.commands) {
+          for (const cmd of full.fullUser.botInfo.commands) {
+            commands.push({ command: cmd.command, description: cmd.description })
+          }
+        }
+        botInfo = {
+          isBot: true,
+          privacyMode: !entity.botChatHistory,
+          commands,
         }
       }
 
@@ -1030,6 +1203,9 @@ export class AccountManager {
         canSendMessages,
         canDeleteMessages,
         isCreator,
+        permissionsMatrix,
+        participants: participantsList.length > 0 ? participantsList : undefined,
+        botInfo,
       }
     } catch (err: any) {
       Logger.warn(`[AccountManager] getChatDetails fallback for ${chatId}:`, err)
@@ -1085,13 +1261,14 @@ export class AccountManager {
   }
 
   /**
-   * Telegraph-like Direct Forwarding:
+   * Telegraph-like Direct Forwarding & Multi-chat support:
    * dropAuthor: true removes the "Forwarded From" header!
    * Supports forwarding to Saved Messages ('me' or accountId)
+   * Supports multiple destination chats simultaneously.
    */
   public async forwardMessages(
     accountId: string,
-    toChatId: string,
+    toChatIds: string | string[],
     fromChatId: string,
     messageIds: number[],
     options: ForwardOptions
@@ -1099,15 +1276,26 @@ export class AccountManager {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
 
-    const targetPeer = (toChatId === 'me' || toChatId === accountId) ? 'me' : toChatId
+    const targets = Array.isArray(toChatIds) ? toChatIds : [toChatIds]
+    if (targets.length === 0) return true
+
     const sourcePeer = (fromChatId === 'me' || fromChatId === accountId) ? 'me' : fromChatId
 
-    await holder.client.forwardMessages(targetPeer, {
-      messages: messageIds,
-      fromPeer: sourcePeer,
-      dropAuthor: options.withoutQuote ?? true, // Removes "Forwarded from" header
-      silent: options.silent ?? false,
+    const forwardPromises = targets.map(async (chatId) => {
+      const targetPeer = (chatId === 'me' || chatId === accountId) ? 'me' : chatId
+      return holder.client!.forwardMessages(targetPeer, {
+        messages: messageIds,
+        fromPeer: sourcePeer,
+        dropAuthor: options.withoutQuote ?? true, // Removes "Forwarded from" header
+        silent: options.silent ?? false,
+      })
     })
+
+    const results = await Promise.allSettled(forwardPromises)
+    const errors = results.filter((r) => r.status === 'rejected')
+    if (errors.length > 0 && errors.length === targets.length) {
+      throw (errors[0] as PromiseRejectedResult).reason
+    }
 
     return true
   }
@@ -1220,7 +1408,10 @@ export class AccountManager {
           id: msg.id,
           chatId: msg.chatId?.toString(),
           accountId,
+          senderId: msg.senderId?.toString(),
           senderName: msg.sender?.firstName || 'Unknown',
+          postAuthor: (msg as any).postAuthor || undefined,
+          senderRank: (msg as any).postAuthor || undefined,
           text: msg.message || '',
           date: msg.date * 1000,
           isOutgoing: msg.out || false,

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { ProxyConfig, ForwardOptions, AppConfig, QrTokenPayload, AccountInfo, UpdateInfo } from './telegram/types'
+import { ProxyConfig, ForwardOptions, AppConfig, QrTokenPayload, AccountInfo, UpdateInfo, ChatDetails } from './telegram/types'
 
 const guidegramAPI = {
   // Window Controls
@@ -38,14 +38,15 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:send-message', { accountId, chatId, text }),
   forwardMessages: (
     accountId: string,
-    toChatId: string,
+    toChatId: string | string[],
     fromChatId: string,
     messageIds: number[],
     options: ForwardOptions
   ): Promise<boolean> =>
     ipcRenderer.invoke('telegram:forward-messages', {
       accountId,
-      toChatId,
+      toChatId: Array.isArray(toChatId) ? toChatId[0] : toChatId,
+      toChatIds: Array.isArray(toChatId) ? toChatId : [toChatId],
       fromChatId,
       messageIds,
       options,
@@ -70,7 +71,7 @@ const guidegramAPI = {
     thumb?: boolean
   ): Promise<string | null> =>
     ipcRenderer.invoke('telegram:download-media', { accountId, chatId, messageId, thumb }),
-  getChatDetails: (accountId: string, chatId: string): Promise<any> =>
+  getChatDetails: (accountId: string, chatId: string): Promise<ChatDetails> =>
     ipcRenderer.invoke('telegram:get-chat-details', { accountId, chatId }),
   resolvePeer: (accountId: string, target: string): Promise<any> =>
     ipcRenderer.invoke('telegram:resolve-peer', { accountId, target }),

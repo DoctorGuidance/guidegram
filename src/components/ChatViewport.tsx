@@ -33,6 +33,10 @@ import {
   CornerUpLeft,
   Quote,
   Reply,
+  Shield,
+  ShieldCheck,
+  AlertTriangle,
+  MessageSquare,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem } from '../types/telegram'
 import { Avatar } from './Avatar'
@@ -51,6 +55,7 @@ interface ChatViewportProps {
   quickForwardToSaved?: boolean
   alwaysDeleteBoth?: boolean
   copyCallbackData?: boolean
+  suppressLinkWarning?: boolean
   onSendMessage: (text: string) => void
   onOpenDirectForward: (message: MessageItem) => void
   onQuickForwardToSaved?: (message: MessageItem) => Promise<boolean> | void
@@ -70,6 +75,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   quickForwardToSaved = true,
   alwaysDeleteBoth = true,
   copyCallbackData = true,
+  suppressLinkWarning = false,
   onSendMessage,
   onOpenDirectForward,
   onQuickForwardToSaved,
@@ -99,6 +105,12 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   // In-chat search state (Ctrl+F)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchSenderFilter, setSearchSenderFilter] = useState<{
+    id?: string
+    name?: string
+  } | null>(null)
+  const [memberSearchQuery, setMemberSearchQuery] = useState('')
+  const [pendingExternalUrl, setPendingExternalUrl] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Voice playback state
@@ -149,6 +161,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     setChatDetails(null)
     setIsSearchOpen(false)
     setSearchQuery('')
+    setSearchSenderFilter(null)
+    setMemberSearchQuery('')
+    setPendingExternalUrl(null)
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause()
       audioPlayerRef.current = null
@@ -182,17 +197,79 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     }
   }, [isSearchOpen])
 
-  // Filter messages based on search query
+  // Filter messages based on search sender filter and search query (64Gram)
   const filteredMessages = React.useMemo(() => {
-    if (!searchQuery.trim()) return messages
-    const q = searchQuery.toLowerCase()
-    return messages.filter(
-      (m) =>
-        (m.text && m.text.toLowerCase().includes(q)) ||
-        (m.senderName && m.senderName.toLowerCase().includes(q)) ||
-        (m.mediaFileName && m.mediaFileName.toLowerCase().includes(q))
-    )
-  }, [messages, searchQuery])
+    let result = messages
+
+    // 1. Filter by specific user if sender filter is active
+    if (searchSenderFilter) {
+      result = result.filter((m) => {
+        if (searchSenderFilter.id && m.senderId) {
+          return m.senderId === searchSenderFilter.id
+        }
+        if (searchSenderFilter.name && m.senderName) {
+          return m.senderName.toLowerCase() === searchSenderFilter.name.toLowerCase()
+        }
+        return false
+      })
+    }
+
+    // 2. Filter by text query if present
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      if (q.startsWith('from:')) {
+        const fromTarget = q.slice(5).trim()
+        if (fromTarget) {
+          result = result.filter(
+            (m) =>
+              (m.senderName && m.senderName.toLowerCase().includes(fromTarget)) ||
+              (m.senderId && m.senderId.includes(fromTarget))
+          )
+        }
+      } else {
+        result = result.filter(
+          (m) =>
+            (m.text && m.text.toLowerCase().includes(q)) ||
+            (m.senderName && m.senderName.toLowerCase().includes(q)) ||
+            (m.mediaFileName && m.mediaFileName.toLowerCase().includes(q))
+        )
+      }
+    }
+
+    return result
+  }, [messages, searchQuery, searchSenderFilter])
+
+  const handleSearchFromUser = (senderId?: string, senderName?: string) => {
+    setSearchSenderFilter({ id: senderId, name: senderName })
+    setIsSearchOpen(true)
+    showToast(`Filtering messages from ${senderName || 'user'}`)
+  }
+
+  const getSenderAdminTitle = (msg: MessageItem): string | undefined => {
+    if (msg.senderRank) return msg.senderRank
+    if (!chatDetails?.participants || !msg.senderId) return undefined
+    const p = chatDetails.participants.find((part) => part.id === msg.senderId)
+    if (!p) return undefined
+    if (p.customTitle) return p.customTitle
+    if (p.role === 'creator') return 'Owner'
+    if (p.role === 'admin') return 'Admin'
+    return undefined
+  }
+
+  const getSenderRole = (msg: MessageItem): 'creator' | 'admin' | 'member' | undefined => {
+    if (!chatDetails?.participants || !msg.senderId) return undefined
+    const p = chatDetails.participants.find((part) => part.id === msg.senderId)
+    return p?.role
+  }
+
+  // Safe external link opener respecting suppressLinkWarning (64Gram)
+  const handleSafeOpenUrl = (url: string) => {
+    if (suppressLinkWarning || url.startsWith('tg://') || url.includes('t.me/')) {
+      window.guidegram?.openExternal?.(url)
+    } else {
+      setPendingExternalUrl(url)
+    }
+  }
 
   const showToast = (msg: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)

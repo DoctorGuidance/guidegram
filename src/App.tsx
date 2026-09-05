@@ -105,6 +105,13 @@ export const App: React.FC = () => {
 
     initApp()
 
+    // Dynamically toggle performance optimization class (64Gram)
+    if (config?.disableAnimations) {
+      document.documentElement.classList.add('disable-animations')
+    } else {
+      document.documentElement.classList.remove('disable-animations')
+    }
+
     // Realtime listeners
     let unsubscribeMsg: (() => void) | undefined
     let unsubscribeUpdate: (() => void) | undefined
@@ -187,6 +194,15 @@ export const App: React.FC = () => {
     }
   }, [])
 
+  // Reactive toggle for 64Gram performance optimizations
+  useEffect(() => {
+    if (config?.disableAnimations) {
+      document.documentElement.classList.add('disable-animations')
+    } else {
+      document.documentElement.classList.remove('disable-animations')
+    }
+  }, [config?.disableAnimations])
+
   const loadDialogsForAccount = async (accountId: string) => {
     if (!window.guidegram?.getDialogs) return
     try {
@@ -240,14 +256,14 @@ export const App: React.FC = () => {
   }
 
   const handleDirectForward = async (
-    targetChatId: string,
+    targetChatIds: string[],
     withoutQuote: boolean,
     silent: boolean
   ) => {
     if (!activeAccountId || !forwardMessage || !window.guidegram) return
     await window.guidegram.forwardMessages(
       activeAccountId,
-      targetChatId,
+      targetChatIds,
       forwardMessage.chatId,
       [forwardMessage.id],
       { withoutQuote, silent }
@@ -289,18 +305,50 @@ export const App: React.FC = () => {
     }
   }
 
-  // 64Gram Feature: Mark all chats as read
-  const handleMarkAllAsRead = async (): Promise<boolean> => {
+  // 64Gram Feature: Mark all chats as read (supports tab category filtering)
+  const handleMarkAllAsRead = async (category?: TabCategory): Promise<boolean> => {
     if (!activeAccountId || !window.guidegram) return false
     try {
-      await window.guidegram.markAllAsRead(activeAccountId)
-      setDialogsByAccount((prev) => {
-        const list = prev[activeAccountId] || []
-        return {
-          ...prev,
-          [activeAccountId]: list.map((d) => ({ ...d, unreadCount: 0 })),
+      if (!category || category === 'all') {
+        await window.guidegram.markAllAsRead(activeAccountId)
+        setDialogsByAccount((prev) => {
+          const list = prev[activeAccountId] || []
+          return {
+            ...prev,
+            [activeAccountId]: list.map((d) => ({ ...d, unreadCount: 0 })),
+          }
+        })
+      } else {
+        const dialogs = dialogsByAccount[activeAccountId] || []
+        const toMark = dialogs.filter((d) => {
+          if (d.unreadCount <= 0) return false
+          if (category === 'users') return d.isUser
+          if (category === 'groups') return d.isGroup
+          if (category === 'channels') return d.isChannel
+          if (category === 'bots') return d.isBot
+          if (category === 'unread') return true
+          return false
+        })
+
+        for (const d of toMark) {
+          try {
+            await window.guidegram.markAsRead(activeAccountId, d.id)
+          } catch (err) {
+            console.warn(`Failed to mark dialog ${d.id} as read:`, err)
+          }
         }
-      })
+
+        setDialogsByAccount((prev) => {
+          const list = prev[activeAccountId] || []
+          const toMarkIds = new Set(toMark.map((d) => d.id))
+          return {
+            ...prev,
+            [activeAccountId]: list.map((d) =>
+              toMarkIds.has(d.id) ? { ...d, unreadCount: 0 } : d
+            ),
+          }
+        })
+      }
       return true
     } catch (err) {
       console.error('Failed to mark all as read:', err)
@@ -541,6 +589,7 @@ export const App: React.FC = () => {
             quickForwardToSaved={config?.quickForwardToSaved ?? true}
             alwaysDeleteBoth={config?.alwaysDeleteBoth ?? true}
             copyCallbackData={config?.copyCallbackData ?? true}
+            suppressLinkWarning={config?.suppressLinkWarning ?? false}
             onSendMessage={handleSendMessage}
             onOpenDirectForward={(msg) => setForwardMessage(msg)}
             onQuickForwardToSaved={handleQuickForwardToSaved}

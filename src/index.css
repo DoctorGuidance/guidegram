@@ -98,3 +98,48 @@
   filter: none;
   background-color: transparent;
 }
+
+/* ==========================================================================
+   64Gram Performance Optimization: Disable Premium Animations & Blurs
+   Drastically cuts CPU and RAM by stripping GPU compositing & blur buffers
+   ========================================================================== */
+
+.disable-animations,
+.disable-animations *,
+.disable-animations *::before,
+.disable-animations *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+}
+
+/* Exempt critical loading spinners while neutralizing decorative animations */
+.disable-animations *:not(.animate-spin) {
+  animation: none !important;
+}
+
+/* Eliminate GPU-heavy backdrop-filter blurring */
+.disable-animations * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Compensate glass panels with opaque backgrounds for crisp legibility */
+.disable-animations .glass-panel {
+  background: rgba(18, 21, 28, 0.96) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.disable-animations .glass-modal {
+  background: rgba(13, 15, 20, 0.98) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Static fallback for reply highlight glow without continuous repaint */
+.disable-animations .reply-highlight {
+  animation: none !important;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.9) !important;
+}

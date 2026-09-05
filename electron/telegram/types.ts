@@ -129,6 +129,8 @@ export interface MessageItem {
   mediaFilePath?: string
   webPage?: WebPagePreview
   entities?: MessageEntityItem[]
+  postAuthor?: string
+  senderRank?: string
   replyMarkup?: {
     rows: InlineButton[][]
   }
@@ -153,6 +155,29 @@ export interface ChatDetails {
   canSendMessages?: boolean
   canDeleteMessages?: boolean
   isCreator?: boolean
+  permissionsMatrix?: {
+    sendMessages: boolean
+    sendMedia: boolean
+    sendStickers: boolean
+    sendPolls: boolean
+    embedLinks: boolean
+    inviteUsers: boolean
+    pinMessages: boolean
+    changeInfo: boolean
+  }
+  participants?: Array<{
+    id: string
+    name: string
+    username?: string
+    role: 'creator' | 'admin' | 'member'
+    customTitle?: string
+    avatarUrl?: string
+  }>
+  botInfo?: {
+    isBot: boolean
+    privacyMode: boolean
+    commands?: Array<{ command: string; description: string }>
+  }
 }
 
 export interface ForwardOptions {
@@ -191,4 +216,6 @@ export interface AppConfig {
   alwaysDeleteBoth: boolean
   markAllReadEnabled: boolean
   copyCallbackData: boolean
+  disableAnimations?: boolean
+  suppressLinkWarning?: boolean
 }

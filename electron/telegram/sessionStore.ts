@@ -44,6 +44,8 @@ export class SessionStore {
       alwaysDeleteBoth: true,
       markAllReadEnabled: true,
       copyCallbackData: true,
+      disableAnimations: false,
+      suppressLinkWarning: false,
     }
 
     try {

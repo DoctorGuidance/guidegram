@@ -64,6 +64,13 @@ export class Logger {
     this.append(this.errorFile, line)
   }
 
+  public static debug(message: string, meta?: any) {
+    const line = this.formatMessage('DEBUG', message, meta)
+    console.debug(`[DEBUG] ${message}`, meta || '')
+    this.append(this.logFile, line)
+  }
+
+
   private static append(filePath: string, content: string) {
     if (!this.initialized || !filePath) return
     try {

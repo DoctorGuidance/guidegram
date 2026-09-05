@@ -24,6 +24,7 @@ import {
   Power,
   HelpCircle,
   Download,
+  Sparkles,
 } from 'lucide-react'
 import { AppConfig, AccountInfo, CloseAction, UpdateInfo } from '../types/telegram'
 
@@ -97,6 +98,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [alwaysDeleteBoth, setAlwaysDeleteBoth] = useState(true)
   const [markAllReadEnabled, setMarkAllReadEnabled] = useState(true)
   const [copyCallbackData, setCopyCallbackData] = useState(true)
+  const [disableAnimations, setDisableAnimations] = useState(false)
+  const [suppressLinkWarning, setSuppressLinkWarning] = useState(false)
 
   // Window Close Action Preference
   const [closeAction, setCloseAction] = useState<CloseAction>('ask')
@@ -126,6 +129,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setAlwaysDeleteBoth(cfg.alwaysDeleteBoth ?? true)
         setMarkAllReadEnabled(cfg.markAllReadEnabled ?? true)
         setCopyCallbackData(cfg.copyCallbackData ?? true)
+        setDisableAnimations(cfg.disableAnimations ?? false)
+        setSuppressLinkWarning(cfg.suppressLinkWarning ?? false)
         setCloseAction(cfg.closeAction || 'ask')
       })
       window.guidegram.getPortableDataPath().then(setPortablePath)
@@ -183,6 +188,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       alwaysDeleteBoth,
       markAllReadEnabled,
       copyCallbackData,
+      disableAnimations,
+      suppressLinkWarning,
     })
     setConfig(updated)
     onConfigUpdated?.(updated)
@@ -384,6 +391,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 icon={<Zap className="w-3.5 h-3.5 text-accent-amber" />}
                 checked={copyCallbackData}
                 onChange={setCopyCallbackData}
+              />
+
+              <ToggleItem
+                title="Disable Premium Animations"
+                desc="Cut CPU and RAM usage by eliminating transitions, blur and effects"
+                icon={<Sparkles className="w-3.5 h-3.5 text-accent-amber" />}
+                checked={disableAnimations}
+                onChange={setDisableAnimations}
+              />
+
+              <ToggleItem
+                title="Suppress External Link Warning"
+                desc="Open external web URLs directly without confirmation prompts"
+                icon={<ExternalLink className="w-3.5 h-3.5 text-accent-cyan" />}
+                checked={suppressLinkWarning}
+                onChange={setSuppressLinkWarning}
               />
             </div>
           </div>
