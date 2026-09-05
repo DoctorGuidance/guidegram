@@ -30,9 +30,17 @@ if %errorlevel% neq 0 (
     pause
     exit /b %errorlevel%
 )
+echo [*] Backing up any existing session data before packaging...
+if exist "release\win-unpacked\data" (
+    powershell -Command "Copy-Item -Path 'release\win-unpacked\data' -Destination '.data_build_backup' -Recurse -Force"
+)
 echo [*] Packaging Windows portable application with custom branding...
 taskkill /F /IM Guidegram.exe /T >nul 2>&1
 call pnpm exec electron-builder --win dir
+if exist ".data_build_backup" (
+    echo [*] Restoring saved user sessions and accounts to output folder...
+    powershell -Command "Copy-Item -Path '.data_build_backup\*' -Destination 'release\win-unpacked\data' -Recurse -Force; Remove-Item -Path '.data_build_backup' -Recurse -Force"
+)
 echo [*] Compressing portable ZIP archive...
 powershell -Command "Compress-Archive -Path 'release/win-unpacked/*' -DestinationPath 'release/Guidegram-Windows-x64-Portable.zip' -Force"
 echo.
