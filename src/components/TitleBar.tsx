@@ -38,7 +38,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({ activeAccount, ghostMode, on
           <span className="text-[10px] font-black text-white">G</span>
         </div>
         <span className="text-xs font-bold text-gray-200 tracking-wide">Guidegram</span>
-        <span className="text-[10px] font-medium px-1.5 py-0.2 bg-primary-600/20 text-primary-400 border border-primary-500/20 rounded-md">
+        <span className="text-[10px] font-semibold px-1.5 py-0.2 bg-primary-600/20 text-primary-300 border border-primary-500/30 rounded-md">
+          v1.0.0
+        </span>
+        <span className="text-[10px] font-medium px-1.5 py-0.2 bg-white/5 text-gray-400 border border-white/10 rounded-md">
           Portable
         </span>
 
