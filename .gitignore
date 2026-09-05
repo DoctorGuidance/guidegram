@@ -34,3 +34,7 @@ data/
 Thumbs.db
 [Dd]esktop.ini
 .DS_Store
+
+# AI Agent Workspace (internal, not project source)
+.agents/
+ORIGINAL_REQUEST.md
