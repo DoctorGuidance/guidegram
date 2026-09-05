@@ -125,6 +125,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Reply bar state
@@ -132,6 +133,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
   // Attachment popover menu state
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   // Floating "Scroll to Bottom" state
   const [showScrollBottom, setShowScrollBottom] = useState(false)
@@ -140,8 +143,38 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   // Multi-line input ref
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => {
+  // Handle scroll events to detect if user scrolled up
+  const handleScroll = () => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    const isScrolledUp = el.scrollTop < el.scrollHeight - el.clientHeight - 180
+    setShowScrollBottom(isScrolledUp)
+    if (!isScrolledUp) {
+      setUnreadScrollCount(0)
+    }
+  }
+
+  const handleScrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setShowScrollBottom(false)
+    setUnreadScrollCount(0)
+  }
+
+  useEffect(() => {
+    const el = messagesContainerRef.current
+    if (!el) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      return
+    }
+    const isNearBottom = el.scrollTop >= el.scrollHeight - el.clientHeight - 200
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setShowScrollBottom(false)
+      setUnreadScrollCount(0)
+    } else {
+      setUnreadScrollCount((prev) => prev + 1)
+      setShowScrollBottom(true)
+    }
   }, [messages])
 
   // Active video message playing in-app
@@ -512,11 +545,12 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedMessage, hoveredMessage, messages, onOpenDirectForward, lightboxUrl, isInfoOpen])
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSend = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if (!inputText.trim()) return
-    onSendMessage(inputText.trim())
+    onSendMessage(inputText.trim(), replyMessage?.id)
     setInputText('')
+    setReplyMessage(null)
   }
 
   const handleCopyChatId = () => {
@@ -1283,7 +1317,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
       {/* 2. Messages Feed */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3"
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 relative"
         onClick={(e) => {
           if (e.target === e.currentTarget) setSelectedMessage(null)
         }}
@@ -1697,12 +1733,87 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           })
         )}
         <div ref={messagesEndRef} />
+
+        {/* Floating Scroll to Bottom Button (↓) with Unread Count */}
+        {showScrollBottom && (
+          <button
+            type="button"
+            onClick={handleScrollToBottom}
+            className="absolute bottom-20 right-6 z-30 p-2.5 rounded-full bg-dark-800/95 hover:bg-dark-750 text-gray-300 hover:text-white border border-white/10 shadow-2xl backdrop-blur-md transition-all flex items-center justify-center group cursor-pointer animate-in fade-in zoom-in-95 duration-150"
+            title="Scroll to bottom"
+          >
+            <ChevronDown className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
+            {unreadScrollCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full bg-primary-500 text-white text-[10px] font-bold shadow-glow">
+                {unreadScrollCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* 3. Input Box OR Broadcast Channel Bottom Action Bar */}
-      <div className="shrink-0 p-3 bg-dark-850/80 border-t border-white/5 backdrop-blur-md">
+      <div className="shrink-0 bg-dark-850/90 border-t border-white/5 backdrop-blur-md relative">
+        {/* Docked Reply Bar above Input */}
+        {replyMessage && (
+          <div className="px-4 py-2 bg-dark-800/80 border-b border-white/5 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-1 self-stretch bg-primary-500 rounded-full" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold text-primary-400 truncate flex items-center gap-1">
+                  <Reply className="w-3 h-3" />
+                  <span>Reply to {replyMessage.senderName || (replyMessage.isOutgoing ? 'You' : 'User')}</span>
+                </div>
+                <div
+                  dir={isRTL(replyMessage.text) ? 'rtl' : 'ltr'}
+                  className="text-xs text-gray-300 truncate"
+                >
+                  {replyMessage.text || (replyMessage.mediaType ? `[${replyMessage.mediaType}]` : 'Media message')}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyMessage(null)}
+              className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+              title="Cancel reply"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Hidden File / Image Native Pickers */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          multiple
+          onChange={(e) => {
+            const files = e.target.files
+            if (files && files.length > 0) {
+              showToast(`Selected ${files.length} document(s) for upload`)
+            }
+            setIsAttachMenuOpen(false)
+          }}
+        />
+        <input
+          type="file"
+          ref={imageInputRef}
+          accept="image/*,video/*"
+          className="hidden"
+          multiple
+          onChange={(e) => {
+            const files = e.target.files
+            if (files && files.length > 0) {
+              showToast(`Selected ${files.length} media file(s) for upload`)
+            }
+            setIsAttachMenuOpen(false)
+          }}
+        />
+
         {chatDetails?.canSendMessages === false || (isChannel && !chatDetails?.canSendMessages) ? (
-          <div className="flex items-center justify-center">
+          <div className="p-3 flex items-center justify-center">
             <button
               type="button"
               onClick={handleToggleNotifications}
@@ -1726,31 +1837,99 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSend} className="flex items-center gap-2">
-            <button
-              type="button"
-              className="p-2 text-gray-400 hover:text-gray-200 rounded-xl hover:bg-dark-800 transition-colors cursor-pointer"
-            >
-              <Paperclip className="w-4 h-4" />
-            </button>
+          <div className="p-3 relative">
+            {/* Attachment Popover Menu */}
+            {isAttachMenuOpen && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute bottom-full left-4 mb-2 w-48 bg-dark-800/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100 z-40 text-xs select-none"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    imageInputRef.current?.click()
+                    setIsAttachMenuOpen(false)
+                  }}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                >
+                  <Image className="w-4 h-4 text-primary-400" />
+                  <span>Photo or Video</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fileInputRef.current?.click()
+                    setIsAttachMenuOpen(false)
+                  }}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                >
+                  <FileUp className="w-4 h-4 text-accent-cyan" />
+                  <span>Document / File</span>
+                </button>
+              </div>
+            )}
 
-            <input
-              type="text"
-              dir={isRTL(inputText) ? 'rtl' : 'ltr'}
-              placeholder="Write a message... (Alt+F to forward, Alt+C to copy text)"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              className="flex-1 bg-dark-800 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors"
-            />
+            <form onSubmit={handleSend} className="flex items-end gap-2">
+              {/* Paperclip Button with Attachment Popover Toggle */}
+              <button
+                type="button"
+                onClick={() => setIsAttachMenuOpen((prev) => !prev)}
+                className={`p-2.5 rounded-xl transition-colors cursor-pointer shrink-0 ${
+                  isAttachMenuOpen
+                    ? 'text-primary-400 bg-dark-750'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-dark-800'
+                }`}
+                title="Attach Photo, Video or Document"
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
 
-            <button
-              type="submit"
-              disabled={!inputText.trim()}
-              className="p-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 disabled:hover:bg-primary-600 text-white rounded-xl transition-all shadow-glow flex items-center justify-center cursor-pointer"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
+              {/* Multi-line Auto-expanding Textarea with Telegram Desktop Shortcuts */}
+              <div className="flex-1 bg-dark-800 border border-white/5 focus-within:border-primary-500/50 rounded-2xl px-3.5 py-2 transition-colors flex items-center">
+                <textarea
+                  ref={textareaRef}
+                  dir={isRTL(inputText) ? 'rtl' : 'ltr'}
+                  placeholder="Write a message... (Enter to send, Shift+Enter for newline, Alt+F to forward)"
+                  value={inputText}
+                  rows={1}
+                  style={{ maxHeight: '160px' }}
+                  onChange={(e) => {
+                    setInputText(e.target.value)
+                    // Auto grow height
+                    e.target.style.height = 'auto'
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSend()
+                    }
+                  }}
+                  className="w-full bg-transparent text-xs text-gray-100 placeholder-gray-500 resize-none focus:outline-none leading-relaxed"
+                />
+              </div>
+
+              {/* Send or Voice Record Trigger */}
+              {inputText.trim() ? (
+                <button
+                  type="submit"
+                  className="p-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-2xl transition-all shadow-glow flex items-center justify-center cursor-pointer shrink-0"
+                  title="Send message (Enter)"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => showToast('Hold to record voice message (Audio device active)')}
+                  className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-800 rounded-2xl transition-colors cursor-pointer shrink-0"
+                  title="Voice Message"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+              )}
+            </form>
+          </div>
         )}
       </div>
 
