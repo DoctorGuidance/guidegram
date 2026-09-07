@@ -15,7 +15,7 @@
 
 No installation or developer tools required. Download the portable standalone zip for Windows 64-bit:
 
-👉 **[Download Guidegram v1.0.0 (Windows x64 Portable ZIP)](https://github.com/DoctorGuidance/guidegram/releases/download/v1.0.0/Guidegram-v1.0.0-Windows-x64.zip)**
+👉 **[Download Guidegram v1.1.0 (Windows x64 Portable ZIP)](https://github.com/DoctorGuidance/guidegram/releases/download/v1.1.0/Guidegram-Windows-x64-Portable.zip)**
 
 *Extract the archive to any directory or USB drive and run `Guidegram.exe` to launch.*
 
