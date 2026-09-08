@@ -183,30 +183,87 @@ export class UpdateManager {
         })
       }
 
-      // Create PowerShell update script
+      // Create resilient PowerShell update script
       const scriptPath = path.join(tempDir, 'apply_update.ps1')
       const exePath = app.getPath('exe')
 
       const psScript = `
+# Wait for main application processes to fully terminate
 Start-Sleep -Seconds 2
+
 $tempDir = "${tempDir.replace(/\\/g, '\\\\')}"
 $zipFile = "${zipPath.replace(/\\/g, '\\\\')}"
 $targetDir = "${appInstallDir.replace(/\\/g, '\\\\')}"
 $exe = "${exePath.replace(/\\/g, '\\\\')}"
+$logFile = Join-Path $tempDir "update_process.log"
 
-try {
-    # Extract archive into target folder without wiping data folder
-    Expand-Archive -Path $zipFile -DestinationPath $targetDir -Force
-    Remove-Item -Path $zipFile -Force -ErrorAction SilentlyContinue
-} catch {
-    Add-Content -Path (Join-Path $tempDir "update_error.log") -Value $_
+Add-Content -Path $logFile -Value "Starting update at $(Get-Date)"
+
+# Force terminate any remaining Guidegram processes
+$attempts = 0
+while ((Get-Process -Name "Guidegram" -ErrorAction SilentlyContinue) -and ($attempts -lt 10)) {
+    Add-Content -Path $logFile -Value "Killing lingering Guidegram processes (attempt $attempts)..."
+    Stop-Process -Name "Guidegram" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+    $attempts++
 }
 
-# Relaunch updated Guidegram
+# Also ensure file is not locked
+$attempts = 0
+while ($attempts -lt 10) {
+    try {
+        if (Test-Path $exe) {
+            $stream = [System.IO.File]::Open($exe, 'Open', 'ReadWrite', 'None')
+            if ($stream) {
+                $stream.Close()
+                $stream.Dispose()
+                Add-Content -Path $logFile -Value "Guidegram.exe is unlocked and ready for overwrite."
+                break
+            }
+        } else {
+            break
+        }
+    } catch {
+        Add-Content -Path $logFile -Value "Guidegram.exe still locked, waiting... ($($_.Exception.Message))"
+        Start-Sleep -Seconds 1
+        $attempts++
+    }
+}
+
+try {
+    Add-Content -Path $logFile -Value "Extracting $zipFile to $targetDir..."
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    
+    # Open zip and extract entry by entry to preserve data directory
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($zipFile)
+    foreach ($entry in $zip.Entries) {
+        # Skip anything trying to touch data folder
+        if ($entry.FullName -like "data/*" -or $entry.FullName -like "data\\*") {
+            continue
+        }
+        $destPath = Join-Path $targetDir $entry.FullName
+        $destDir = [System.IO.Path]::GetDirectoryName($destPath)
+        if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        }
+        if (-not [string]::IsNullOrEmpty($entry.Name)) {
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
+        }
+    }
+    $zip.Dispose()
+
+    Add-Content -Path $logFile -Value "Extraction completed successfully."
+    Remove-Item -Path $zipFile -Force -ErrorAction SilentlyContinue
+} catch {
+    Add-Content -Path $logFile -Value "ERROR: $($_.Exception.ToString())"
+}
+
+# Relaunch updated Guidegram executable
+Add-Content -Path $logFile -Value "Relaunching $exe"
 Start-Process -FilePath $exe
 `
       await fs.promises.writeFile(scriptPath, psScript, 'utf-8')
-      Logger.info(`[UpdateManager] Update script generated at: ${scriptPath}`)
+      Logger.info(`[UpdateManager] Resilient update script generated at: ${scriptPath}`)
 
       if (onProgress) {
         onProgress({
@@ -220,8 +277,8 @@ Start-Process -FilePath $exe
       // Spawn powershell detached process
       const { spawn } = await import('child_process')
       const child = spawn(
-        'powershell.exe',
-        ['-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+          'powershell.exe',
+        ['-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath],
         {
           detached: true,
           stdio: 'ignore',
@@ -229,10 +286,10 @@ Start-Process -FilePath $exe
       )
       child.unref()
 
-      // Quit app immediately so files can be safely replaced
+      // Ensure tray is removed and all processes exit cleanly
       setTimeout(() => {
-        app.quit()
-      }, 700)
+        app.exit(0)
+      }, 500)
 
       return { success: true }
     } catch (err: any) {
