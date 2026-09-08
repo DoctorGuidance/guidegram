@@ -305,7 +305,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="p-3.5 rounded-2xl bg-dark-800 border border-white/5 flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
-                  <span>Current Version: v1.0.1</span>
+                  <span>Current Version: v{__APP_VERSION__}</span>
                   <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-gray-300 font-mono">
                     Portable
                   </span>

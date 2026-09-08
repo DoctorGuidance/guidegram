@@ -56,7 +56,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <span className="text-xs font-bold text-gray-200 tracking-wide">Guidegram</span>
         </button>
         <span className="text-[10px] font-semibold px-1.5 py-0.2 bg-primary-600/20 text-primary-300 border border-primary-500/30 rounded-md">
-          v1.0.1
+          v{__APP_VERSION__}
         </span>
         <span className="text-[10px] font-medium px-1.5 py-0.2 bg-white/5 text-gray-400 border border-white/10 rounded-md">
           Portable

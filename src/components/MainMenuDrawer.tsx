@@ -244,7 +244,7 @@ export const MainMenuDrawer: React.FC<MainMenuDrawerProps> = ({
 
         {/* Drawer Footer */}
         <div className="p-3.5 bg-dark-950 border-t border-white/5 flex items-center justify-between text-[11px] text-gray-500">
-          <div>Guidegram Desktop v1.0.1</div>
+          <div>Guidegram Desktop v{__APP_VERSION__}</div>
           <div className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400">Portable</div>
         </div>
       </div>
