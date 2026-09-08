@@ -120,9 +120,11 @@ const guidegramAPI = {
     accountId: string,
     chatId: string,
     messageId: number,
-    data?: string
+    data?: string,
+    row?: number,
+    col?: number
   ): Promise<BotCallbackResult> =>
-    ipcRenderer.invoke('telegram:send-bot-callback', { accountId, chatId, messageId, data }),
+    ipcRenderer.invoke('telegram:send-bot-callback', { accountId, chatId, messageId, data, row, col }),
   getCustomEmojiUrl: (
     accountId: string,
     documentId: string

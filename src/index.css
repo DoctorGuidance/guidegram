@@ -10,7 +10,7 @@
   }
 
   body {
-    font-family: 'Open Sans', 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Open Sans', 'Vazirmatn', 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
   }
@@ -19,7 +19,7 @@
   .font-persian,
   [dir="rtl"] input,
   [dir="rtl"] textarea {
-    font-family: 'Vazirmatn', 'Open Sans', -apple-system, BlinkMacSystemFont, Tahoma, sans-serif;
+    font-family: 'Vazirmatn', 'Vazir', 'Open Sans', -apple-system, BlinkMacSystemFont, Tahoma, 'Segoe UI', sans-serif;
     direction: rtl;
     text-align: right;
     unicode-bidi: isolate;
@@ -29,7 +29,7 @@
   .font-latin,
   [dir="ltr"] input,
   [dir="ltr"] textarea {
-    font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Open Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     direction: ltr;
     text-align: left;
     unicode-bidi: isolate;

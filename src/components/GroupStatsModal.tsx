@@ -59,7 +59,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
   messages,
 }) => {
   const [timeframe, setTimeframe] = useState<Timeframe>('week')
-  const [activeTab, setActiveTab] = useState<'overview' | 'senders' | 'hours' | 'words' | 'media'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'senders' | 'hours' | 'words' | 'media' | 'joins'>('overview')
   const [copied, setCopied] = useState(false)
 
   // 1. Filter messages by selected timeframe
@@ -244,6 +244,70 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
     return { text, photo, video, voice, document, sticker }
   }, [filteredMessages])
 
+  // 8. Member Join Events & Earliest Activity Detection
+  const memberJoins = useMemo(() => {
+    const joins: Array<{
+      id: string
+      name: string
+      date: number
+      method: string
+      isServiceAction: boolean
+    }> = []
+
+    const seenUsers = new Set<string>()
+    const sortedChronological = [...messages].sort((a, b) => a.date - b.date)
+
+    for (const m of sortedChronological) {
+      const txt = (m.text || '').toLowerCase()
+      const isJoinText =
+        txt.includes('joined') ||
+        txt.includes('پیوست') ||
+        txt.includes('عضو شد') ||
+        txt.includes('به گروه آمد') ||
+        txt.includes('اضافه شد') ||
+        txt.includes('invited')
+
+      const senderId = m.senderId || m.senderName || 'unknown'
+      const senderName = m.senderName || 'Member'
+
+      if (isJoinText) {
+        joins.push({
+          id: senderId,
+          name: senderName,
+          date: m.date,
+          method: txt.includes('link') || txt.includes('لینک') ? 'با لینک دعوت (Invite Link)' : 'افزوده شده توسط کاربر/ادمین',
+          isServiceAction: true,
+        })
+        seenUsers.add(senderId)
+      } else if (!seenUsers.has(senderId) && senderId !== 'unknown') {
+        seenUsers.add(senderId)
+        joins.push({
+          id: senderId,
+          name: senderName,
+          date: m.date,
+          method: 'اولین پیام ثبت‌شده در تاریخچه',
+          isServiceAction: false,
+        })
+      }
+    }
+
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const yesterdayStart = todayStart - 24 * 3600 * 1000
+    const weekStart = now.getTime() - 7 * 24 * 3600 * 1000
+    const monthStart = now.getTime() - 30 * 24 * 3600 * 1000
+
+    return joins
+      .filter((j) => {
+        if (timeframe === 'today') return j.date >= todayStart
+        if (timeframe === 'yesterday') return j.date >= yesterdayStart && j.date < todayStart
+        if (timeframe === 'week') return j.date >= weekStart
+        if (timeframe === 'month') return j.date >= monthStart
+        return true
+      })
+      .sort((a, b) => b.date - a.date)
+  }, [messages, timeframe])
+
   if (!isOpen) return null
 
   const totalMessagesCount = filteredMessages.length
@@ -254,6 +318,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
       `📊 Statistics for "${chat.title}" (${timeframe.toUpperCase()}):`,
       `• Total Messages: ${totalMessagesCount}`,
       `• Active Members: ${uniqueSendersCount}`,
+      `• Members Joined/First Seen: ${memberJoins.length}`,
       `• Peak Hour: ${peakHour.hour}:00 (${peakHour.count} messages)`,
       `• Average Message: ${avgChars} chars / ${avgWords} words`,
       `• Top Sender: ${topSenders[0]?.name || 'N/A'} (${topSenders[0]?.count || 0} messages)`,
@@ -437,6 +502,18 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
           >
             <FileText className="w-3.5 h-3.5" />
             <span>تفکیک رسانه‌ها</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('joins')}
+            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 font-persian ${
+              activeTab === 'joins'
+                ? 'border-primary-500 text-primary-400 font-bold'
+                : 'border-transparent hover:text-gray-200'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>پیوستن اعضا ({memberJoins.length})</span>
           </button>
         </div>
 
@@ -805,6 +882,73 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
                   <div className="text-[11px] text-gray-400 font-persian">استیکر (Sticker)</div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 6: MEMBER JOINS & EARLY ACTIVITY */}
+          {activeTab === 'joins' && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-dark-850/80 border border-white/5 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-bold text-white font-persian">
+                    عضویت‌های شناسایی‌شده در تاریخچه ({memberJoins.length})
+                  </div>
+                  <div className="text-[11px] text-gray-400 font-persian mt-0.5">
+                    بر اساس پیام‌های پیوستن و اولین تعاملات ثبت‌شده در تاریخچه محلی چت
+                  </div>
+                </div>
+                <div className="px-3 py-1.5 rounded-xl bg-primary-500/15 border border-primary-500/30 text-primary-300 font-mono text-xs font-bold">
+                  {memberJoins.length} عضو
+                </div>
+              </div>
+
+              {memberJoins.length === 0 ? (
+                <div className="p-8 text-center text-xs text-gray-400 rounded-2xl bg-dark-850/50 border border-white/5 font-persian leading-relaxed">
+                  هیچ پیام پیوستن یا فعالیت جدیدی در این بازه زمانی در تاریخچه چت کاربر یافت نشد.
+                  <br />
+                  (اگر پیام ورود کاربر در تاریخچه سرور یا کش وجود داشته باشد در این بخش ثبت می‌شود)
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {memberJoins.map((j, idx) => {
+                    const d = new Date(j.date)
+                    const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+                    const dateStr = `${d.getFullYear()}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}`
+
+                    return (
+                      <div
+                        key={`${j.id}_${idx}`}
+                        className="p-3 rounded-2xl bg-dark-850/60 border border-white/5 flex items-center justify-between gap-3 hover:bg-dark-800/80 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-primary-600/20 text-primary-400 border border-primary-500/20 flex items-center justify-center font-bold text-xs shrink-0">
+                            {j.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-gray-200 truncate">
+                              {j.name}
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-persian flex items-center gap-1 mt-0.5">
+                              <span className={j.isServiceAction ? 'text-accent-cyan' : 'text-gray-400'}>
+                                {j.method}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="text-xs font-mono font-medium text-gray-300">
+                            {timeStr}
+                          </div>
+                          <div className="text-[10px] font-mono text-gray-500">
+                            {dateStr}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

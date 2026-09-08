@@ -196,6 +196,10 @@ export interface ChatDetails {
     isBot: boolean
     privacyMode: boolean
     commands?: Array<{ command: string; description: string }>
+    menuButton?: {
+      text?: string
+      url?: string
+    }
   }
 }
 

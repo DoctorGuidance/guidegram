@@ -270,10 +270,14 @@ app.whenReady().then(async () => {
       let decodedPath = ''
       if (url.searchParams.has('path')) {
         decodedPath = url.searchParams.get('path')!
+      } else if (/^[a-zA-Z]$/.test(url.host)) {
+        // e.g. guidegram-media://D/path/file.jpg -> D:/path/file.jpg
+        decodedPath = `${url.host}:${decodeURIComponent(url.pathname)}`
+      } else if (/^[a-zA-Z]:/.test(url.host)) {
+        decodedPath = `${url.host}${decodeURIComponent(url.pathname)}`
       } else {
         // e.g. guidegram-media://local/D%3A%5C... or guidegram-media:///D:/...
         let raw = url.pathname.replace(/^\/+/, '')
-        // If host was used as a dummy prefix, e.g. guidegram-media://local/...
         decodedPath = decodeURIComponent(raw)
       }
 
@@ -295,9 +299,34 @@ app.whenReady().then(async () => {
       }
 
       // Forward request to net.fetch with file:// URL to preserve Range headers for video streaming
-      return await net.fetch(pathToFileURL(decodedPath).toString(), {
-        headers: request.headers,
-      })
+      try {
+        return await net.fetch(pathToFileURL(decodedPath).toString(), {
+          headers: request.headers,
+        })
+      } catch (fetchErr) {
+        // Fallback to direct reading with explicit Content-Type
+        const ext = path.extname(decodedPath).toLowerCase()
+        const mimeTypes: Record<string, string> = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.webp': 'image/webp',
+          '.gif': 'image/gif',
+          '.mp4': 'video/mp4',
+          '.ogg': 'audio/ogg',
+          '.mp3': 'audio/mpeg',
+          '.pdf': 'application/pdf',
+        }
+        const contentType = mimeTypes[ext] || 'application/octet-stream'
+        const fileBuf = await fs.promises.readFile(decodedPath)
+        return new Response(fileBuf, {
+          headers: {
+            'Content-Type': contentType,
+            'Content-Length': fileBuf.length.toString(),
+            'Access-Control-Allow-Origin': '*',
+          },
+        })
+      }
     } catch (err) {
       Logger.error('[Protocol] Failed to serve guidegram-media request:', err)
       return new Response('Media error', { status: 500 })
@@ -918,9 +947,9 @@ function setupIpcHandlers() {
     }
   })
 
-  ipcMain.handle('telegram:send-bot-callback', async (_event, { accountId, chatId, messageId, data }) => {
+  ipcMain.handle('telegram:send-bot-callback', async (_event, { accountId, chatId, messageId, data, row, col }) => {
     try {
-      return await accountManager.sendBotCallbackQuery(accountId, chatId, messageId, data)
+      return await accountManager.sendBotCallbackQuery(accountId, chatId, messageId, data, row, col)
     } catch (err: any) {
       Logger.warn(`[IPC] sendBotCallbackQuery error:`, err)
       throw err

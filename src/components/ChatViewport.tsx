@@ -430,6 +430,12 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const [chatDetails, setChatDetails] = useState<ChatDetails | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const failedMediaKeysRef = useRef<Set<string>>(new Set())
+
+  // Sync isMuted state whenever selected chat changes or updates
+  useEffect(() => {
+    setIsMuted(!!chat?.isMuted)
+  }, [chat?.id, chat?.isMuted])
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false)
   const [isBotMenuOpen, setIsBotMenuOpen] = useState(false)
   const [callingBotBtnId, setCallingBotBtnId] = useState<string | null>(null)
@@ -1011,6 +1017,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       if (
         downloadedMedia[cacheKey] ||
         loadingMediaIds[cacheKey] ||
+        failedMediaKeysRef.current.has(cacheKey) ||
         !window.guidegram?.downloadMedia
       ) {
         return downloadedMedia[cacheKey] || null
@@ -1027,8 +1034,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         if (dataUrl) {
           setDownloadedMedia((prev) => ({ ...prev, [cacheKey]: dataUrl }))
           return dataUrl
+        } else {
+          failedMediaKeysRef.current.add(cacheKey)
         }
       } catch (err) {
+        failedMediaKeysRef.current.add(cacheKey)
         console.warn(`Failed to download media for ${msg.id}:`, err)
       } finally {
         setLoadingMediaIds((prev) => {
@@ -3048,7 +3058,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                                             msg.accountId,
                                             msg.chatId,
                                             msg.id,
-                                            btn.data
+                                            btn.data,
+                                            rIdx,
+                                            bIdx
                                           )
                                           if (res?.alert && res.message) {
                                             alert(res.message)
@@ -3587,32 +3599,49 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   <div className="relative shrink-0">
                     <button
                       type="button"
-                      onClick={() => setIsBotMenuOpen((prev) => !prev)}
+                      onClick={() => {
+                        if (chatDetails?.botInfo?.menuButton?.url) {
+                          handleSafeOpenUrl(chatDetails.botInfo.menuButton.url)
+                        } else {
+                          setIsBotMenuOpen((prev) => !prev)
+                        }
+                      }}
                       className={`p-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
                         isBotMenuOpen
                           ? 'bg-primary-500/25 text-primary-300 border border-primary-500/40 shadow-glow'
                           : 'bg-dark-800 hover:bg-dark-750 text-gray-300 hover:text-white border border-white/5'
                       }`}
-                      title="منوی دستورات ربات (Bot Commands Menu)"
+                      title={chatDetails?.botInfo?.menuButton?.text || 'منوی دستورات ربات (Bot Commands Menu)'}
                     >
                       <Bot className="w-4 h-4 text-primary-400" />
-                      <span className="font-bold text-xs">منو</span>
+                      <span className="font-bold text-xs">
+                        {chatDetails?.botInfo?.menuButton?.text || 'منو'}
+                      </span>
                     </button>
 
                     {isBotMenuOpen && (
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="absolute bottom-full left-0 mb-2 w-52 bg-dark-800/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs select-none"
+                        className="absolute bottom-full left-0 mb-2 w-64 max-h-72 overflow-y-auto bg-dark-800/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs select-none"
                       >
-                        <div className="px-2.5 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-white/5">
-                          دستورات ربات
+                        <div className="px-2.5 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 flex items-center justify-between">
+                          <span>دستورات ربات</span>
+                          {chatDetails?.username && (
+                            <span className="text-primary-400 font-mono">@{chatDetails.username}</span>
+                          )}
                         </div>
-                        {[
-                          { cmd: '/start', label: 'شروع مجدد ربات' },
-                          { cmd: '/help', label: 'راهنمای ربات' },
-                          { cmd: '/settings', label: 'تنظیمات' },
-                          { cmd: '/menu', label: 'منوی اصلی' },
-                        ].map((item) => (
+                        {(chatDetails?.botInfo?.commands && chatDetails.botInfo.commands.length > 0
+                          ? chatDetails.botInfo.commands.map((c) => ({
+                              cmd: c.command.startsWith('/') ? c.command : `/${c.command}`,
+                              label: c.description,
+                            }))
+                          : [
+                              { cmd: '/start', label: 'شروع مجدد ربات' },
+                              { cmd: '/help', label: 'راهنمای ربات' },
+                              { cmd: '/settings', label: 'تنظیمات' },
+                              { cmd: '/menu', label: 'منوی اصلی' },
+                            ]
+                        ).map((item) => (
                           <button
                             key={item.cmd}
                             type="button"
@@ -3620,10 +3649,10 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                               setIsBotMenuOpen(false)
                               onSendMessage(item.cmd)
                             }}
-                            className="flex items-center justify-between px-2.5 py-2 rounded-xl hover:bg-white/10 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+                            className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl hover:bg-white/10 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
                           >
-                            <span className="font-mono font-bold text-primary-400">{item.cmd}</span>
-                            <span className="text-[10px] text-gray-400">{item.label}</span>
+                            <span className="font-mono font-bold text-primary-400 shrink-0">{item.cmd}</span>
+                            <span className="text-[10px] text-gray-400 truncate text-right">{item.label}</span>
                           </button>
                         ))}
                       </div>

@@ -291,8 +291,8 @@ export const ChatList: React.FC<ChatListProps> = ({
                         <span
                           title={
                             dialog.isMuted
-                              ? `${dialog.unreadCount} پیام (بی‌صدا/Muted)`
-                              : `${dialog.unreadCount} پیام خوانده نشده`
+                              ? `${dialog.unreadCount} پیام ${dialog.isGroup ? `از ${dialog.unreadSendersCount ? `${dialog.unreadSendersCount} نفر` : 'چند نفر'}` : ''} (بی‌صدا/Muted)`
+                              : `${dialog.unreadCount} پیام خوانده نشده ${dialog.isGroup ? `از ${dialog.unreadSendersCount ? `${dialog.unreadSendersCount} نفر` : 'چند نفر'}` : ''}`
                           }
                           className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full transition-colors flex items-center gap-1 ${
                             isSelected
@@ -303,8 +303,10 @@ export const ChatList: React.FC<ChatListProps> = ({
                           }`}
                         >
                           <span>{dialog.unreadCount}</span>
-                          {dialog.isGroup && dialog.unreadCount > 1 && (
-                            <span className="text-[8px] opacity-80 font-normal">👥</span>
+                          {dialog.isGroup && (
+                            <span className="text-[9px] opacity-90 font-normal">
+                              ({dialog.unreadSendersCount ? `${dialog.unreadSendersCount} نفر` : (dialog.unreadCount > 1 ? 'چند نفر' : '۱ نفر')})
+                            </span>
                           )}
                         </span>
                       )}

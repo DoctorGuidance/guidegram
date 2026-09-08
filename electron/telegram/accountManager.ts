@@ -838,42 +838,77 @@ export class AccountManager {
     const dialogs = await holder.client.getDialogs({ limit })
     const nowSec = Math.floor(Date.now() / 1000)
 
-    return dialogs.map((d: any) => {
-      const entity = d.entity || {}
-      const isUser = d.isUser || false
-      const isGroup = d.isGroup || false
-      const isChannel = d.isChannel || false
-      const isBot = entity.bot || false
-      const peerId = d.id.toString()
-      const cachedAvatar = this.avatarCache.get(`${accountId}_${peerId}`)
+    const dialogItems = await Promise.all(
+      dialogs.map(async (d: any) => {
+        const entity = d.entity || {}
+        const isUser = d.isUser || false
+        const isGroup = d.isGroup || false
+        const isChannel = d.isChannel || false
+        const isBot = entity.bot || false
+        const peerId = d.id.toString()
+        const cachedAvatar = this.avatarCache.get(`${accountId}_${peerId}`)
 
-      const notifySettings = d.dialog?.notifySettings
-      const isMuted = !!(
-        notifySettings &&
-        (notifySettings.silent === true ||
-          (notifySettings.muteUntil && Number(notifySettings.muteUntil) > nowSec))
-      )
-      const unreadCount = d.unreadCount || 0
-      const unreadMentionsCount = d.unreadMentionsCount || d.dialog?.unreadMentionsCount || 0
+        const notifySettings = d.dialog?.notifySettings || (d as any).notifySettings || (entity as any)?.notifySettings
+        let isMuted = false
+        if (notifySettings) {
+          if (notifySettings.silent === true) {
+            isMuted = true
+          } else if (notifySettings.muteUntil !== undefined && notifySettings.muteUntil !== null) {
+            const muteVal = Number(notifySettings.muteUntil)
+            if (muteVal > nowSec || muteVal === 2147483647) {
+              isMuted = true
+            }
+          }
+        }
+        // In Telegram, broadcast channels without explicit un-muting are muted by default
+        if (!isMuted && isChannel && !isGroup && (!notifySettings || notifySettings.muteUntil === undefined)) {
+          isMuted = true
+        }
 
-      return {
-        id: peerId,
-        accountId,
-        title: d.title || d.name || 'Chat',
-        unreadCount,
-        unreadMentionsCount,
-        isMuted,
-        isUser,
-        isGroup,
-        isChannel,
-        isBot,
-        isPinned: d.pinned || false,
-        lastMessageText: d.message?.message || '',
-        lastMessageDate: d.message?.date ? d.message.date * 1000 : Date.now(),
-        avatarInitials: (d.title || d.name || 'C').substring(0, 2).toUpperCase(),
-        avatarUrl: cachedAvatar,
-      }
-    })
+        const unreadCount = d.unreadCount || 0
+        const unreadMentionsCount = d.unreadMentionsCount || d.dialog?.unreadMentionsCount || 0
+        let unreadSendersCount: number | undefined = undefined
+
+        if (isGroup && unreadCount > 0) {
+          if (unreadCount === 1) {
+            unreadSendersCount = 1
+          } else {
+            try {
+              if (holder.client) {
+                const recentMsgs = await holder.client.getMessages(peerId, { limit: Math.min(unreadCount, 30) })
+                const distinctSenders = new Set(recentMsgs.map((m: any) => m.senderId?.toString()).filter(Boolean))
+                unreadSendersCount = Math.max(1, distinctSenders.size)
+              } else {
+                unreadSendersCount = 1
+              }
+            } catch (_) {
+              unreadSendersCount = Math.min(unreadCount, Math.max(2, Math.ceil(unreadCount / 3)))
+            }
+          }
+        }
+
+        return {
+          id: peerId,
+          accountId,
+          title: d.title || d.name || 'Chat',
+          unreadCount,
+          unreadMentionsCount,
+          unreadSendersCount,
+          isMuted,
+          isUser,
+          isGroup,
+          isChannel,
+          isBot,
+          isPinned: d.pinned || false,
+          lastMessageText: d.message?.message || '',
+          lastMessageDate: d.message?.date ? d.message.date * 1000 : Date.now(),
+          avatarInitials: (d.title || d.name || 'C').substring(0, 2).toUpperCase(),
+          avatarUrl: cachedAvatar,
+        }
+      })
+    )
+
+    return dialogItems
   }
 
   /**
@@ -1275,11 +1310,32 @@ export class AccountManager {
     accountId: string,
     chatId: string,
     messageId: number,
-    data?: string
+    data?: string,
+    row?: number,
+    col?: number
   ): Promise<BotCallbackResult> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) {
       throw new Error(`Account ${accountId} is still connecting or disconnected.`)
+    }
+
+    // Try native GramJS message.click(i, j) if coordinates provided
+    if (typeof row === 'number' && typeof col === 'number') {
+      try {
+        const msgs = await holder.client.getMessages(chatId, { ids: [messageId] })
+        if (msgs && msgs.length > 0) {
+          const clickRes: any = await msgs[0].click({ i: row, j: col })
+          if (clickRes) {
+            return {
+              message: clickRes.message || (typeof clickRes === 'string' ? clickRes : undefined),
+              alert: clickRes.alert || false,
+              url: clickRes.url || (typeof clickRes === 'string' && clickRes.startsWith('http') ? clickRes : undefined),
+            }
+          }
+        }
+      } catch (clickErr) {
+        Logger.debug(`[AccountManager] msgs[0].click({ i: ${row}, j: ${col} }) fallback:`, clickErr)
+      }
     }
 
     const peer = await holder.client.getInputEntity(chatId)
@@ -1326,7 +1382,16 @@ export class AccountManager {
 
       if (Array.isArray(res) && res.length > 0) {
         const doc = res[0]
-        const buf = await holder.client.downloadMedia(doc, { thumb: 1 })
+        let buf: any = null
+        if (doc.thumbs && doc.thumbs.length > 0) {
+          try {
+            const thumbIdx = doc.thumbs.length - 1
+            buf = await holder.client.downloadMedia(doc, { thumb: thumbIdx })
+          } catch (_) {}
+        }
+        if (!buf || buf.length === 0) {
+          buf = await holder.client.downloadMedia(doc, {})
+        }
         if (buf && (Buffer.isBuffer(buf) || (buf as any).length > 0)) {
           await fs.promises.writeFile(diskPath, buf)
           const streamUrl = `guidegram-media://local/${encodeURIComponent(diskPath)}`
@@ -1660,10 +1725,19 @@ export class AccountManager {
             commands.push({ command: cmd.command, description: cmd.description })
           }
         }
+        let menuButton: { text?: string; url?: string } | undefined = undefined
+        if (full?.fullUser?.botInfo?.menuButton) {
+          const mb = full.fullUser.botInfo.menuButton
+          menuButton = {
+            text: mb.text || undefined,
+            url: mb.url || undefined,
+          }
+        }
         botInfo = {
           isBot: true,
           privacyMode: !entity.botChatHistory,
           commands,
+          menuButton,
         }
       }
 
@@ -1840,8 +1914,9 @@ export class AccountManager {
     }
 
     // Cache local media URL so the chat renders instantly without redownloading
-    this.mediaCache.set(cacheKey, `guidegram-media://${finalFilePath}`)
-    this.mediaCache.set(`${cacheKey}_thumb`, `guidegram-media://${finalFilePath}`)
+    const localStreamUrl = `guidegram-media://local/${encodeURIComponent(finalFilePath)}`
+    this.mediaCache.set(cacheKey, localStreamUrl)
+    this.mediaCache.set(`${cacheKey}_thumb`, localStreamUrl)
 
     let mediaFileSize: number | undefined = mediaData.mediaFileSize
     if (!mediaFileSize && fs.existsSync(finalFilePath)) {
@@ -1872,7 +1947,7 @@ export class AccountManager {
       mediaHeight: mediaData.mediaHeight,
       mediaMimeType: mediaData.mediaMimeType,
       mediaFilePath: finalFilePath,
-      mediaUrl: `guidegram-media://${finalFilePath}`,
+      mediaUrl: localStreamUrl,
       entities,
     }
   }
