@@ -32,4 +32,4 @@
 | **Linux** | Guidegram-1.1.1.AppImage | AppImage | x86_64 | Self-contained executable for all Linux distributions |
 
 ---
-*Built with ❤️ by DoctorGuidance*
+*Built with 🤍 by DoctorGuidance*
