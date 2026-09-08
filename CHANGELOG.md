@@ -1,6 +1,15 @@
-﻿# 📜 Guidegram Changelog
+# 📜 Guidegram Changelog
 
 All notable changes to the Guidegram desktop client will be documented in this file.
+
+---
+
+## [v1.1.2] — Icon & Asset Consistency Hotfix
+
+### 🌟 What's New
+- **🖼️ Official 3D Metallic Neon Logo Packaging**: Replaced draft placeholder icons with the official 3D metallic neon cyan badge (`src/assets/logo.png`) across all application binaries, executables, metadata, and taskbar icons.
+- **Embedded Asset Synchronization**: Updated fallback DataURLs and extraResources configuration.
+- **Polished Documentation**: Updated release notes and unified branding footers.
 
 ---
 
