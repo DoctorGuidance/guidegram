@@ -204,6 +204,13 @@ export interface ForwardOptions {
 
 export type CloseAction = 'ask' | 'minimize' | 'quit'
 
+export interface UpdateProgress {
+  percent: number // 0 to 100
+  transferredBytes: number
+  totalBytes: number
+  stage: 'downloading' | 'verifying' | 'extracting' | 'restarting'
+}
+
 export interface UpdateInfo {
   currentVersion: string
   latestVersion: string

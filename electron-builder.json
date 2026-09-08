@@ -11,6 +11,12 @@
     "dist-electron",
     "resources"
   ],
+  "extraResources": [
+    {
+      "from": "resources",
+      "to": "resources"
+    }
+  ],
   "win": {
     "icon": "resources/icon.ico",
     "target": [

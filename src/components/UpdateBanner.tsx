@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
-import { Sparkles, Download, X, ArrowUpRight, Check, AlertCircle } from 'lucide-react'
-import { UpdateInfo } from '../types/telegram'
+import React, { useState, useEffect } from 'react'
+import { Sparkles, Download, X, ArrowUpRight, AlertCircle, RefreshCw } from 'lucide-react'
+import { UpdateInfo, UpdateProgress } from '../types/telegram'
 
 interface UpdateBannerProps {
   updateInfo: UpdateInfo
@@ -10,6 +10,17 @@ interface UpdateBannerProps {
 export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismiss }) => {
   const [isUpdating, setIsUpdating] = useState(false)
   const [updateError, setUpdateError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<UpdateProgress | null>(null)
+
+  useEffect(() => {
+    if (!window.guidegram?.on) return
+    const cleanup = window.guidegram.on('app:update-progress', (p: UpdateProgress) => {
+      setProgress(p)
+    })
+    return () => {
+      cleanup?.()
+    }
+  }, [])
 
   const handleUpdate = async () => {
     if (!updateInfo.downloadUrl) {
@@ -36,6 +47,8 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
     }
   }
 
+  const formatMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+
   return (
     <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-dark-900/95 border border-primary-500/40 rounded-3xl p-4 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom-5 duration-200 select-none">
       <div className="flex items-start justify-between gap-3">
@@ -56,14 +69,48 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer shrink-0"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        {!isUpdating && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
+
+      {/* Real-time Download & Extraction Progress */}
+      {isUpdating && (
+        <div className="mt-3 p-2.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-primary-300 font-semibold flex items-center gap-1.5">
+              <RefreshCw className="w-3 h-3 animate-spin text-accent-cyan" />
+              {progress?.stage === 'extracting'
+                ? 'Extracting update files...'
+                : progress?.stage === 'restarting'
+                ? 'Restarting Guidegram...'
+                : `Downloading update... ${progress?.percent ? `${progress.percent}%` : ''}`}
+            </span>
+            {progress && progress.totalBytes > 0 && (
+              <span className="text-gray-400 font-mono text-[10px]">
+                {formatMB(progress.transferredBytes)} / {formatMB(progress.totalBytes)}
+              </span>
+            )}
+          </div>
+
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-primary-500 to-accent-cyan transition-all duration-300 ease-out"
+              style={{ width: `${progress?.percent ?? 5}%` }}
+            />
+          </div>
+
+          <p className="text-[10px] text-gray-500">
+            Guidegram will close and reopen automatically once ready.
+          </p>
+        </div>
+      )}
 
       {updateError && (
         <div className="mt-2.5 p-2 rounded-xl bg-accent-rose/10 border border-accent-rose/20 text-[10px] text-accent-rose flex items-center gap-1.5">
@@ -90,13 +137,15 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
         </button>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="px-3 py-1.5 rounded-xl text-[11px] font-semibold text-gray-400 hover:text-white transition-colors cursor-pointer"
-          >
-            Later
-          </button>
+          {!isUpdating && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="px-3 py-1.5 rounded-xl text-[11px] font-semibold text-gray-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Later
+            </button>
+          )}
           <button
             type="button"
             disabled={isUpdating}
@@ -105,8 +154,16 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
           >
             {isUpdating ? (
               <>
-                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Updating...</span>
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>
+                  {progress?.stage === 'restarting'
+                    ? 'Restarting...'
+                    : progress?.stage === 'extracting'
+                    ? 'Extracting...'
+                    : progress?.percent !== undefined
+                    ? `${progress.percent}%`
+                    : 'Updating...'}
+                </span>
               </>
             ) : (
               <>

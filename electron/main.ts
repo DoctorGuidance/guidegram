@@ -50,15 +50,30 @@ let sessionStore: SessionStore
 let accountManager: AccountManager
 let updateManager: UpdateManager
 
+const FALLBACK_ICON_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEEElEQVR4nO2VX0wcVRTGvzu77Mx0ha5iBfqgFXVLCzatthZM22BMKxGTEo2N8qA1qW2iaZqoEdGkRmMsibb+eRBs1RqjvihWA0+gjYWKQihUm5oC2wIiLelCRZb9N3PPHDPDlmCFhSU+7pfczMw95873m3PuzABppZVWqupmH05yIZq5GPWcB2YxZ+4Q63dN8GfuCb53rhT3gkw7OQNLsAsRVGISJYjChSgAE8CnMNY3cFvZPXCNZ2IkwEAfAectZ6XrbjfK/zDRPQq0LQ5ggFchjG8QQYFj+t/h2XErSotuAAIWIAgQCqAA6LOAIwYOwifeWVwFBnk1JtGCKLITZhai+AVRdCGGCGLIQQwlR1rh3z4KXJFAzm2I+XOh2X2xR4DhmipGqgBDrCOELxBDNmKOeRsM7MIWB6UUCvLBaIRP7Ozbz1vfDuBweQFWPLIJ2oCYMrerIBjoWRRACHsQxdrEk/+EOLZhM56AQI5jnIV6CBFycl8Xze1DfGhdHt4fFsClQZb+5eJn4cJmuyXJAJQ5I1HsTZhLTOJJbEERgCtYKl6DT5yaNgfQEpRPZ2bxu39JBo/y5a8/ju3wuzDmV4A7FrbNr9Fp9uMkM5qZ0cDfIYk+6qd93w5LqzVI/Pu4dSLInGnPDxB/+YPJXBfnN5Otd886O4kNTt+nen98rsVVv5kvjcWtA2ABZm7WTaVimU9E7FiuglddQC+7UZs6QBQ3JcyBCPpnS9naFK8Jxq0qiwXGglbPsU+MExSivYXbR6FJC/eXXQx72fVWU1NuOHWAGLTp9zzuoPxLJd/HK6IKV40ZAhcDFs42mis9cXpDlxIaEVSSUIngJmM5gJcXAxCc8aHJuTZMLvGnNNgI9LLn7xYTqkHQpIQqCaoNIe1rgi7Jm8w8GUDPNEAMm14p6vjRMhTvgd715+xwx32eTuzm6/ImQsW6aakeKeGRBPuoET2gSXrBBtIkDc8HIGad/ZAznCpEsBRRTNwyMlrweEt/JUD1NedKBpLd8MHSC42qpHKnCiYVHz1V2I6UvwN7hIkIPkhUIWvQc+Ph89d7jwLKQ9WrOiuqb+9aNtuystL+x6bNJfVM5p/txDwSc0aqORuEM4ggT4kzdClbMyi875n2C8SK3MAsfGAO1/RsrNu2bcTrikee04j2a5LcNoBqmg/X/br22OIBbD3LGxWDj2uSliR6ypqUZ3RJHR4pxzRJqiZlviapVJOUpZmJDUh0qLZ7zfNYgMR8Cd6d8TtVsr7SJK28utMTMIlx9dyJmTrJF2u71rw39Rv6HwAc7eaMFePjlbpJT2nSKtakVGeaq1IOqkQNumEcrDu9LukmXRzADJU8OqRrIeXmDMPM9hpW2Ctilz9vXX1pZk5aaaWFFPQPar8W5BrfhOgAAAAASUVORK5CYII='
+
 function getResourcesPath(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'resources')
-    : path.resolve(__dirname, '../resources')
+  const candidates = [
+    path.join(process.resourcesPath, 'resources'),
+    process.resourcesPath,
+    path.join(app.getAppPath(), 'resources'),
+    path.resolve(__dirname, '../resources'),
+    path.resolve(__dirname, '../../resources'),
+    path.resolve(process.cwd(), 'resources'),
+  ]
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(path.join(c, 'icon32.png')) || fs.existsSync(path.join(c, 'icon.ico'))) {
+        return c
+      }
+    } catch (_) {}
+  }
+  return path.resolve(__dirname, '../resources')
 }
 
 function getAppIconPath(): string {
   const base = getResourcesPath()
-  // Prefer ICO for the window titlebar/taskbar on Windows
   const iconIco = path.join(base, 'icon.ico')
   const iconPng = path.join(base, 'icon256.png')
   if (fs.existsSync(iconIco)) return iconIco
@@ -66,35 +81,46 @@ function getAppIconPath(): string {
   return ''
 }
 
+function getAppIcon(): InstanceType<typeof nativeImage> {
+  const iconPath = getAppIconPath()
+  if (iconPath && fs.existsSync(iconPath)) {
+    const img = nativeImage.createFromPath(iconPath)
+    if (!img.isEmpty()) return img
+  }
+  return nativeImage.createFromDataURL(FALLBACK_ICON_DATA_URL)
+}
+
 function getTrayIconPath(): string {
   const base = getResourcesPath()
-  // System tray requires a small PNG with transparent background — never ICO
   const icon32 = path.join(base, 'icon32.png')
   const icon16 = path.join(base, 'icon16.png')
   if (fs.existsSync(icon32)) return icon32
   if (fs.existsSync(icon16)) return icon16
+  const iconPng = path.join(base, 'icon256.png')
+  if (fs.existsSync(iconPng)) return iconPng
   return ''
+}
+
+function getTrayIcon(): InstanceType<typeof nativeImage> {
+  const iconPath = getTrayIconPath()
+  if (iconPath && fs.existsSync(iconPath)) {
+    let img = nativeImage.createFromPath(iconPath)
+    if (!img.isEmpty()) {
+      if (process.platform === 'win32') {
+        img = img.resize({ width: 16, height: 16 })
+      }
+      return img
+    }
+  }
+  // Safe infallible embedded fallback
+  const fallback = nativeImage.createFromDataURL(FALLBACK_ICON_DATA_URL)
+  return fallback.resize({ width: 16, height: 16 })
 }
 
 function createTray() {
   if (tray) return
 
-  const iconPath = getTrayIconPath()
-  let trayIcon: InstanceType<typeof nativeImage> | null = null
-
-  if (iconPath) {
-    trayIcon = nativeImage.createFromPath(iconPath)
-    // Resize to 16x16 for Windows system tray (high-DPI aware)
-    if (process.platform === 'win32') {
-      trayIcon = trayIcon.resize({ width: 16, height: 16 })
-    }
-  }
-
-  // Fallback: create empty nativeImage if no file found
-  if (!trayIcon || trayIcon.isEmpty()) {
-    trayIcon = nativeImage.createEmpty()
-  }
-
+  const trayIcon = getTrayIcon()
   tray = new Tray(trayIcon)
   tray.setToolTip('Guidegram - Telegram Client')
 
@@ -167,7 +193,7 @@ function createTray() {
 function createWindow() {
   Logger.info('[Window] Creating main application window...')
 
-  const iconPath = getAppIconPath()
+  const appIcon = getAppIcon()
   mainWindow = new BrowserWindow({
     width: 1260,
     height: 840,
@@ -177,7 +203,7 @@ function createWindow() {
     backgroundColor: '#08090C',
     title: 'Guidegram',
     frame: false, // Frameless window with custom titlebar
-    icon: iconPath || undefined,
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       sandbox: false,
@@ -629,7 +655,11 @@ function setupIpcHandlers() {
     const appDir = isDev
       ? path.resolve(__dirname, '..')
       : path.dirname(app.getPath('exe'))
-    return updateManager.performPortableUpdate(downloadUrl, appDir, portableDataDir)
+    return updateManager.performPortableUpdate(downloadUrl, appDir, portableDataDir, (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-progress', progress)
+      }
+    })
   })
 
   // Telegram Accounts

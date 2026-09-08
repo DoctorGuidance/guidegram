@@ -2,7 +2,7 @@ import https from 'https'
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
-import { UpdateInfo, ProxyConfig } from './types'
+import { UpdateInfo, UpdateProgress, ProxyConfig } from './types'
 import { Logger } from './logger'
 
 export class UpdateManager {
@@ -160,7 +160,8 @@ export class UpdateManager {
   public async performPortableUpdate(
     downloadUrl: string,
     appInstallDir: string,
-    dataDir: string
+    dataDir: string,
+    onProgress?: (progress: UpdateProgress) => void
   ): Promise<{ success: boolean; error?: string }> {
     try {
       Logger.info(`[UpdateManager] Starting portable update download from: ${downloadUrl}`)
@@ -168,9 +169,18 @@ export class UpdateManager {
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
 
       const zipPath = path.join(tempDir, 'update.zip')
-      const downloaded = await this.downloadFile(downloadUrl, zipPath)
+      const downloaded = await this.downloadFile(downloadUrl, zipPath, onProgress)
       if (!downloaded) {
         return { success: false, error: 'Failed to download update package.' }
+      }
+
+      if (onProgress) {
+        onProgress({
+          percent: 100,
+          transferredBytes: 0,
+          totalBytes: 0,
+          stage: 'extracting',
+        })
       }
 
       // Create PowerShell update script
@@ -198,6 +208,15 @@ Start-Process -FilePath $exe
       await fs.promises.writeFile(scriptPath, psScript, 'utf-8')
       Logger.info(`[UpdateManager] Update script generated at: ${scriptPath}`)
 
+      if (onProgress) {
+        onProgress({
+          percent: 100,
+          transferredBytes: 0,
+          totalBytes: 0,
+          stage: 'restarting',
+        })
+      }
+
       // Spawn powershell detached process
       const { spawn } = await import('child_process')
       const child = spawn(
@@ -213,7 +232,7 @@ Start-Process -FilePath $exe
       // Quit app immediately so files can be safely replaced
       setTimeout(() => {
         app.quit()
-      }, 500)
+      }, 700)
 
       return { success: true }
     } catch (err: any) {
@@ -222,9 +241,16 @@ Start-Process -FilePath $exe
     }
   }
 
-  private downloadFile(url: string, destPath: string): Promise<boolean> {
+  private downloadFile(
+    url: string,
+    destPath: string,
+    onProgress?: (progress: UpdateProgress) => void
+  ): Promise<boolean> {
     return new Promise((resolve) => {
       const file = fs.createWriteStream(destPath)
+      let transferredBytes = 0
+      let totalBytes = 0
+
       const request = (targetUrl: string) => {
         https
           .get(targetUrl, { headers: { 'User-Agent': 'Guidegram-Desktop-App' } }, (res) => {
@@ -246,12 +272,41 @@ Start-Process -FilePath $exe
               return
             }
 
+            const headerLen = res.headers['content-length']
+            if (headerLen) {
+              totalBytes = parseInt(headerLen, 10) || 0
+            }
+
+            res.on('data', (chunk: Buffer) => {
+              transferredBytes += chunk.length
+              if (onProgress && totalBytes > 0) {
+                const percent = Math.min(99, Math.round((transferredBytes / totalBytes) * 100))
+                onProgress({
+                  percent,
+                  transferredBytes,
+                  totalBytes,
+                  stage: 'downloading',
+                })
+              }
+            })
+
             res.pipe(file)
             file.on('finish', () => {
-              file.close(() => resolve(true))
+              file.close(() => {
+                if (onProgress) {
+                  onProgress({
+                    percent: 100,
+                    transferredBytes,
+                    totalBytes: totalBytes || transferredBytes,
+                    stage: 'extracting',
+                  })
+                }
+                resolve(true)
+              })
             })
           })
-          .on('error', () => {
+          .on('error', (err) => {
+            Logger.error('[UpdateManager] Download file error:', err)
             file.close()
             fs.unlink(destPath, () => {})
             resolve(false)
