@@ -1,0 +1,42 @@
+﻿# 📜 Guidegram Changelog
+
+All notable changes to the Guidegram desktop client will be documented in this file.
+
+---
+
+## [v1.1.1] — Hotfix & UX Polish
+
+### 🌟 What's New
+- **🖼️ Official 3D Neon Logo Everywhere**: Resolved icon discrepancy by using the official 3D metallic neon cyan badge from src/assets/logo.png across System Tray, Taskbar, Window, and Desktop executables.
+- **🖼️ System Tray & Taskbar Icon Visibility**:
+  - Resolved root-cause path resolution error (esources/resources) in packaged Windows builds that previously caused Electron to create an empty transparent system tray icon slot.
+  - Ensured mainWindow explicitly receives high-resolution NativeImage icon on creation.
+  - Fail-safe embedded base64 DataURL fallback for the official Guidegram icon so tray and taskbar icons never appear blank.
+  - Added xtraResources mapping in lectron-builder.json guaranteeing icon assets are unpacked on disk.
+- **📊 Real-Time Download Progress & Status Feedback for Updates**:
+  - Live progress bar displaying current download percentage (0% - 100%).
+  - Shows exact downloaded megabytes vs total package size (e.g. 45.2 MB / 94.8 MB).
+  - Stage tracking: Downloading update..., Extracting update files..., and Restarting Guidegram....
+  - Reassuring guidance indicating user session data remains 100% untouched.
+
+---
+
+## [v1.1.0] — Modern Telegram Desktop Parity & Next-Gen Power Features
+
+### 🌟 What's New
+- **⚡ Parallel Chunk Download Acceleration (Up to 3x Faster)**: Multi-worker MTProto pipeline engaging 4 parallel concurrent MTProto workers for large media and videos (> 2MB).
+- **🛡️ Combinatorial Anti-Fingerprinting & Hardware Spoofing**: Prevents device fingerprinting with over 28 realistic hardware workstation profiles.
+- **📌 Multi-Cycle Pinned Messages & Dedicated Search Drawer**: Cycle smoothly through pinned messages with counter indicators (1 of N) + dedicated searchable pinned messages drawer.
+- **📝 Large Text Auto-Splitter & .txt File Converter**: Automatic detection when text exceeds 4,096 characters with 1-click option to send as .txt or split into sequential chunks.
+- **🤖 AI Composer Text Assistant**: Contextual AI writing assistant with professional rephrasing, grammar fixes, summarization, and expressive emoji enhancements.
+- **🎨 Floating Contextual Formatting Toolbar & Spoilers**: Quick floating toolbar for bold, italic, code, strikethrough, quote, link, and interactive click-to-reveal spoilers (||...||).
+- **🔍 In-Chat Search Highlighting & Match Navigation**: In-bubble term highlight with jump navigation and keyboard shortcuts.
+- **⏰ Silent Messages & Scheduled Sending Modal**: Send without sound and schedule messages with flexible presets.
+- **⚡ 64Gram-Inspired Power Features**: Chat ID & Message ID badges, seconds in message timestamps, quick forward to Saved Messages, group avatars, and inline button inspection.
+- **👁️ Ghost Mode & BiDi/RTL Typography**: Suppress read receipts and native Persian/Arabic RTL detection.
+
+---
+
+## [v1.0.0] — Initial Release
+
+- Initial public release of Guidegram portable multi-account desktop Telegram client.
