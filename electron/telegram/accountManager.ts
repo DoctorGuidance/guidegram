@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { app, BrowserWindow, dialog } from 'electron'
 import { TelegramClient, Api, sessions, errors, helpers } from 'telegram'
 import { NewMessage } from 'telegram/events/index.js'
 import QRCode from 'qrcode'
@@ -23,6 +24,7 @@ import {
   MessageReactionItem,
   SendMessageOptions,
   SendMediaOptions,
+  BotCallbackResult,
 } from './types'
 
 export interface ClientHolder {
@@ -75,6 +77,7 @@ export interface ParallelDownloadOptions {
   workers?: number // Default: 4
   partSizeKB?: number // Default: 512
   onProgress?: (percent: number, received: number, total: number) => void
+  isCancelled?: () => boolean
 }
 
 export async function parallelDownloadDocument(
@@ -110,6 +113,10 @@ export async function parallelDownloadDocument(
   try {
     const workerPromises = Array.from({ length: workers }, async () => {
       while (nextPartIndex < totalParts && !abortError) {
+        if (options?.isCancelled?.()) {
+          abortError = new Error('DOWNLOAD_CANCELLED')
+          break
+        }
         const partIndex = nextPartIndex++
         if (partIndex >= totalParts) break
 
@@ -118,7 +125,10 @@ export async function parallelDownloadDocument(
 
         let chunkBytes: Buffer | null = null
         for (let attempt = 1; attempt <= 3; attempt++) {
-          if (abortError) break
+          if (abortError || options?.isCancelled?.()) {
+            if (!abortError && options?.isCancelled?.()) abortError = new Error('DOWNLOAD_CANCELLED')
+            break
+          }
           try {
             const sender = await client.getSender(targetDcId)
             const req = new Api.upload.GetFile({
@@ -174,6 +184,9 @@ export async function parallelDownloadDocument(
     await fileHandle.sync()
   } finally {
     await fileHandle.close().catch(() => {})
+    if (abortError && abortError.message === 'DOWNLOAD_CANCELLED') {
+      await fs.promises.unlink(tempPath).catch(() => {})
+    }
   }
 
   // Atomic rename to finalize download
@@ -191,6 +204,8 @@ export class AccountManager {
   private avatarCache = new Map<string, string>() // `${accountId}_${peerId}` -> data URL
   private mediaCache = new Map<string, string>() // `${accountId}_${chatId}_${msgId}` -> data URL
   private inFlightDownloads = new Map<string, Promise<string | null>>()
+  private activeMediaDownloads = new Map<string, { abort: () => void; isCancelled: () => boolean }>()
+  private customEmojiCache = new Map<string, string>() // documentId -> streamUrl
 
   constructor(store: SessionStore, onEvent?: (event: string, payload: any) => void) {
     this.store = store
@@ -821,6 +836,8 @@ export class AccountManager {
     }
 
     const dialogs = await holder.client.getDialogs({ limit })
+    const nowSec = Math.floor(Date.now() / 1000)
+
     return dialogs.map((d: any) => {
       const entity = d.entity || {}
       const isUser = d.isUser || false
@@ -830,11 +847,22 @@ export class AccountManager {
       const peerId = d.id.toString()
       const cachedAvatar = this.avatarCache.get(`${accountId}_${peerId}`)
 
+      const notifySettings = d.dialog?.notifySettings
+      const isMuted = !!(
+        notifySettings &&
+        (notifySettings.silent === true ||
+          (notifySettings.muteUntil && Number(notifySettings.muteUntil) > nowSec))
+      )
+      const unreadCount = d.unreadCount || 0
+      const unreadMentionsCount = d.unreadMentionsCount || d.dialog?.unreadMentionsCount || 0
+
       return {
         id: peerId,
         accountId,
         title: d.title || d.name || 'Chat',
-        unreadCount: d.unreadCount || 0,
+        unreadCount,
+        unreadMentionsCount,
+        isMuted,
         isUser,
         isGroup,
         isChannel,
@@ -1008,14 +1036,46 @@ export class AccountManager {
       return this.inFlightDownloads.get(cacheKey)!
     }
 
-    const downloadPromise = this.performDownloadMedia(accountId, chatId, messageId, thumb, cacheKey)
+    const cancelKey = `${accountId}_${chatId}_${messageId}`
+    let isCancelled = false
+    this.activeMediaDownloads.set(cancelKey, {
+      abort: () => {
+        isCancelled = true
+      },
+      isCancelled: () => isCancelled,
+    })
+
+    const downloadPromise = this.performDownloadMedia(accountId, chatId, messageId, thumb, cacheKey, () => isCancelled)
     this.inFlightDownloads.set(cacheKey, downloadPromise)
 
     try {
       return await downloadPromise
     } finally {
       this.inFlightDownloads.delete(cacheKey)
+      this.activeMediaDownloads.delete(cancelKey)
     }
+  }
+
+  /**
+   * Cancel in-flight download of media
+   */
+  public async cancelDownloadMedia(accountId: string, chatId: string, messageId: number): Promise<boolean> {
+    const cancelKey = `${accountId}_${chatId}_${messageId}`
+    const active = this.activeMediaDownloads.get(cancelKey)
+    if (active) {
+      active.abort()
+      this.activeMediaDownloads.delete(cancelKey)
+      this.onEventCallback?.('telegram:download-progress', {
+        accountId,
+        chatId,
+        messageId,
+        progress: -1,
+        bytesReceived: 0,
+        totalBytes: 0,
+      })
+      return true
+    }
+    return false
   }
 
   private async performDownloadMedia(
@@ -1023,7 +1083,8 @@ export class AccountManager {
     chatId: string,
     messageId: number,
     thumb: boolean,
-    cacheKey: string
+    cacheKey: string,
+    isCancelled?: () => boolean
   ): Promise<string | null> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) return null
@@ -1049,7 +1110,7 @@ export class AccountManager {
           this.mediaCache.set(cacheKey, dataUrl)
           return dataUrl
         } else {
-          const streamUrl = `guidegram-media://${diskPath}`
+          const streamUrl = `guidegram-media://local/${encodeURIComponent(diskPath)}`
           this.mediaCache.set(cacheKey, streamUrl)
           return streamUrl
         }
@@ -1065,6 +1126,7 @@ export class AccountManager {
           await parallelDownloadDocument(holder.client, doc, diskPath, {
             workers: 4,
             partSizeKB: 512,
+            isCancelled,
             onProgress: (percent, received, total) => {
               this.onEventCallback?.('telegram:download-progress', {
                 accountId,
@@ -1076,7 +1138,11 @@ export class AccountManager {
               })
             },
           })
-        } catch (parallelErr) {
+        } catch (parallelErr: any) {
+          if (parallelErr?.message === 'DOWNLOAD_CANCELLED' || isCancelled?.()) {
+            await fs.promises.unlink(tempDiskPath).catch(() => {})
+            return null
+          }
           Logger.warn(`[AccountManager] Parallel download failed for ${chatId}/${messageId}, falling back:`, parallelErr)
           await fs.promises.unlink(tempDiskPath).catch(() => {})
           const fallbackRes = await holder.client.downloadMedia(msgs[0].media, {
@@ -1091,10 +1157,21 @@ export class AccountManager {
           }
         }
       } else {
+        if (isCancelled?.()) return null
+
         // Streamed or thumbnail download
         if (thumb) {
-          const buf = await holder.client.downloadMedia(msgs[0].media, { thumb: -1 })
-          if (buf && buf.length > 0) {
+          let thumbIndex: number | undefined = undefined
+          if (mediaObj?.document?.thumbs && mediaObj.document.thumbs.length > 0) {
+            thumbIndex = mediaObj.document.thumbs.length - 1
+          } else if (mediaObj?.photo?.sizes && mediaObj.photo.sizes.length > 0) {
+            thumbIndex = Math.min(1, mediaObj.photo.sizes.length - 1)
+          } else {
+            thumbIndex = 0
+          }
+
+          const buf = await holder.client.downloadMedia(msgs[0].media, { thumb: thumbIndex })
+          if (buf && (Buffer.isBuffer(buf) || (buf as any).length > 0)) {
             await fs.promises.writeFile(tempDiskPath, buf)
             await fs.promises.rename(tempDiskPath, diskPath)
           }
@@ -1115,13 +1192,150 @@ export class AccountManager {
           this.mediaCache.set(cacheKey, dataUrl)
           return dataUrl
         } else {
-          const streamUrl = `guidegram-media://${diskPath}`
+          const streamUrl = `guidegram-media://local/${encodeURIComponent(diskPath)}`
           this.mediaCache.set(cacheKey, streamUrl)
+          this.onEventCallback?.('telegram:download-progress', {
+            accountId,
+            chatId,
+            messageId,
+            progress: 100,
+            bytesReceived: fileSize,
+            totalBytes: fileSize,
+          })
           return streamUrl
         }
       }
     } catch (err: any) {
-      Logger.warn(`[AccountManager] Failed to download media for ${chatId}/${messageId}:`, err)
+      if (err?.message !== 'DOWNLOAD_CANCELLED') {
+        Logger.warn(`[AccountManager] Failed to download media for ${chatId}/${messageId}:`, err)
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Save media directly to user's downloads folder or prompt with native Save Dialog
+   */
+  public async saveMediaToFile(
+    win: BrowserWindow | null,
+    accountId: string,
+    chatId: string,
+    messageId: number,
+    defaultName?: string
+  ): Promise<{ success: boolean; filePath?: string; canceled?: boolean }> {
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is disconnected.`)
+
+    // Ensure media is downloaded
+    const mediaUrl = await this.downloadMedia(accountId, chatId, messageId, false)
+    if (!mediaUrl) {
+      throw new Error('Failed to download media for saving.')
+    }
+
+    const cacheKey = `${accountId}_${chatId}_${messageId}`
+    let sourcePath = ''
+    const exts = ['.mp4', '.jpg', '.png', '.webp', '.ogg', '.pdf', '']
+    for (const ext of exts) {
+      const p = path.join(this.mediaDir, `${cacheKey}${ext}`)
+      if (fs.existsSync(p)) {
+        sourcePath = p
+        break
+      }
+    }
+
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
+      throw new Error('Cached media file not found on disk.')
+    }
+
+    const safeDefaultName = defaultName || path.basename(sourcePath)
+    const downloadsFolder = app.getPath('downloads')
+    const targetDefault = path.join(downloadsFolder, safeDefaultName)
+
+    if (win) {
+      const res = await dialog.showSaveDialog(win, {
+        title: 'Save Media to Computer',
+        defaultPath: targetDefault,
+      })
+      if (res.canceled || !res.filePath) {
+        return { success: false, canceled: true }
+      }
+      await fs.promises.copyFile(sourcePath, res.filePath)
+      return { success: true, filePath: res.filePath }
+    } else {
+      await fs.promises.copyFile(sourcePath, targetDefault)
+      return { success: true, filePath: targetDefault }
+    }
+  }
+
+  /**
+   * Execute bot inline button callback query and retrieve answer
+   */
+  public async sendBotCallbackQuery(
+    accountId: string,
+    chatId: string,
+    messageId: number,
+    data?: string
+  ): Promise<BotCallbackResult> {
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client) {
+      throw new Error(`Account ${accountId} is still connecting or disconnected.`)
+    }
+
+    const peer = await holder.client.getInputEntity(chatId)
+    const result: any = await holder.client.invoke(
+      new Api.messages.GetBotCallbackAnswer({
+        peer,
+        msgId: messageId,
+        data: data ? Buffer.from(data, 'utf-8') : undefined,
+      })
+    )
+
+    return {
+      message: result?.message || undefined,
+      alert: result?.alert || false,
+      url: result?.url || undefined,
+    }
+  }
+
+  /**
+   * Fetch custom / premium emoji document and return cached local stream URL
+   */
+  public async getCustomEmojiUrl(accountId: string, documentId: string): Promise<string | null> {
+    if (!documentId) return null
+    if (this.customEmojiCache.has(documentId)) {
+      return this.customEmojiCache.get(documentId)!
+    }
+
+    const diskPath = path.join(this.mediaDir, `emoji_${documentId}.webp`)
+    if (fs.existsSync(diskPath)) {
+      const streamUrl = `guidegram-media://local/${encodeURIComponent(diskPath)}`
+      this.customEmojiCache.set(documentId, streamUrl)
+      return streamUrl
+    }
+
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client) return null
+
+    try {
+      const res: any = await holder.client.invoke(
+        new Api.messages.GetCustomEmojiDocuments({
+          documentId: [helpers.returnBigInt(documentId)],
+        })
+      )
+
+      if (Array.isArray(res) && res.length > 0) {
+        const doc = res[0]
+        const buf = await holder.client.downloadMedia(doc, { thumb: 1 })
+        if (buf && (Buffer.isBuffer(buf) || (buf as any).length > 0)) {
+          await fs.promises.writeFile(diskPath, buf)
+          const streamUrl = `guidegram-media://local/${encodeURIComponent(diskPath)}`
+          this.customEmojiCache.set(documentId, streamUrl)
+          return streamUrl
+        }
+      }
+    } catch (err) {
+      Logger.warn(`[AccountManager] Failed to fetch custom emoji ${documentId}:`, err)
     }
 
     return null
@@ -1865,11 +2079,17 @@ export class AccountManager {
       let mediaHeight: number | undefined
       let mediaFileSize: number | undefined
       if (photo && Array.isArray(photo.sizes)) {
-        const largest = photo.sizes[photo.sizes.length - 1]
-        if (largest) {
-          mediaWidth = largest.w
-          mediaHeight = largest.h
-          mediaFileSize = largest.size
+        for (let i = photo.sizes.length - 1; i >= 0; i--) {
+          const s = photo.sizes[i]
+          if (s) {
+            if (!mediaWidth && s.w) mediaWidth = s.w
+            if (!mediaHeight && s.h) mediaHeight = s.h
+            if (!mediaFileSize) {
+              if (typeof s.size === 'number') mediaFileSize = s.size
+              else if (Array.isArray(s.sizes) && s.sizes.length > 0) mediaFileSize = s.sizes[s.sizes.length - 1]
+              else if (s.size) mediaFileSize = Number(s.size) || undefined
+            }
+          }
         }
       }
       return { mediaType: 'photo', mediaWidth, mediaHeight, mediaFileSize }
@@ -1923,7 +2143,18 @@ export class AccountManager {
           }
         }
 
-        const mediaFileSize = typeof doc.size === 'bigint' ? Number(doc.size) : (doc.size || 0)
+        let mediaFileSize = 0
+        if (doc.size !== undefined && doc.size !== null) {
+          if (typeof doc.size === 'number') {
+            mediaFileSize = doc.size
+          } else if (typeof doc.size === 'bigint') {
+            mediaFileSize = Number(doc.size)
+          } else if (typeof (doc.size as any).toJSNumber === 'function') {
+            mediaFileSize = (doc.size as any).toJSNumber()
+          } else {
+            mediaFileSize = parseInt(String(doc.size), 10) || Number(doc.size) || 0
+          }
+        }
         return {
           mediaType,
           isSticker,

@@ -23,6 +23,8 @@ import type {
   SendMediaOptions,
   SendMessageOptions,
   UploadProgressPayload,
+  DownloadProgressPayload,
+  BotCallbackResult,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -55,4 +57,6 @@ export type {
   SendMediaOptions,
   SendMessageOptions,
   UploadProgressPayload,
+  DownloadProgressPayload,
+  BotCallbackResult,
 }

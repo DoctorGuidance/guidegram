@@ -279,15 +279,33 @@ export const ChatList: React.FC<ChatListProps> = ({
                           className={`w-3 h-3 ${isSelected ? 'text-white' : 'text-gray-500'}`}
                         />
                       )}
+                      {dialog.unreadMentionsCount && dialog.unreadMentionsCount > 0 ? (
+                        <span
+                          title={`${dialog.unreadMentionsCount} unread mentions`}
+                          className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-accent-cyan text-dark-950 flex items-center justify-center font-mono shadow-sm"
+                        >
+                          @{dialog.unreadMentionsCount > 1 ? dialog.unreadMentionsCount : ''}
+                        </span>
+                      ) : null}
                       {dialog.unreadCount > 0 && (
                         <span
-                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                          title={
+                            dialog.isMuted
+                              ? `${dialog.unreadCount} پیام (بی‌صدا/Muted)`
+                              : `${dialog.unreadCount} پیام خوانده نشده`
+                          }
+                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full transition-colors flex items-center gap-1 ${
                             isSelected
-                              ? 'bg-white text-primary-600'
-                              : 'bg-primary-600 text-white'
+                              ? 'bg-white text-dark-900 font-bold'
+                              : dialog.isMuted
+                              ? 'bg-white/15 text-gray-300 border border-white/5'
+                              : 'bg-primary-600 text-white shadow-sm'
                           }`}
                         >
-                          {dialog.unreadCount}
+                          <span>{dialog.unreadCount}</span>
+                          {dialog.isGroup && dialog.unreadCount > 1 && (
+                            <span className="text-[8px] opacity-80 font-normal">👥</span>
+                          )}
                         </span>
                       )}
                     </div>

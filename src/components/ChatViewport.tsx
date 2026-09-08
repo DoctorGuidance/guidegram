@@ -56,10 +56,12 @@ import {
   Layers,
   Split,
   Wand2,
+  BarChart2,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview } from '../types/telegram'
 import { Avatar } from './Avatar'
 import { VideoPlayer } from './VideoPlayer'
+import { GroupStatsModal } from './GroupStatsModal'
 import { isRTL, formatFileSize, formatDuration, formatNumber } from '../utils/textUtils'
 
 interface ChatViewportProps {
@@ -353,6 +355,43 @@ const ComposerLinkPreviewBar: React.FC<ComposerLinkPreviewBarProps> = ({ url, on
   )
 }
 
+const CustomEmojiView: React.FC<{
+  accountId: string
+  documentId: string
+  fallback?: string
+}> = ({ accountId, documentId, fallback }) => {
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    if (!documentId || !accountId || !window.guidegram?.getCustomEmojiUrl) return
+    window.guidegram
+      .getCustomEmojiUrl(accountId, documentId)
+      .then((res) => {
+        if (active && res) {
+          setUrl(res)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [accountId, documentId])
+
+  if (url) {
+    return (
+      <img
+        src={url}
+        alt={fallback || 'emoji'}
+        className="inline-block w-[1.25em] h-[1.25em] align-[-0.2em] object-contain mx-0.5 select-none"
+        loading="lazy"
+        draggable={false}
+      />
+    )
+  }
+  return <span className="inline-block">{fallback || '⭐'}</span>
+}
+
 export const ChatViewport: React.FC<ChatViewportProps> = ({
   chat,
   messages,
@@ -391,6 +430,12 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const [chatDetails, setChatDetails] = useState<ChatDetails | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const [isStatsModalOpen, setIsStatsModalOpen] = useState(false)
+  const [isBotMenuOpen, setIsBotMenuOpen] = useState(false)
+  const [callingBotBtnId, setCallingBotBtnId] = useState<string | null>(null)
+  const [downloadProgress, setDownloadProgress] = useState<
+    Record<number, { progress: number; bytesReceived: number; totalBytes: number }>
+  >({})
 
   // In-chat search state (Ctrl+F)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -707,6 +752,33 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     }
   }, [chat?.id])
 
+  // Track active media download progress from backend
+  useEffect(() => {
+    if (!window.guidegram?.on) return
+    const unsub = window.guidegram.on('telegram:download-progress', (payload: any) => {
+      if (!payload || !payload.messageId) return
+      if (payload.progress === -1 || payload.progress >= 100) {
+        setDownloadProgress((prev) => {
+          const next = { ...prev }
+          delete next[payload.messageId]
+          return next
+        })
+      } else {
+        setDownloadProgress((prev) => ({
+          ...prev,
+          [payload.messageId]: {
+            progress: payload.progress,
+            bytesReceived: payload.bytesReceived,
+            totalBytes: payload.totalBytes,
+          },
+        }))
+      }
+    })
+    return () => {
+      if (typeof unsub === 'function') unsub()
+    }
+  }, [])
+
   // Active video message playing in-app
   const [activeVideoId, setActiveVideoId] = useState<number | null>(null)
 
@@ -969,6 +1041,43 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     },
     [downloadedMedia, loadingMediaIds]
   )
+
+  // Cancel in-flight download of media
+  const handleCancelDownload = async (msg: MessageItem) => {
+    try {
+      await window.guidegram?.cancelDownloadMedia?.(msg.accountId, msg.chatId, msg.id)
+      setDownloadProgress((prev) => {
+        const next = { ...prev }
+        delete next[msg.id]
+        return next
+      })
+      showToast('دانلود متوقف شد')
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  // Save media to file via native dialog
+  const handleSaveMedia = async (msg: MessageItem) => {
+    try {
+      showToast('در حال آماده‌سازی برای ذخیره...')
+      const res = await window.guidegram?.saveMediaToFile?.(
+        msg.accountId,
+        msg.chatId,
+        msg.id,
+        msg.mediaFileName
+      )
+      if (res?.success) {
+        showToast('فایل با موفقیت ذخیره شد')
+      } else if (res?.canceled) {
+        // user canceled dialog
+      } else {
+        showToast('خطا در ذخیره فایل')
+      }
+    } catch (err: any) {
+      showToast('خطا در دانلود فایل: ' + (err?.message || 'نامشخص'))
+    }
+  }
 
   // Audio Playback Controller
   const handlePlayVoice = async (msg: MessageItem) => {
@@ -1541,6 +1650,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const renderFormattedText = (text: string, entities?: MessageEntityItem[]) => {
     if (!text) return null
 
+    // Extract custom_emoji entities
+    const customEmojis = (entities || []).filter(
+      (e) => (e.type === 'custom_emoji' || e.documentId) && e.documentId
+    )
+
     // Helper to highlight active search query in plain text
     const highlightQuery = (val: string, keyBase: string): React.ReactNode => {
       if (!searchQuery.trim() || !val) return val
@@ -1777,13 +1891,70 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       })
     }
 
-    // Split paragraphs to handle BiDi per block
+    // Split paragraphs to handle BiDi and custom emojis per block
     const paragraphs = text.split('\n')
+    let currentGlobalOffset = 0
+
     return (
       <div className="space-y-1">
         {paragraphs.map((para, pIdx) => {
+          const paraStart = currentGlobalOffset
+          const paraEnd = currentGlobalOffset + para.length
+          currentGlobalOffset += para.length + 1 // +1 for '\n'
+
           if (!para) return <div key={pIdx} className="h-2" />
           const paraIsRtl = isRTL(para)
+
+          // Find custom emojis within this paragraph
+          const paraEmojis = customEmojis
+            .filter((e) => e.offset >= paraStart && e.offset < paraEnd)
+            .sort((a, b) => a.offset - b.offset)
+
+          let renderedContent: React.ReactNode
+
+          if (paraEmojis.length === 0) {
+            renderedContent = renderInlineTokens(para, `p-${pIdx}`)
+          } else {
+            const elements: React.ReactNode[] = []
+            let lastIdx = 0
+
+            paraEmojis.forEach((emojiEnt, eIdx) => {
+              const relOffset = emojiEnt.offset - paraStart
+              const relEnd = Math.min(para.length, relOffset + emojiEnt.length)
+
+              if (relOffset > lastIdx) {
+                const subStr = para.slice(lastIdx, relOffset)
+                elements.push(
+                  <React.Fragment key={`p-${pIdx}-t-${lastIdx}`}>
+                    {renderInlineTokens(subStr, `p-${pIdx}-sub-${lastIdx}`)}
+                  </React.Fragment>
+                )
+              }
+
+              const fallbackEmoji = para.slice(relOffset, relEnd)
+              elements.push(
+                <CustomEmojiView
+                  key={`p-${pIdx}-emoji-${eIdx}`}
+                  accountId={chat?.accountId || ''}
+                  documentId={emojiEnt.documentId!}
+                  fallback={fallbackEmoji}
+                />
+              )
+
+              lastIdx = relEnd
+            })
+
+            if (lastIdx < para.length) {
+              const tailStr = para.slice(lastIdx)
+              elements.push(
+                <React.Fragment key={`p-${pIdx}-tail-${lastIdx}`}>
+                  {renderInlineTokens(tailStr, `p-${pIdx}-tail`)}
+                </React.Fragment>
+              )
+            }
+
+            renderedContent = elements
+          }
 
           return (
             <div
@@ -1793,7 +1964,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 paraIsRtl ? 'text-right font-sans' : 'text-left font-sans'
               }`}
             >
-              {renderInlineTokens(para, `p-${pIdx}`)}
+              {renderedContent}
             </div>
           )
         })}
@@ -1880,7 +2051,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
     // 2. Video Card
     if (msg.mediaType === 'video') {
-      const fullVideoUrl = downloadedMedia[`${msg.id}`] || (msg.mediaFilePath ? `guidegram-media://${encodeURIComponent(msg.mediaFilePath)}` : null)
+      const fullVideoUrl =
+        downloadedMedia[`${msg.id}`] ||
+        (msg.mediaFilePath ? `guidegram-media://local/${encodeURIComponent(msg.mediaFilePath)}` : null)
       const thumbUrl = downloadedMedia[`${msg.id}_thumb`] || msg.mediaUrl
       const isThisVideoPlaying = activeVideoId === msg.id
 
@@ -1900,27 +2073,31 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
               duration={msg.mediaDuration}
               onClose={() => setActiveVideoId(null)}
               onShowToast={showToast}
+              onDownload={() => handleSaveMedia(msg)}
             />
           </div>
         )
       }
 
       const isLoadingVideo = loadingMediaIds[`${msg.id}`]
+      const currentDl = downloadProgress[msg.id]
+      const isDownloading = currentDl && currentDl.progress >= 0 && currentDl.progress < 100
 
       return (
         <div className="mb-2 rounded-2xl overflow-hidden max-w-sm border border-white/10 bg-dark-850/90 shadow-md group/video">
-          {/* Poster or Thumbnail with Circular Play Button */}
+          {/* Poster or Thumbnail with Circular Play Button or Download Progress */}
           <div
             onClick={async () => {
+              if (isDownloading) return
               if (fullVideoUrl) {
                 setActiveVideoId(msg.id)
               } else {
-                showToast('Buffering video...')
+                showToast('در حال بارگذاری و بافر ویدئو...')
                 const videoDataUrl = await requestMediaDownload(msg, false)
                 if (videoDataUrl) {
                   setActiveVideoId(msg.id)
                 } else {
-                  showToast('Failed to load video stream')
+                  showToast('خطا در بارگذاری استریم ویدئو')
                 }
               }
             }}
@@ -1941,14 +2118,45 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             {/* Dark Overlay with Blur on Hover */}
             <div className="absolute inset-0 bg-black/35 group-hover/video:bg-black/20 transition-colors" />
 
-            {/* Play Button or Loading Spinner */}
-            <div className="relative z-10 w-14 h-14 rounded-full bg-primary-600/90 hover:bg-primary-500 text-white flex items-center justify-center shadow-glow group-hover/video:scale-110 active:scale-95 transition-all">
-              {isLoadingVideo ? (
-                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Play className="w-6 h-6 fill-current ml-0.5" />
-              )}
-            </div>
+            {/* Play Button or Download Progress Overlay */}
+            {isDownloading ? (
+              <div
+                className="relative z-10 flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-black/80 backdrop-blur-md border border-white/15 text-white shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span className="text-xs font-mono font-bold text-primary-300">
+                    {Math.round(currentDl.progress)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCancelDownload(msg)}
+                    title="توقف دانلود (Cancel)"
+                    className="p-1 rounded-lg bg-red-500/30 hover:bg-red-500/50 text-red-200 transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="w-28 bg-white/20 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-primary-500 h-full transition-all duration-150"
+                    style={{ width: `${currentDl.progress}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-gray-300 font-mono">
+                  {formatFileSize(currentDl.bytesReceived)} / {formatFileSize(currentDl.totalBytes || msg.mediaFileSize || 0)}
+                </span>
+              </div>
+            ) : (
+              <div className="relative z-10 w-14 h-14 rounded-full bg-primary-600/90 hover:bg-primary-500 text-white flex items-center justify-center shadow-glow group-hover/video:scale-110 active:scale-95 transition-all">
+                {isLoadingVideo ? (
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Play className="w-6 h-6 fill-current ml-0.5" />
+                )}
+              </div>
+            )}
 
             {/* Duration Badge Bottom Right */}
             {msg.mediaDuration && (
@@ -1965,15 +2173,46 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             )}
           </div>
 
-          {/* Video Footer info */}
+          {/* Video Footer info & Download Button */}
           <div className="p-2.5 flex items-center justify-between gap-2 border-t border-white/5">
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold text-gray-200 truncate">
                 {msg.mediaFileName || 'Video'}
               </div>
               <div className="text-[10px] text-gray-400">
-                Click to stream and play with full speed controls
+                {isDownloading
+                  ? `در حال دانلود: ${Math.round(currentDl.progress)}%`
+                  : 'پخش آنلاین و کنترل پیشرفته'}
               </div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {isDownloading ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleCancelDownload(msg)
+                  }}
+                  title="توقف دانلود"
+                  className="px-2 py-1 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 transition-colors cursor-pointer flex items-center gap-1 text-xs"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">توقف</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleSaveMedia(msg)
+                  }}
+                  title="ذخیره ویدئو در سیستم (Download Video)"
+                  className="px-2 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-primary-400" />
+                  <span className="hidden sm:inline">دانلود</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2256,6 +2495,17 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             <Search className="w-4 h-4" />
           </button>
 
+          {/* Group Statistics Modal Trigger */}
+          {chat.isGroup && (
+            <button
+              onClick={() => setIsStatsModalOpen(true)}
+              title="آمار گروه (Group Statistics)"
+              className="p-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-gray-400 hover:text-accent-cyan border border-white/10 transition-colors cursor-pointer"
+            >
+              <BarChart2 className="w-4 h-4 text-accent-cyan" />
+            </button>
+          )}
+
           {/* Chat Info Drawer Button */}
           <button
             onClick={handleOpenInfo}
@@ -2433,10 +2683,30 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           }}
         >
         {filteredMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-xs text-gray-500 gap-2">
-            <div>
-              {searchQuery ? `No messages found matching "${searchQuery}"` : 'No messages in this chat yet.'}
-            </div>
+          <div className="flex flex-col items-center justify-center h-full text-xs text-gray-400 gap-3">
+            {(chat.isBot || chatDetails?.isBot) && !searchQuery ? (
+              <div className="flex flex-col items-center gap-3 p-6 rounded-3xl bg-dark-850/80 border border-white/10 shadow-xl max-w-sm text-center animate-in fade-in zoom-in-95 duration-200">
+                <div className="w-16 h-16 rounded-2xl bg-primary-500/15 border border-primary-500/30 flex items-center justify-center text-primary-400 shadow-glow">
+                  <Bot className="w-8 h-8" />
+                </div>
+                <div className="font-bold text-base text-gray-100">{chat.title}</div>
+                <div className="text-xs text-gray-400 leading-relaxed">
+                  {chatDetails?.about || 'برای شروع ارتباط با این ربات دکمه زیر را لمس کنید'}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onSendMessage('/start')}
+                  className="mt-2 px-6 py-2.5 rounded-2xl bg-primary-600 hover:bg-primary-500 active:scale-95 text-white font-bold text-xs transition-all shadow-glow flex items-center gap-2 cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>شروع ربات (START)</span>
+                </button>
+              </div>
+            ) : (
+              <div>
+                {searchQuery ? `No messages found matching "${searchQuery}"` : 'No messages in this chat yet.'}
+              </div>
+            )}
           </div>
         ) : (
           filteredMessages.map((msg) => {
@@ -2594,9 +2864,10 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     />
                   )}
 
-                  {/* Message Bubble (Stickers render transparently without bubble frame) */}
-                  <div
-                    className={`transition-all ${
+                  <div className="flex flex-col min-w-0 max-w-full">
+                    {/* Message Bubble (Stickers render transparently without bubble frame) */}
+                    <div
+                      className={`transition-all ${
                       msg.isSticker || msg.mediaType === 'sticker'
                         ? 'bg-transparent p-0'
                         : `rounded-2xl px-4 py-2.5 text-xs shadow-sm ${
@@ -2681,62 +2952,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       )
                     })()}
 
-                    {/* Inline Keyboard Buttons with BiDi / RTL Support */}
-                    {msg.replyMarkup &&
-                      msg.replyMarkup.rows &&
-                      msg.replyMarkup.rows.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-white/10 space-y-1.5">
-                          {msg.replyMarkup.rows.map((row, rIdx) => (
-                            <div key={rIdx} className="flex gap-1.5 flex-wrap">
-                              {row.map((btn, bIdx) => {
-                                const btnIsRtl = isRTL(btn.text)
-                                return (
-                                  <button
-                                    key={bIdx}
-                                    dir={btnIsRtl ? 'rtl' : 'ltr'}
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (btn.url) {
-                                        handleSafeOpenUrl(btn.url)
-                                      } else if (btn.data && copyCallbackData) {
-                                        navigator.clipboard.writeText(btn.data)
-                                        showToast(`Copied callback data: "${btn.data}"`)
-                                      }
-                                    }}
-                                    onContextMenu={(e) => {
-                                      if (btn.data && copyCallbackData) {
-                                        e.preventDefault()
-                                        e.stopPropagation()
-                                        navigator.clipboard.writeText(btn.data)
-                                        showToast(`Copied callback data: "${btn.data}"`)
-                                      }
-                                    }}
-                                    title={
-                                      btn.data
-                                        ? `Callback: ${btn.data} (Click/Right-click to copy)`
-                                        : btn.url
-                                        ? `Open ${btn.url}`
-                                        : undefined
-                                    }
-                                    className="flex-1 min-w-[80px] px-3 py-1.5 rounded-xl bg-dark-750 hover:bg-dark-700 active:scale-98 text-gray-200 hover:text-white text-xs font-medium transition-all border border-white/5 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
-                                  >
-                                    <span className="truncate">{btn.text}</span>
-                                    {btn.url && (
-                                      <ExternalLink className="w-3 h-3 text-gray-300 shrink-0" />
-                                    )}
-                                    {btn.data && copyCallbackData && (
-                                      <span className="text-[9px] px-1 py-0.2 bg-black/40 rounded text-accent-cyan font-mono shrink-0">
-                                        DATA
-                                      </span>
-                                    )}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          ))}
-                        </div>
-                      )}
 
                     {/* Telegram Reactions Pills (❤️ 12, 🔥 5) */}
                     {msg.reactions && msg.reactions.length > 0 && (
@@ -2800,6 +3015,91 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       <span>{formatMessageTime(msg.date)}</span>
                       {msg.isOutgoing && <CheckCheck className="w-3 h-3 inline" />}
                     </div>
+                  </div>
+
+                  {/* Bot Inline Keyboard Buttons - Rendered SEPARATELY below message bubble */}
+                    {msg.replyMarkup &&
+                      msg.replyMarkup.rows &&
+                      msg.replyMarkup.rows.length > 0 && (
+                        <div className="mt-1.5 w-full space-y-1.5">
+                          {msg.replyMarkup.rows.map((row, rIdx) => (
+                            <div key={rIdx} className="flex gap-1.5 flex-wrap w-full">
+                              {row.map((btn, bIdx) => {
+                                const btnIsRtl = isRTL(btn.text)
+                                const btnId = `${msg.id}_${rIdx}_${bIdx}`
+                                const isCalling = callingBotBtnId === btnId
+
+                                return (
+                                  <button
+                                    key={bIdx}
+                                    dir={btnIsRtl ? 'rtl' : 'ltr'}
+                                    type="button"
+                                    disabled={isCalling}
+                                    onClick={async (e) => {
+                                      e.stopPropagation()
+                                      if (btn.url) {
+                                        handleSafeOpenUrl(btn.url)
+                                        return
+                                      }
+                                      if (btn.data) {
+                                        setCallingBotBtnId(btnId)
+                                        try {
+                                          const res = await window.guidegram?.sendBotCallbackQuery?.(
+                                            msg.accountId,
+                                            msg.chatId,
+                                            msg.id,
+                                            btn.data
+                                          )
+                                          if (res?.alert && res.message) {
+                                            alert(res.message)
+                                          } else if (res?.message) {
+                                            showToast(res.message)
+                                          } else if (res?.url) {
+                                            handleSafeOpenUrl(res.url)
+                                          }
+                                        } catch (cbErr: any) {
+                                          showToast('خطا در اجرای دکمه ربات: ' + (cbErr?.message || 'نامشخص'))
+                                        } finally {
+                                          setCallingBotBtnId(null)
+                                        }
+                                      }
+                                    }}
+                                    onContextMenu={(e) => {
+                                      if (btn.data && copyCallbackData) {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        navigator.clipboard.writeText(btn.data)
+                                        showToast(`Copied callback data: "${btn.data}"`)
+                                      }
+                                    }}
+                                    title={
+                                      btn.data
+                                        ? `Callback: ${btn.data} (Click to execute)`
+                                        : btn.url
+                                        ? `Open ${btn.url}`
+                                        : undefined
+                                    }
+                                    className="flex-1 min-w-[80px] px-3 py-2 rounded-xl bg-dark-800/90 hover:bg-dark-750 active:scale-98 text-gray-100 hover:text-white text-xs font-medium transition-all border border-white/10 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer backdrop-blur-sm"
+                                  >
+                                    {isCalling ? (
+                                      <div className="w-3.5 h-3.5 border-2 border-primary-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                                    ) : null}
+                                    <span className="truncate">{btn.text}</span>
+                                    {btn.url && (
+                                      <ExternalLink className="w-3 h-3 text-gray-300 shrink-0" />
+                                    )}
+                                    {btn.data && copyCallbackData && (
+                                      <span className="text-[9px] px-1 py-0.2 bg-black/40 rounded text-accent-cyan font-mono shrink-0">
+                                        DATA
+                                      </span>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                   </div>
 
                   {/* Incoming Message Action Bar */}
@@ -3282,6 +3582,55 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
               </div>
             ) : (
               <form onSubmit={handleSend} className="flex items-end gap-2">
+                {/* Bot Menu & Command Switcher */}
+                {(chat.isBot || chatDetails?.isBot) && (
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsBotMenuOpen((prev) => !prev)}
+                      className={`p-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isBotMenuOpen
+                          ? 'bg-primary-500/25 text-primary-300 border border-primary-500/40 shadow-glow'
+                          : 'bg-dark-800 hover:bg-dark-750 text-gray-300 hover:text-white border border-white/5'
+                      }`}
+                      title="منوی دستورات ربات (Bot Commands Menu)"
+                    >
+                      <Bot className="w-4 h-4 text-primary-400" />
+                      <span className="font-bold text-xs">منو</span>
+                    </button>
+
+                    {isBotMenuOpen && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute bottom-full left-0 mb-2 w-52 bg-dark-800/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md p-1.5 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs select-none"
+                      >
+                        <div className="px-2.5 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-white/5">
+                          دستورات ربات
+                        </div>
+                        {[
+                          { cmd: '/start', label: 'شروع مجدد ربات' },
+                          { cmd: '/help', label: 'راهنمای ربات' },
+                          { cmd: '/settings', label: 'تنظیمات' },
+                          { cmd: '/menu', label: 'منوی اصلی' },
+                        ].map((item) => (
+                          <button
+                            key={item.cmd}
+                            type="button"
+                            onClick={() => {
+                              setIsBotMenuOpen(false)
+                              onSendMessage(item.cmd)
+                            }}
+                            className="flex items-center justify-between px-2.5 py-2 rounded-xl hover:bg-white/10 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+                          >
+                            <span className="font-mono font-bold text-primary-400">{item.cmd}</span>
+                            <span className="text-[10px] text-gray-400">{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Paperclip Button with Attachment Popover Toggle */}
                 <button
                   type="button"
@@ -3842,6 +4191,29 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Group Statistics Action Card */}
+              {chat.isGroup && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsInfoOpen(false)
+                    setIsStatsModalOpen(true)
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-accent-cyan/15 hover:bg-accent-cyan/25 border border-accent-cyan/30 text-accent-cyan font-semibold text-xs flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-accent-cyan/20 flex items-center justify-center">
+                      <BarChart2 className="w-4 h-4 text-accent-cyan" />
+                    </div>
+                    <div className="flex flex-col text-left">
+                      <span className="font-bold text-white">آمار پیشرفته گروه</span>
+                      <span className="text-[10px] text-gray-400">تحلیل اعضا، ساعات اوج، کلمات و ایموجی‌ها</span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-accent-cyan" />
+                </button>
+              )}
 
               {/* 64Gram Power Feature: Chat Permissions Matrix */}
               {(chat.isGroup || chat.isChannel) && (
@@ -4480,6 +4852,17 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 7. Group Advanced Analytics & Statistics Modal */}
+      {chat.isGroup && (
+        <GroupStatsModal
+          isOpen={isStatsModalOpen}
+          onClose={() => setIsStatsModalOpen(false)}
+          chat={chat}
+          chatDetails={chatDetails}
+          messages={messages}
+        />
       )}
     </div>
   )

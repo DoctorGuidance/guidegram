@@ -263,21 +263,41 @@ function createWindow() {
 app.whenReady().then(async () => {
   Logger.info('[App] Electron app is ready. Initializing SessionStore & AccountManager...')
 
-  // Register local media streaming protocol for videos, voice, audio, and documents
-  protocol.handle('guidegram-media', (request) => {
+  // Register local media streaming protocol for videos, voice, audio, photos, and documents
+  protocol.handle('guidegram-media', async (request) => {
     try {
-      let rawPath = request.url.replace(/^guidegram-media:\/\//, '')
-      let decodedPath = decodeURIComponent(rawPath)
-      // Normalize Windows drive letter if prefixed by leading slash, e.g. /D:/... -> D:/...
+      const url = new URL(request.url)
+      let decodedPath = ''
+      if (url.searchParams.has('path')) {
+        decodedPath = url.searchParams.get('path')!
+      } else {
+        // e.g. guidegram-media://local/D%3A%5C... or guidegram-media:///D:/...
+        let raw = url.pathname.replace(/^\/+/, '')
+        // If host was used as a dummy prefix, e.g. guidegram-media://local/...
+        decodedPath = decodeURIComponent(raw)
+      }
+
+      // Normalize Windows drive letter
       if (process.platform === 'win32') {
-        if (/^\/[a-zA-Z]:/.test(decodedPath)) {
-          decodedPath = decodedPath.slice(1)
+        if (/^\/?[a-zA-Z]:/.test(decodedPath)) {
+          decodedPath = decodedPath.replace(/^\/+/, '')
+        } else if (/^[a-zA-Z]\//.test(decodedPath)) {
+          // If Chromium stripped colon (e.g. D/Users/...)
+          decodedPath = decodedPath.charAt(0) + ':/' + decodedPath.slice(2)
         }
       }
+
+      decodedPath = path.normalize(decodedPath)
+
       if (!fs.existsSync(decodedPath)) {
+        Logger.warn(`[Protocol] File not found: "${decodedPath}" from request "${request.url}"`)
         return new Response('Media file not found', { status: 404 })
       }
-      return net.fetch(pathToFileURL(decodedPath).toString())
+
+      // Forward request to net.fetch with file:// URL to preserve Range headers for video streaming
+      return await net.fetch(pathToFileURL(decodedPath).toString(), {
+        headers: request.headers,
+      })
     } catch (err) {
       Logger.error('[Protocol] Failed to serve guidegram-media request:', err)
       return new Response('Media error', { status: 500 })
@@ -886,6 +906,42 @@ function setupIpcHandlers() {
     } catch (err: any) {
       Logger.warn(`[IPC] downloadMedia error:`, err)
       return null
+    }
+  })
+
+  ipcMain.handle('telegram:cancel-download-media', async (_event, { accountId, chatId, messageId }) => {
+    try {
+      return await accountManager.cancelDownloadMedia(accountId, chatId, messageId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] cancelDownloadMedia error:`, err)
+      return false
+    }
+  })
+
+  ipcMain.handle('telegram:send-bot-callback', async (_event, { accountId, chatId, messageId, data }) => {
+    try {
+      return await accountManager.sendBotCallbackQuery(accountId, chatId, messageId, data)
+    } catch (err: any) {
+      Logger.warn(`[IPC] sendBotCallbackQuery error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:get-custom-emoji', async (_event, { accountId, documentId }) => {
+    try {
+      return await accountManager.getCustomEmojiUrl(accountId, documentId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getCustomEmojiUrl error:`, err)
+      return null
+    }
+  })
+
+  ipcMain.handle('telegram:save-media-to-file', async (_event, { accountId, chatId, messageId, defaultName }) => {
+    try {
+      return await accountManager.saveMediaToFile(mainWindow, accountId, chatId, messageId, defaultName)
+    } catch (err: any) {
+      Logger.warn(`[IPC] saveMediaToFile error:`, err)
+      throw err
     }
   })
 

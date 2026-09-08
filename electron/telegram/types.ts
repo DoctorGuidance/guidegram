@@ -61,6 +61,9 @@ export interface DialogItem {
   accountId: string
   title: string
   unreadCount: number
+  unreadMentionsCount?: number
+  unreadSendersCount?: number
+  isMuted?: boolean
   isUser: boolean
   isGroup: boolean
   isChannel: boolean
@@ -282,4 +285,20 @@ export interface UploadProgressPayload {
   progress: number
   filePath?: string
 }
+
+export interface DownloadProgressPayload {
+  accountId: string
+  chatId: string
+  messageId: number
+  progress: number
+  bytesReceived: number
+  totalBytes: number
+}
+
+export interface BotCallbackResult {
+  message?: string
+  alert?: boolean
+  url?: string
+}
+
 

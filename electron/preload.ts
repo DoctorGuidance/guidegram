@@ -13,6 +13,7 @@ import {
   SendMediaOptions,
   SendMessageOptions,
   WebPagePreview,
+  BotCallbackResult,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -109,6 +110,31 @@ const guidegramAPI = {
     thumb?: boolean
   ): Promise<string | null> =>
     ipcRenderer.invoke('telegram:download-media', { accountId, chatId, messageId, thumb }),
+  cancelDownloadMedia: (
+    accountId: string,
+    chatId: string,
+    messageId: number
+  ): Promise<boolean> =>
+    ipcRenderer.invoke('telegram:cancel-download-media', { accountId, chatId, messageId }),
+  sendBotCallbackQuery: (
+    accountId: string,
+    chatId: string,
+    messageId: number,
+    data?: string
+  ): Promise<BotCallbackResult> =>
+    ipcRenderer.invoke('telegram:send-bot-callback', { accountId, chatId, messageId, data }),
+  getCustomEmojiUrl: (
+    accountId: string,
+    documentId: string
+  ): Promise<string | null> =>
+    ipcRenderer.invoke('telegram:get-custom-emoji', { accountId, documentId }),
+  saveMediaToFile: (
+    accountId: string,
+    chatId: string,
+    messageId: number,
+    defaultName?: string
+  ): Promise<{ success: boolean; filePath?: string; canceled?: boolean }> =>
+    ipcRenderer.invoke('telegram:save-media-to-file', { accountId, chatId, messageId, defaultName }),
   getChatDetails: (accountId: string, chatId: string): Promise<ChatDetails> =>
     ipcRenderer.invoke('telegram:get-chat-details', { accountId, chatId }),
   resolvePeer: (accountId: string, target: string): Promise<any> =>
