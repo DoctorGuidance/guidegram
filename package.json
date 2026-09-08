@@ -1,6 +1,6 @@
 {
   "name": "guidegram",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Next-generation portable multi-account desktop Telegram client",
   "author": "DoctorGuidance",
   "main": "dist-electron/main.js",

@@ -1,10 +1,16 @@
-# 🚀 Guidegram v1.2.0 — Major UX & Media Evolution
+# 🚀 Guidegram v1.2.1 — Seamless Updater & Media Evolution
 
 > **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Per-Account Isolated Proxies, 64Gram & Telegraph Capabilities, and Hardware Anti-Fingerprinting.
 
 ---
 
-### 🌟 What's New in v1.2.0
+### 🌟 What's New in v1.2.1
+
+#### 🔄 Ultra-Resilient Portable Updater
+- **Automated Process Cleanup**: Closes all lingering Electron GPU and background processes before attempting file replacement.
+- **File-Lock Verification Loop**: Verifies `Guidegram.exe` handle availability with direct .NET stream tests to avoid Windows `Access Denied` collisions.
+- **Atomic File-by-File Extraction**: Replaces files safely via native .NET zip engine while strictly preserving the isolated user data folder (`data/`).
+- **Guaranteed Post-Update Relaunch**: Automatically restarts Guidegram as soon as replacement completes.
 
 #### 🎬 Revamped Video Player & Streaming Architecture
 - **Interactive Download Controller**: Direct pause, resume, and cancel capabilities during downloads.
@@ -44,8 +50,8 @@
 | Platform | Package File | Type | Architecture | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | **Windows** | Guidegram-Windows-x64-Portable.zip | Standalone ZIP | x64 | **Portable**: Extract and run Guidegram.exe without installation |
-| **macOS** | Guidegram-1.2.0-universal.dmg | DMG Installer | Universal (Intel & Apple Silicon) | Drag-and-drop installer for macOS 11+ |
-| **Linux** | Guidegram-1.2.0.AppImage | AppImage | x86_64 | Self-contained executable for all Linux distributions |
+| **macOS** | Guidegram-1.2.1-universal.dmg | DMG Installer | Universal (Intel & Apple Silicon) | Drag-and-drop installer for macOS 11+ |
+| **Linux** | Guidegram-1.2.1.AppImage | AppImage | x86_64 | Self-contained executable for all Linux distributions |
 
 ---
 *Built with 🤍 by DoctorGuidance*
