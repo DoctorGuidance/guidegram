@@ -4,17 +4,12 @@ All notable changes to the Guidegram desktop client will be documented in this f
 
 ---
 
-## [v1.2.1] — Seamless Updater & Media Evolution
+## [v1.2.1] — Updater Resilience & Hotfix Release
 
 ### 🌟 What's New
 - **🔄 Ultra-Resilient Portable Auto-Updater**: Automated lingering process cleanup, file-lock verification via .NET stream checks, atomic file-by-file extraction, and guaranteed post-update relaunch without session disruption.
-- **🎬 Revamped Video Player & Streaming**: Interactive pause/resume/cancel controls, live accurate percentage/MB progress, playback speed controls, and verified preview thumbnails.
-- **🖼️ High-Reliability Media Rendering**: Corrected protocol encoding for Windows local paths, preventing broken image placeholders.
-- **✨ Full Premium Custom Emoji Support**: Animated and custom emoji rendering without falling back to basic unicode.
-- **🤖 Bot Inline Keyboards & Menu**: Dedicated glass keyboard layout under messages, accurate row/col callback dispatch, and dedicated bot menu actions.
-- **🔤 Modern Persian/Arabic & Latin Typography**: Beautiful Vazirmatn font for Persian/Arabic and Open Sans/Segoe UI for Latin text.
-- **🔇 Neutral Muted Badges & Senders Count**: Clear muted chat indicators and distinct senders count for unread group messages.
-- **📊 Advanced Group Analytics**: 6-tab analytics modal covering active users, peak discussion hours, message volume, keywords, top emojis, and member join history.
+- **🏷️ Synchronized Build Versioning**: Unified dynamic application version resolution across TitleBar, Settings, and MainMenuDrawer.
+- **🛡️ Process Concurrency Protection**: Fixed Windows process locks preventing in-app update replacement.
 
 ---
 
