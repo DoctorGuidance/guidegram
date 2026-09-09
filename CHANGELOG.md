@@ -4,6 +4,20 @@ All notable changes to the Guidegram desktop client will be documented in this f
 
 ---
 
+## [v1.2.4] — Official Brand Identity & Multi-Resolution Icon Suite (2026-09-09)
+
+### 🎨 Brand Identity & Visual Overhaul
+- **Official Mint-Teal Logo**: Rolled out the new brand emblem with supersonic monogram 'G' on mint-teal squircle tile (`#34cca2`).
+- **Corner Alpha Transparency**: Clean transparency mask eliminating white square corner boxes on dark and light system themes.
+- **Multi-Resolution Windows Icon (`icon.ico`)**: 7-layer embedded ICO (16px to 256px) with unsharp masking for crisp taskbar and system tray presence.
+- **Unified Assets**: Standardized `src/assets/logo.png`, `src/assets/icon.png`, `src/assets/icon.ico`, `public/favicon.ico`, and `public/logo.png`.
+
+### 🔄 Dynamic Versioning & System Controls
+- **Runtime Version Sync**: Replaced static build-time version displays with live Electron IPC queries (`app:get-version`).
+- **Inline Software Updater**: Direct download action with progress bar within the Settings page.
+
+---
+
 ## [v1.2.3] — Dynamic Version Sync & Inline Updater Controls
 
 ### 🌟 What's New
@@ -60,7 +74,8 @@ All notable changes to the Guidegram desktop client will be documented in this f
 ### 🌟 What's New
 - **🖼️ Official 3D Neon Logo Everywhere**: Resolved icon discrepancy by using the official 3D metallic neon cyan badge from src/assets/logo.png across System Tray, Taskbar, Window, and Desktop executables.
 - **🖼️ System Tray & Taskbar Icon Visibility**:
-  - Resolved root-cause path resolution error (esources/resources) in packaged Windows builds that previously caused Electron to create an empty transparent system tray icon slot.
+  - Resolved root-cause path resolution error (
+esources/resources) in packaged Windows builds that previously caused Electron to create an empty transparent system tray icon slot.
   - Ensured mainWindow explicitly receives high-resolution NativeImage icon on creation.
   - Fail-safe embedded base64 DataURL fallback for the official Guidegram icon so tray and taskbar icons never appear blank.
   - Added xtraResources mapping in lectron-builder.json guaranteeing icon assets are unpacked on disk.
