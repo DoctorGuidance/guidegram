@@ -4,6 +4,15 @@ All notable changes to the Guidegram desktop client will be documented in this f
 
 ---
 
+## [v1.2.3] — Dynamic Version Sync & Inline Updater Controls
+
+### 🌟 What's New
+- **🔄 Dynamic Real-time Version Synchronization**: Connected renderer UI directly to runtime Electron core version via `app:get-version` IPC, completely preventing static bundler cache mismatches.
+- **📥 Inline Download & Update Action**: Added direct `Download & Update Now` button, real-time progress bar (download %, extraction stage), and GitHub release links right within the Settings modal.
+- **✅ Clear Up-to-Date Status**: Enhanced update status messaging to unambiguously indicate when the running instance is completely up to date.
+
+---
+
 ## [v1.2.2] — Telegram Premium Animation, Profile Power & Schema Evolution
 
 ### 🌟 What's New
