@@ -56,6 +56,14 @@ export interface PinnedMessageItem {
   date?: number
 }
 
+export interface UserExtras {
+  customEmojiStatusId?: string
+  personalChannelId?: string
+  personalChannelTitle?: string
+  stargiftsCount?: number
+  birthday?: string
+}
+
 export interface DialogItem {
   id: string
   accountId: string
@@ -78,6 +86,8 @@ export interface DialogItem {
   avatarUrl?: string
   username?: string
   folderId?: number
+  customEmojiStatusId?: string
+  isPremium?: boolean
 }
 
 export interface InlineButton {
@@ -98,6 +108,12 @@ export interface WebPagePreview {
 }
 
 export type LinkPreviewData = WebPagePreview
+
+export interface CustomEmojiPayload {
+  format: 'lottie' | 'image' | 'video'
+  data?: any // Lottie parsed JSON
+  url?: string // image/video stream url
+}
 
 export interface ReplyInfo {
   replyToMsgId: number
@@ -201,6 +217,11 @@ export interface ChatDetails {
       url?: string
     }
   }
+  customEmojiStatusId?: string
+  personalChannelId?: string
+  personalChannelTitle?: string
+  stargiftsCount?: number
+  birthday?: string
 }
 
 export interface ForwardOptions {

@@ -642,7 +642,8 @@ async function scrapeLinkPreview(targetUrl: string): Promise<WebPagePreview | nu
 function setupIpcHandlers() {
   // Window Controls
   ipcMain.handle('window:minimize', () => {
-    mainWindow?.minimize()
+    // Hide to system tray instead of leaving on taskbar
+    mainWindow?.hide()
   })
 
   ipcMain.handle('window:maximize', () => {
@@ -656,11 +657,10 @@ function setupIpcHandlers() {
     }
   })
 
-  // Window Close Action Handling: Check whether to ask, minimize, or quit
   ipcMain.handle('window:request-close', () => {
     const cfg = sessionStore.getConfig()
     if (cfg.closeAction === 'minimize') {
-      mainWindow?.minimize()
+      mainWindow?.hide()
       return { action: 'minimize' }
     } else if (cfg.closeAction === 'quit') {
       mainWindow?.close()
@@ -679,7 +679,7 @@ function setupIpcHandlers() {
       })
     }
     if (action === 'minimize') {
-      mainWindow?.minimize()
+      mainWindow?.hide()
     } else {
       mainWindow?.close()
     }
@@ -961,6 +961,15 @@ function setupIpcHandlers() {
       return await accountManager.getCustomEmojiUrl(accountId, documentId)
     } catch (err: any) {
       Logger.warn(`[IPC] getCustomEmojiUrl error:`, err)
+      return null
+    }
+  })
+
+  ipcMain.handle('telegram:get-custom-emoji-data', async (_event, { accountId, documentId }) => {
+    try {
+      return await accountManager.getCustomEmojiData(accountId, documentId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getCustomEmojiData error:`, err)
       return null
     }
   })

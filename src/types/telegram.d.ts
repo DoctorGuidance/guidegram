@@ -59,4 +59,5 @@ export type {
   UploadProgressPayload,
   DownloadProgressPayload,
   BotCallbackResult,
+  CustomEmojiPayload,
 }

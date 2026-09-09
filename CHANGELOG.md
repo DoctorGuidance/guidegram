@@ -4,6 +4,17 @@ All notable changes to the Guidegram desktop client will be documented in this f
 
 ---
 
+## [v1.2.2] — Telegram Premium Animation, Profile Power & Schema Evolution
+
+### 🌟 What's New
+- **✨ Fluid Animated Telegram Premium Custom Emojis**: Native vector Lottie rendering engine (`lottie-web`) with automatic GZIP decompressor for Telegram `.tgs` animated sticker and emoji packs.
+- **⭐ Premium Custom Emoji Status**: Direct MTProto document resolution and real-time animated display of emoji status badges beside user names across both the Chat List and Chat Viewport header.
+- **👤 Enhanced User Profile Intelligence**: Comprehensive MTProto UserFull entity extraction displaying user's pinned Personal Channel (with 1-click external navigation), received Star Gifts count, and Birthday dates.
+- **📥 System Tray Docking & Minimization**: Restores complete system tray integration ("Show hidden icons" area) with zero taskbar clutter upon window minimization.
+- **🧠 Telegram MTProto API Master Reference & Coverage Skill**: Introduced official `telegram-mtproto-api` skill with an automated codebase coverage analyzer (`analyze_coverage.py`) scanning all 23 MTProto namespaces (968 functions) and live TL-Schema updater.
+
+---
+
 ## [v1.2.1] — Updater Resilience & Hotfix Release
 
 ### 🌟 What's New

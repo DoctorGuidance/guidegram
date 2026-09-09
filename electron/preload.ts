@@ -14,6 +14,7 @@ import {
   SendMessageOptions,
   WebPagePreview,
   BotCallbackResult,
+  CustomEmojiPayload,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -130,6 +131,11 @@ const guidegramAPI = {
     documentId: string
   ): Promise<string | null> =>
     ipcRenderer.invoke('telegram:get-custom-emoji', { accountId, documentId }),
+  getCustomEmojiData: (
+    accountId: string,
+    documentId: string
+  ): Promise<CustomEmojiPayload | null> =>
+    ipcRenderer.invoke('telegram:get-custom-emoji-data', { accountId, documentId }),
   saveMediaToFile: (
     accountId: string,
     chatId: string,

@@ -57,8 +57,12 @@ import {
   Split,
   Wand2,
   BarChart2,
+  Gift,
+  Cake,
+  Tv,
 } from 'lucide-react'
-import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview } from '../types/telegram'
+import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload } from '../types/telegram'
+import lottie from 'lottie-web'
 import { Avatar } from './Avatar'
 import { VideoPlayer } from './VideoPlayer'
 import { GroupStatsModal } from './GroupStatsModal'
@@ -355,40 +359,101 @@ const ComposerLinkPreviewBar: React.FC<ComposerLinkPreviewBarProps> = ({ url, on
   )
 }
 
-const CustomEmojiView: React.FC<{
+export const CustomEmojiView: React.FC<{
   accountId: string
   documentId: string
   fallback?: string
-}> = ({ accountId, documentId, fallback }) => {
-  const [url, setUrl] = useState<string | null>(null)
+  className?: string
+}> = ({ accountId, documentId, fallback, className = "inline-block w-[1.25em] h-[1.25em] align-[-0.2em] object-contain mx-0.5 select-none" }) => {
+  const [payload, setPayload] = useState<CustomEmojiPayload | null>(null)
+  const animContainerRef = useRef<HTMLSpanElement | null>(null)
 
   useEffect(() => {
     let active = true
-    if (!documentId || !accountId || !window.guidegram?.getCustomEmojiUrl) return
-    window.guidegram
-      .getCustomEmojiUrl(accountId, documentId)
-      .then((res) => {
-        if (active && res) {
-          setUrl(res)
-        }
-      })
-      .catch(() => {})
+    if (!documentId || !accountId) return
+
+    if (window.guidegram?.getCustomEmojiData) {
+      window.guidegram
+        .getCustomEmojiData(accountId, documentId)
+        .then((res) => {
+          if (active && res) {
+            setPayload(res)
+          }
+        })
+        .catch(() => {})
+    } else if (window.guidegram?.getCustomEmojiUrl) {
+      window.guidegram
+        .getCustomEmojiUrl(accountId, documentId)
+        .then((url) => {
+          if (active && url) {
+            setPayload({ format: 'image', url })
+          }
+        })
+        .catch(() => {})
+    }
+
     return () => {
       active = false
     }
   }, [accountId, documentId])
 
-  if (url) {
+  // Mount animated Lottie instance when payload is lottie
+  useEffect(() => {
+    if (payload?.format === 'lottie' && payload.data && animContainerRef.current) {
+      const container = animContainerRef.current
+      container.innerHTML = ''
+      try {
+        const anim = lottie.loadAnimation({
+          container,
+          renderer: 'svg',
+          loop: true,
+          autoplay: true,
+          animationData: payload.data,
+        })
+        return () => {
+          anim.destroy()
+        }
+      } catch (err) {
+        console.warn('Lottie render error:', err)
+      }
+    }
+  }, [payload])
+
+  if (payload?.format === 'lottie') {
+    return (
+      <span
+        ref={animContainerRef}
+        className={className}
+        title={fallback || 'Custom Emoji'}
+      />
+    )
+  }
+
+  if (payload?.format === 'video' && payload.url) {
+    return (
+      <video
+        src={payload.url}
+        autoPlay
+        loop
+        muted
+        playsInline
+        className={className}
+      />
+    )
+  }
+
+  if (payload?.url) {
     return (
       <img
-        src={url}
+        src={payload.url}
         alt={fallback || 'emoji'}
-        className="inline-block w-[1.25em] h-[1.25em] align-[-0.2em] object-contain mx-0.5 select-none"
+        className={className}
         loading="lazy"
         draggable={false}
       />
     )
   }
+
   return <span className="inline-block">{fallback || '⭐'}</span>
 }
 
@@ -2444,6 +2509,14 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
               >
                 {chat.title}
               </span>
+              {(chatDetails?.customEmojiStatusId || chat.customEmojiStatusId) && (
+                <CustomEmojiView
+                  accountId={chat.accountId}
+                  documentId={chatDetails?.customEmojiStatusId || chat.customEmojiStatusId!}
+                  fallback="⭐"
+                  className="inline-block w-4 h-4 align-middle shrink-0"
+                />
+              )}
               <ChevronRight className="w-3.5 h-3.5 text-gray-500 group-hover:text-primary-400 group-hover:translate-x-0.5 transition-all shrink-0" />
             </div>
 
@@ -4111,12 +4184,22 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   className="mb-3 cursor-pointer"
                 />
 
-                <h3
-                  dir={isRTL(chatDetails?.title || chat.title) ? 'rtl' : 'ltr'}
-                  className="text-base font-bold text-white mb-1 px-2"
-                >
-                  {chatDetails?.title || chat.title}
-                </h3>
+                <div className="flex items-center justify-center gap-1.5 mb-1 px-2">
+                  <h3
+                    dir={isRTL(chatDetails?.title || chat.title) ? 'rtl' : 'ltr'}
+                    className="text-base font-bold text-white"
+                  >
+                    {chatDetails?.title || chat.title}
+                  </h3>
+                  {chatDetails?.customEmojiStatusId && (
+                    <CustomEmojiView
+                      accountId={chat.accountId}
+                      documentId={chatDetails.customEmojiStatusId}
+                      fallback="⭐"
+                      className="inline-block w-5 h-5 align-middle select-none shrink-0"
+                    />
+                  )}
+                </div>
 
                 <div className="text-xs text-gray-400 flex items-center gap-1.5">
                   {isChannel ? (
@@ -4142,6 +4225,64 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Personal Channel Card (Telegram Premium Feature) */}
+              {chatDetails?.personalChannelId && (
+                <div
+                  onClick={() => {
+                    window.guidegram?.openExternal?.(`https://t.me/c/${chatDetails.personalChannelId}`)
+                  }}
+                  className="p-3.5 rounded-2xl bg-primary-600/10 hover:bg-primary-600/20 border border-primary-500/20 cursor-pointer transition-all group flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-primary-600/20 text-primary-400 flex items-center justify-center">
+                      <Tv className="w-4 h-4" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[10px] uppercase font-bold text-primary-400 tracking-wider">
+                        Personal Channel
+                      </div>
+                      <div className="text-xs font-semibold text-white group-hover:text-primary-300 transition-colors">
+                        {chatDetails.personalChannelTitle || `Channel #${chatDetails.personalChannelId}`}
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-primary-400 transition-colors" />
+                </div>
+              )}
+
+              {/* Star Gifts & Birthday (Telegram Premium) */}
+              {(chatDetails?.stargiftsCount != null && chatDetails.stargiftsCount > 0 || chatDetails?.birthday) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {chatDetails?.stargiftsCount != null && chatDetails.stargiftsCount > 0 && (
+                    <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <Gift className="w-4 h-4" />
+                      </div>
+                      <div className="text-left min-w-0">
+                        <div className="text-[9px] uppercase font-bold text-amber-400">Gifts</div>
+                        <div className="text-xs font-bold text-white truncate">
+                          {chatDetails.stargiftsCount} Gifts
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {chatDetails?.birthday && (
+                    <div className="p-3 rounded-2xl bg-accent-violet/10 border border-accent-violet/20 flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-accent-violet/20 text-accent-violet flex items-center justify-center shrink-0">
+                        <Cake className="w-4 h-4" />
+                      </div>
+                      <div className="text-left min-w-0">
+                        <div className="text-[9px] uppercase font-bold text-accent-violet">Birthday</div>
+                        <div className="text-xs font-bold text-white truncate">
+                          {chatDetails.birthday}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Members / Subscribers Count */}
               {chatDetails?.membersCount != null && (

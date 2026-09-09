@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import zlib from 'zlib'
 import { app, BrowserWindow, dialog } from 'electron'
 import { TelegramClient, Api, sessions, errors, helpers } from 'telegram'
 import { NewMessage } from 'telegram/events/index.js'
@@ -25,6 +26,7 @@ import {
   SendMessageOptions,
   SendMediaOptions,
   BotCallbackResult,
+  CustomEmojiPayload,
 } from './types'
 
 export interface ClientHolder {
@@ -887,6 +889,11 @@ export class AccountManager {
           }
         }
 
+        const isPremium = entity.premium === true
+        const customEmojiStatusId = entity.emojiStatus?.documentId
+          ? entity.emojiStatus.documentId.toString()
+          : undefined
+
         return {
           id: peerId,
           accountId,
@@ -904,6 +911,9 @@ export class AccountManager {
           lastMessageDate: d.message?.date ? d.message.date * 1000 : Date.now(),
           avatarInitials: (d.title || d.name || 'C').substring(0, 2).toUpperCase(),
           avatarUrl: cachedAvatar,
+          username: entity.username || undefined,
+          isPremium,
+          customEmojiStatusId,
         }
       })
     )
@@ -1355,19 +1365,31 @@ export class AccountManager {
   }
 
   /**
-   * Fetch custom / premium emoji document and return cached local stream URL
+   * Fetch custom / premium emoji document and return cached local stream URL or parsed Lottie JSON
    */
   public async getCustomEmojiUrl(accountId: string, documentId: string): Promise<string | null> {
+    const payload = await this.getCustomEmojiData(accountId, documentId)
+    return payload?.url || null
+  }
+
+  public async getCustomEmojiData(accountId: string, documentId: string): Promise<CustomEmojiPayload | null> {
     if (!documentId) return null
-    if (this.customEmojiCache.has(documentId)) {
-      return this.customEmojiCache.get(documentId)!
+
+    // Check disk cache for uncompressed json (lottie)
+    const jsonPath = path.join(this.mediaDir, `emoji_${documentId}.json`)
+    if (fs.existsSync(jsonPath)) {
+      try {
+        const raw = await fs.promises.readFile(jsonPath, 'utf-8')
+        const data = JSON.parse(raw)
+        return { format: 'lottie', data }
+      } catch (_) {}
     }
 
     const diskPath = path.join(this.mediaDir, `emoji_${documentId}.webp`)
     if (fs.existsSync(diskPath)) {
       const streamUrl = `guidegram-media://local/${encodeURIComponent(diskPath)}`
       this.customEmojiCache.set(documentId, streamUrl)
-      return streamUrl
+      return { format: 'image', url: streamUrl }
     }
 
     const holder = this.clients.get(accountId)
@@ -1382,21 +1404,48 @@ export class AccountManager {
 
       if (Array.isArray(res) && res.length > 0) {
         const doc = res[0]
-        let buf: any = null
-        if (doc.thumbs && doc.thumbs.length > 0) {
-          try {
-            const thumbIdx = doc.thumbs.length - 1
-            buf = await holder.client.downloadMedia(doc, { thumb: thumbIdx })
-          } catch (_) {}
-        }
+        const mime = (doc.mimeType || '').toLowerCase()
+        const isTgSticker = mime.includes('tgsticker') || mime.includes('tgs')
+        const isVideo = mime.includes('video')
+
+        let buf: any = await holder.client.downloadMedia(doc, {})
         if (!buf || buf.length === 0) {
-          buf = await holder.client.downloadMedia(doc, {})
+          if (doc.thumbs && doc.thumbs.length > 0) {
+            try {
+              const thumbIdx = doc.thumbs.length - 1
+              buf = await holder.client.downloadMedia(doc, { thumb: thumbIdx })
+            } catch (_) {}
+          }
         }
+
         if (buf && (Buffer.isBuffer(buf) || (buf as any).length > 0)) {
-          await fs.promises.writeFile(diskPath, buf)
+          const rawBuf = Buffer.isBuffer(buf) ? buf : Buffer.from(buf)
+
+          // Check if it's gzip compressed TGS (Telegram Animated Sticker / Emoji)
+          const isGzip = rawBuf.length > 2 && rawBuf[0] === 0x1f && rawBuf[1] === 0x8b
+          if (isTgSticker || isGzip) {
+            try {
+              const decompressed = zlib.gunzipSync(rawBuf)
+              const jsonStr = decompressed.toString('utf-8')
+              const lottieData = JSON.parse(jsonStr)
+              await fs.promises.writeFile(jsonPath, jsonStr, 'utf-8')
+              return { format: 'lottie', data: lottieData }
+            } catch (decompErr) {
+              Logger.warn(`[AccountManager] Failed to gunzip TGS emoji ${documentId}:`, decompErr)
+            }
+          }
+
+          if (isVideo) {
+            const videoPath = path.join(this.mediaDir, `emoji_${documentId}.mp4`)
+            await fs.promises.writeFile(videoPath, rawBuf)
+            const streamUrl = `guidegram-media://local/${encodeURIComponent(videoPath)}`
+            return { format: 'video', url: streamUrl }
+          }
+
+          await fs.promises.writeFile(diskPath, rawBuf)
           const streamUrl = `guidegram-media://local/${encodeURIComponent(diskPath)}`
           this.customEmojiCache.set(documentId, streamUrl)
-          return streamUrl
+          return { format: 'image', url: streamUrl }
         }
       }
     } catch (err) {
@@ -1741,6 +1790,32 @@ export class AccountManager {
         }
       }
 
+      let customEmojiStatusId: string | undefined = entity.emojiStatus?.documentId
+        ? entity.emojiStatus.documentId.toString()
+        : undefined
+      let personalChannelId: string | undefined = undefined
+      let personalChannelTitle: string | undefined = undefined
+      let stargiftsCount: number | undefined = undefined
+      let birthday: string | undefined = undefined
+
+      if (isUser && full?.fullUser) {
+        const fu = full.fullUser
+        if (fu.stargiftsCount != null) {
+          stargiftsCount = Number(fu.stargiftsCount)
+        }
+        if (fu.birthday) {
+          const b = fu.birthday
+          birthday = b.year ? `${b.day}/${b.month}/${b.year}` : `${b.day}/${b.month}`
+        }
+        if (fu.personalChannelId) {
+          personalChannelId = fu.personalChannelId.toString()
+          if (full.chats && Array.isArray(full.chats)) {
+            const ch = full.chats.find((c: any) => c.id?.toString() === personalChannelId)
+            if (ch) personalChannelTitle = ch.title
+          }
+        }
+      }
+
       const avatarUrl = await this.getProfilePhoto(accountId, chatId)
 
       return {
@@ -1765,6 +1840,11 @@ export class AccountManager {
         permissionsMatrix,
         participants: participantsList.length > 0 ? participantsList : undefined,
         botInfo,
+        customEmojiStatusId,
+        personalChannelId,
+        personalChannelTitle,
+        stargiftsCount,
+        birthday,
       }
     } catch (err: any) {
       Logger.warn(`[AccountManager] getChatDetails fallback for ${chatId}:`, err)

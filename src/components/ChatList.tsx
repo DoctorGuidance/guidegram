@@ -4,6 +4,7 @@ import { DialogItem, AccountInfo } from '../types/telegram'
 import { TabCategory } from './ChatTabs'
 import { Avatar } from './Avatar'
 import { isRTL } from '../utils/textUtils'
+import { CustomEmojiView } from './ChatViewport'
 
 interface ChatListProps {
   account: AccountInfo | null
@@ -236,6 +237,14 @@ export const ChatList: React.FC<ChatListProps> = ({
                       >
                         {dialog.title}
                       </span>
+                      {dialog.customEmojiStatusId && (
+                        <CustomEmojiView
+                          accountId={dialog.accountId}
+                          documentId={dialog.customEmojiStatusId}
+                          fallback="⭐"
+                          className="w-3.5 h-3.5 shrink-0 inline-block align-middle"
+                        />
+                      )}
                       {showChatId && (
                         <button
                           type="button"
