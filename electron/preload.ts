@@ -163,6 +163,8 @@ const guidegramAPI = {
   getPortableDataPath: () => ipcRenderer.invoke('system:get-portable-data-path'),
 
   // Software Updates
+  getAppVersion: (): Promise<string> =>
+    ipcRenderer.invoke('app:get-version'),
   checkForUpdates: (): Promise<UpdateInfo | null> =>
     ipcRenderer.invoke('system:check-for-updates'),
   installUpdate: (downloadUrl: string): Promise<{ success: boolean; error?: string }> =>

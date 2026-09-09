@@ -694,6 +694,10 @@ function setupIpcHandlers() {
   })
 
   // Update System Handlers
+  ipcMain.handle('app:get-version', () => {
+    return app.getVersion()
+  })
+
   ipcMain.handle('system:check-for-updates', async () => {
     const cfg = sessionStore.getConfig()
     const activeProxy = cfg.proxies.find((p) => p.enabled)

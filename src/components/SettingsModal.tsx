@@ -28,8 +28,10 @@ import {
   ShieldCheck,
   Laptop,
   AlertTriangle,
+  AlertCircle,
+  ArrowUpRight,
 } from 'lucide-react'
-import { AppConfig, AccountInfo, CloseAction, UpdateInfo } from '../types/telegram'
+import { AppConfig, AccountInfo, CloseAction, UpdateInfo, UpdateProgress } from '../types/telegram'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -37,6 +39,7 @@ interface SettingsModalProps {
   onClose: () => void
   onLogoutAccount: (accountId: string) => Promise<void>
   onConfigUpdated?: (config: AppConfig) => void
+  onUpdateFound?: (info: UpdateInfo) => void
 }
 
 interface ToggleItemProps {
@@ -83,6 +86,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onLogoutAccount,
   onConfigUpdated,
+  onUpdateFound,
 }) => {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [portablePath, setPortablePath] = useState('')
@@ -108,9 +112,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Window Close Action Preference
   const [closeAction, setCloseAction] = useState<CloseAction>('ask')
 
-  // Updater State
+  // Dynamic App Version & Updater State
+  const [appVersion, setAppVersion] = useState<string>(__APP_VERSION__)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   const [updateCheckResult, setUpdateCheckResult] = useState<string | null>(null)
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null)
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null)
+  const [updateError, setUpdateError] = useState<string | null>(null)
 
   // Log Viewer State
   const [showLogs, setShowLogs] = useState(false)
@@ -119,7 +128,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [loadingLogs, setLoadingLogs] = useState(false)
 
   useEffect(() => {
+    if (!window.guidegram?.on) return
+    const cleanup = window.guidegram.on('app:update-progress', (p: UpdateProgress) => {
+      setUpdateProgress(p)
+    })
+    return () => {
+      cleanup?.()
+    }
+  }, [])
+
+  useEffect(() => {
     if (isOpen) {
+      window.guidegram?.getAppVersion?.().then((ver) => {
+        if (ver) setAppVersion(ver)
+      })
       window.guidegram.getConfig().then((cfg) => {
         setConfig(cfg)
         setApiId(cfg.apiId)
@@ -146,19 +168,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleManualCheckUpdates = async () => {
     setCheckingUpdate(true)
     setUpdateCheckResult(null)
+    setUpdateError(null)
     try {
       if (window.guidegram?.checkForUpdates) {
         const res = await window.guidegram.checkForUpdates()
-        if (res && res.hasUpdate) {
-          setUpdateCheckResult(`New update found: v${res.latestVersion}! Click Update in the banner.`)
+        if (res) {
+          if (res.currentVersion) setAppVersion(res.currentVersion)
+          if (res.hasUpdate) {
+            setAvailableUpdate(res)
+            setUpdateCheckResult(`New update found: v${res.latestVersion}!`)
+            onUpdateFound?.(res)
+          } else {
+            setAvailableUpdate(null)
+            setUpdateCheckResult(`Guidegram is up to date (v${res.currentVersion || appVersion}).`)
+          }
         } else {
-          setUpdateCheckResult(`Guidegram is up to date (v${res?.currentVersion || '1.0.0'}).`)
+          setUpdateCheckResult('Check failed. Unable to fetch release info.')
         }
       }
     } catch (e: any) {
       setUpdateCheckResult('Check failed. Make sure your connection or proxy is active.')
     } finally {
       setCheckingUpdate(false)
+    }
+  }
+
+  const handleInstallUpdate = async () => {
+    if (!availableUpdate) return
+    if (!availableUpdate.downloadUrl) {
+      window.guidegram?.openExternal?.('https://github.com/DoctorGuidance/guidegram/releases/latest')
+      return
+    }
+
+    setIsInstallingUpdate(true)
+    setUpdateError(null)
+
+    try {
+      if (window.guidegram?.installUpdate) {
+        const res = await window.guidegram.installUpdate(availableUpdate.downloadUrl)
+        if (!res.success) {
+          setUpdateError(res.error || 'Failed to apply update.')
+          setIsInstallingUpdate(false)
+        }
+      }
+    } catch (err: any) {
+      setUpdateError(err.message || 'Update failed')
+      setIsInstallingUpdate(false)
     }
   }
 
@@ -302,28 +357,119 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>Software Updates (Auto-checks hourly)</span>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-dark-800 border border-white/5 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
-                  <span>Current Version: v{__APP_VERSION__}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-gray-300 font-mono">
-                    Portable
-                  </span>
+            <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
+                    <span>Current Version: v{appVersion}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-gray-300 font-mono">
+                      Portable
+                    </span>
+                    {availableUpdate && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-accent-emerald/20 text-accent-emerald font-semibold border border-accent-emerald/30">
+                        v{availableUpdate.latestVersion} Available
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-1">
+                    {updateCheckResult || 'Checks for new GitHub releases automatically every hour.'}
+                  </div>
                 </div>
-                <div className="text-[11px] text-gray-400 mt-0.5">
-                  {updateCheckResult || 'Checks for new GitHub releases automatically every hour.'}
-                </div>
+
+                <button
+                  type="button"
+                  disabled={checkingUpdate || isInstallingUpdate}
+                  onClick={handleManualCheckUpdates}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-dark-750 hover:bg-dark-700 disabled:opacity-50 text-white border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
+                  <span>{checkingUpdate ? 'Checking...' : 'Check Now'}</span>
+                </button>
               </div>
 
-              <button
-                type="button"
-                disabled={checkingUpdate}
-                onClick={handleManualCheckUpdates}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-dark-750 hover:bg-dark-700 disabled:opacity-50 text-white border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
-                <span>{checkingUpdate ? 'Checking...' : 'Check Now'}</span>
-              </button>
+              {/* Action Banner / Download & Install when update is available */}
+              {availableUpdate && (
+                <div className="pt-3 border-t border-white/5 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[11px] text-gray-300">
+                      Update v{availableUpdate.latestVersion} is ready to install (preserves all accounts & data).
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.guidegram?.openExternal?.(
+                            'https://github.com/DoctorGuidance/guidegram/releases/latest'
+                          )
+                        }}
+                        className="text-[11px] font-medium text-gray-400 hover:text-primary-300 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Release Notes</span>
+                        <ArrowUpRight className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isInstallingUpdate}
+                        onClick={handleInstallUpdate}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white shadow-glow flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        {isInstallingUpdate ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            <span>
+                              {updateProgress?.stage === 'restarting'
+                                ? 'Restarting...'
+                                : updateProgress?.stage === 'extracting'
+                                ? 'Extracting...'
+                                : updateProgress?.percent !== undefined
+                                ? `${updateProgress.percent}%`
+                                : 'Updating...'}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Download & Update Now</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Real-time Progress Bar */}
+                  {isInstallingUpdate && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-primary-500 to-accent-cyan transition-all duration-300 ease-out"
+                          style={{ width: `${updateProgress?.percent ?? 5}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-gray-400">
+                        <span>
+                          {updateProgress?.stage === 'extracting'
+                            ? 'Extracting update files safely...'
+                            : updateProgress?.stage === 'restarting'
+                            ? 'Restarting Guidegram...'
+                            : `Downloading update package...`}
+                        </span>
+                        {updateProgress && updateProgress.totalBytes > 0 && (
+                          <span className="font-mono">
+                            {(updateProgress.transferredBytes / (1024 * 1024)).toFixed(1)} MB / {(updateProgress.totalBytes / (1024 * 1024)).toFixed(1)} MB
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {updateError && (
+                    <div className="p-2 rounded-xl bg-accent-rose/10 border border-accent-rose/20 text-[10px] text-accent-rose flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{updateError}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

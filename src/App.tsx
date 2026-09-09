@@ -727,6 +727,7 @@ export const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         onLogoutAccount={handleLogoutAccount}
         onConfigUpdated={(newCfg) => setConfig(newCfg)}
+        onUpdateFound={(info) => setUpdateInfo(info)}
       />
 
       <CloseConfirmModal
