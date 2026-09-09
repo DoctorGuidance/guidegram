@@ -1,4 +1,8 @@
-# 🚀 Guidegram
+<div align="center">
+  <img src="resources/guidegram_logo_transparent.png" alt="Guidegram Logo" width="128" height="128" />
+  <h1>🚀 Guidegram</h1>
+  <p><strong>Next-Generation Portable Desktop Telegram Client with Unlimited Multi-Account & 64Gram / Telegraph Power Features</strong></p>
+</div>
 
 [![GitHub Release](https://img.shields.io/github/v/release/DoctorGuidance/guidegram?style=for-the-badge&color=22c55e&logo=github)](https://github.com/DoctorGuidance/guidegram/releases/latest)
 [![Windows](https://img.shields.io/badge/Platform-Windows%20x64-0078d4?style=for-the-badge&logo=windows)](https://github.com/DoctorGuidance/guidegram/releases/latest)
@@ -6,7 +10,6 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
 
-> **Next-Generation Portable Desktop Telegram Client with Unlimited Multi-Account & 64Gram / Telegraph Power Features**
 > A modern, lightning-fast, portable desktop client for Telegram designed to eliminate the 3-account restriction, empower users with individual per-account proxies, and provide advanced forwarding and messaging capabilities.
 
 ---
