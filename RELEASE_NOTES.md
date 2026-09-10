@@ -1,4 +1,4 @@
-# 🚀 Guidegram v1.4.1 — Data Shield & Installer Safety Hotfix
+# 🚀 Guidegram v1.6.0 — Official Telegram Desktop Parity & Infinite History Architecture
 
 > **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, 64Gram & Telegraph Power Features, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
 
@@ -6,109 +6,64 @@
 
 <div align="center">
   <img src="resources/guidegram_logo_transparent.png" alt="Guidegram Logo" width="150" height="150" />
-  <h3>Guidegram v1.4.1</h3>
-  <p><strong>NSIS Data Shield • Dual-Layer Safe Backup • Directory Protection • In-Place Upgrades</strong></p>
+  <h3>Guidegram v1.6.0</h3>
+  <p><strong>Official Telegram Desktop Parity • Infinite History Scroll • Deep Dialog Pagination • Tiered Update Enforcement</strong></p>
 </div>
 
 ---
 
-### 🛡️ Critical Safety Fixes in v1.4.1
+## 🚀 Key Highlights & Architectural Overview
 
-#### 🔒 1. NSIS Installer Data Shield (`build/installer.nsh`)
-- **Eliminated Recursive Directory Removal**: Overrode default `RMDir /r $INSTDIR` during setup updates and reinstalls. The installer now exclusively updates app binaries and runtime files, keeping user sessions, logins, caches, and custom files 100% intact.
-- **In-Place Seamless Upgrade**: Installing directly over an existing portable installation upgrades the program files in place without wiping the `data/` folder.
-
-#### 🪞 2. Dual-Layer Mirrored Safe Backup
-- **Automatic Session & Config Mirroring**: Whenever an account logs in or configurations change, `SessionStore` mirrors tokens and config to a protected OS vault (`%APPDATA%/Guidegram/safe_backup/`).
-- **Instant Auto-Restoration**: If the local `data/` folder is ever accidentally deleted or corrupted, Guidegram immediately detects the backup on launch and restores all accounts and sessions without requiring the user to log in again.
+Guidegram v1.6.0 delivers full parity with the official **Telegram Desktop (TDesktop)** interface and protocol handling. This release addresses critical usability bottlenecks by introducing bidirectional infinite message history scrolling, deep dialog pagination for complete private chat visibility, an intelligent tiered update enforcement system, and comprehensive group statistics timeframe synchronization.
 
 ---
 
-### 🌟 Features from v1.4.0 Included
+## 📦 What's New & Feature Enhancements
 
-#### 🗄️ 1. Storage Usage & One-Click Cache Purge
-- **Live Disk Analyzer**: Scans and calculates downloaded media file sizes on disk, showing exact megabytes and file counts (`Cache on Disk: XX MB`).
-- **Safe Cache Purge**: Clears temporary downloaded images and videos without touching credentials, account session tokens, or chat databases.
+### 1. 📜 Infinite Chat History Scroll & Zero-Jitter Pagination
+- **Continuous Message Pagination**: Scrolling to the top of any chat automatically retrieves historical messages in 50-item batches via MTProto `offsetId` pagination.
+- **Scroll Jump Prevention**: Viewport scroll position is preserved seamlessly using height delta compensation (`newScrollHeight - prevScrollHeight + prevScrollTop`), allowing users to smoothly scroll back to the very first message in any conversation.
+- **Dynamic Loader**: Displays an elegant top loading indicator while historical messages are being fetched.
 
-#### 🔔 2. Pure Web Audio Synthesizer & Real Notifications
-- **Zero-Asset Notification Chime**: Synthesizes Telegram-style harmonic tones via the browser Web Audio API, guaranteeing flawless audio playback across all machines without external mp3 files.
-- **Sound & Toast Toggle**: Full persistence of `notificationsEnabled` and `soundEnabled` in `AppConfig` with a "Play Chime" test button in Settings.
+### 2. 🗂️ Deep Dialog Loading & Infinite Chat List Scrolling
+- **Extended Initial Depth**: Increased initial dialogs batch to **350** items (previously 150), resolving the issue where active channels and supergroups crowded out older private chats (PVs).
+- **Infinite Scroll on Sidebar**: Scrolling near the bottom of the chat list automatically triggers chunked pagination using the timestamp of the oldest dialog (`offsetDate`), continuously populating the chat list with infinite scroll depth.
+- **Deduplication Engine**: Merges new dialog batches into the local session map without ID collisions or re-render flickering.
 
-#### 📂 3. Custom Downloads Destination
-- **Folder Picker**: Choose any directory on your computer as your downloads folder.
-- **Save As Option**: Toggle "Always ask where to save each file" for complete per-file destination control.
+### 3. 🛡️ Tiered Update Enforcement System
+- **Mandatory Protocol & Security Updates**: Automatically detects Major/Minor version bumps (e.g. `v1.6.0`) and security/critical tags in release notes. For mandatory releases, dismissal buttons are suppressed, enforcing an in-app required update banner to maintain protocol safety and stability.
+- **Session-Only Soft Dismissal**: Routine patch updates allow temporary dismissal for the active session, resurfacing upon the next application restart.
+- **Visual Alert System**: Amber/rose glowing border with pulsing `ShieldAlert` badge for critical updates.
 
-#### 🎨 4. Chat Message Font Size Scaling
-- **Adjustable Text Size**: Select message sizes from `12px` to `18px` (12, 13, 14, 15, 16, 18px) with real-time in-settings sample preview and instant message bubble scaling.
+### 4. 📊 Group Statistics Timeframe Auto-Sync
+- **Default to Today**: Group stats now correctly default to **Today** (امروز) instead of an incomplete one-week window.
+- **Historical Periods Auto-Sync**: Switching between **Today**, **Yesterday**, **Past Week**, and **Past Month** dynamically checks if loaded history covers the timeframe and automatically queries MTProto server batches until the boundary timestamp is fully retrieved.
+- **Timestamp Precision**: Fixed a millisecond/second double-division bug in `accountManager.ts`, ensuring accurate server-side historical filtering.
 
-#### ⌨️ 5. Power Keyboard Shortcuts
-- `Ctrl + 1..9`: Instant one-keystroke account switching across multiple profiles.
-- `Ctrl + K` / `Ctrl + F`: Jump to conversation search input.
-- `Alt + F`: Direct forward without quote (Telegraph style).
-- `Esc`: Close open drawers, modals, and previews.
-- Dedicated **Keyboard Shortcuts Guide** modal in Settings.
-
----
-
-### 🌟 Features from v1.3.1 & v1.3.0 Included
-
-#### 📥 6. Granular Automatic Media Download & Channel Data Saver
-- Complete per-media and per-chat type controls for Photos, Videos, and Files across Private Chats, Groups, and Channels.
-- **Channel Data Saver**: Channel photos are disabled by default to eliminate bandwidth flooding, with on-demand **"Click to load image"** buttons.
-
-### 🌟 Features from v1.3.0 Included
-
-#### 🎭 3. Animated Stickers Drawer (TGS Lottie & WebP)
-- **Cloud Sticker Packs Sync**: Automatically queries and organizes all sticker sets installed on your Telegram account (`messages.getAllStickers` & `messages.getStickerSet`).
-- **Interactive TGS Vector Animations**: Real-time client-side `.tgs` gzip decompression with smooth vector animations rendered via `lottie-web`.
-- **Instant Click-to-Send**: Employs native MTProto `Api.InputDocument` references for instant zero-overhead delivery without re-uploading file bytes.
-- **Dedicated Drawer UI**: Easily accessible via the new `Smile` icon in the message composer.
+### 5. 🖥️ Official Telegram Desktop Interface Parity
+- **Main Menu Drawer**: Complete parity with official Telegram Desktop including user avatar, full display name, @username, and quick access navigation.
+- **My Profile Drawer**: Rich profile viewing including user biography, Telegram Star Gifts count, Data Center (DC) indicator, and Telegram Stars balance.
+- **Unified Settings**: Deep configuration for storage usage, cache purge, download directory picker, privacy and security settings, message font size scaling, and keyboard shortcuts guide.
 
 ---
 
-#### 🕵️ 2. Stealth Stories Engine with Ghost Mode Superpower
-- **Story Ring Indicators**: Beautiful interactive gradient rings displayed around contact avatars in the conversation list.
-- **Dedicated Story Viewer**: Segmented timeline progress playback, full caption rendering, and intuitive click/tap navigation.
-- **Exclusive Stealth Mode**: When **Ghost Mode** is enabled, story read receipts (`stories.readStories`) are strictly bypassed. You can view any contact's or channel's stories completely anonymously without appearing in their viewer list!
+## 🐛 Bug Fixes & Reliability Improvements
+- Fixed message history cutoff that prevented viewing older messages in active groups.
+- Resolved private chat filtering limitation where only 1 DM was visible in busy accounts.
+- Fixed historical timestamp resolution bug in `getHistoricalMessages`.
+- Hardened single instance locking and breakaway updater launchers.
 
 ---
 
-#### 🌐 3. In-Chat Live Message Translation
-- **Native MTProto Translation Engine**: Powered by `messages.translateText` directly communicating with Telegram Data Centers.
-- **Bilingual & RTL Optimized**: One-click translation of incoming and outgoing foreign messages directly from the message hover action bar with tailored Persian (`fa`) support and Right-to-Left formatting.
-- **Dismissible Translation Cards**: Clean inline translated cards below message bubbles that keep chat flow natural.
+## 📊 Full Commit Log (v1.5.0...v1.6.0)
+- `bc1a126` - chore(release): bump version to 1.6.0
+- `4031a31` - fix(stats): default group stats to today and auto-fetch historical periods
+- `b9d524e` - feat(chat): implement infinite history scroll and deep dialog pagination for desktop parity
+- `a4a9587` - feat(updater): implement tiered update enforcement with mandatory security and protocol upgrades
+- `7c1c70f` - feat(ui): complete Telegram Desktop parity for menu, profile, and settings
 
 ---
 
-#### ⚡ 4. Channel Boost Status & Level Tracking
-- **Level & Progress Tracking**: Inspect any channel's current boost level, total boost count, and progress towards the next level (`premium.getBoostsStatus`).
-- **Visual Progress Bar & Deep-Links**: Sleek animated progress bar in the Channel Info drawer with direct boost URLs.
-
----
-
-#### 🛡️ 5. Active Sessions Management & 2FA Security
-- **Multi-Device Session Inspector**: Full list of all desktop and mobile devices connected to your account with platform icons, IP addresses, country, and app versions (`account.getAuthorizations`).
-- **Remote Session Revocation**: Terminate specific unrecognized devices or revoke all other sessions with a single click.
-- **Two-Step Verification (2FA) Status**: Real-time inspection of your Cloud Password protection and recovery email configuration (`account.getPassword`).
-
----
-
-#### 📁 6. Telegram Cloud Chat Folders
-- **Server-Side Folder Synchronization**: Automatically loads custom folders and filters configured on your mobile or desktop Telegram clients (`messages.getDialogFilters`).
-- **Dynamic Category Tabs**: Integrated directly into the chat header with instant peer inclusion and exclusion filtering.
-
----
-
-### 🧪 Verification & Empirical Testing
-- **166 / 166 Automated Tests Passed** across all 7 verification milestones.
-- **TypeScript Strict Compliance**: 0 errors across main, preload, and renderer layers (`npx tsc --noEmit`).
-- **Zero AI / Internal Tooling Leakage**: Clean, native, production-ready codebase adhering strictly to open-source standards.
-- **Cross-Platform Portable Builds**: Fully verified with standalone portable Windows x64 distributions.
-
----
-
-### 📥 Download & Installation
-
-Download the portable executable or installer from the assets below:
-- `Guidegram-Setup-1.3.0.exe` (Windows Installer)
-- `Guidegram-1.3.0-win.zip` (Standalone Portable Archive)
+<div align="center">
+  <p>Crafted with precision by <strong>DoctorGuidance</strong></p>
+</div>
