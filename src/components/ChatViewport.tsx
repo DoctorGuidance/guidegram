@@ -5173,7 +5173,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 <div className="p-3.5 rounded-2xl bg-dark-850/90 border border-white/5 space-y-2.5">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
                     <span>Chat Permissions</span>
-                    <span className="text-[9px] text-gray-500 font-mono">64Gram Matrix</span>
+                    <span className="text-[9px] text-gray-500 font-mono">Permissions Matrix</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {[

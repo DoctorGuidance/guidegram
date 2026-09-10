@@ -466,7 +466,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <div className="text-sm font-bold text-gray-100">{t('settings.title')}</div>
-              <div className="text-[10px] text-gray-400">Telegram Desktop & 64Gram Power Preferences</div>
+              <div className="text-[10px] text-gray-400">Telegram Desktop & Advanced Power Preferences</div>
             </div>
           </div>
           <button
@@ -562,7 +562,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             <div className="mt-auto pt-3 border-t border-white/5">
               <div className="px-3 py-1 text-[10px] text-gray-500 font-mono">
-                v{appVersion} • 64Gram Mod
+                v{appVersion} • Desktop Enhanced
               </div>
             </div>
           </div>
@@ -910,9 +910,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Section: 64Gram Extended Privacy & Anti-Fingerprinting */}
+                {/* Section: Extended Privacy & Anti-Fingerprinting */}
                 <div className="space-y-2.5 pt-3 border-t border-white/5">
-                  <div className="text-xs font-bold text-gray-300">64Gram Extended Privacy</div>
+                  <div className="text-xs font-bold text-gray-300">Advanced Extended Privacy</div>
                   <ToggleItem
                     title="Ghost Mode (حالت روح)"
                     desc="Read messages without sending read receipts or online status"
@@ -1125,11 +1125,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* 64Gram Chat Enhancements */}
+                {/* Advanced Chat Enhancements */}
                 <div className="space-y-3 pt-3 border-t border-white/5">
                   <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
                     <Zap className="w-4 h-4 text-accent-cyan" />
-                    <span>64Gram Chat Enhancements</span>
+                    <span>Advanced Chat Enhancements</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -1584,7 +1584,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Modal Footer */}
         <div className="px-6 py-3.5 border-t border-white/10 bg-dark-900 flex items-center justify-between">
-          <div className="text-[11px] text-gray-500">Guidegram (64Gram Enhanced Edition)</div>
+          <div className="text-[11px] text-gray-500">Guidegram Desktop Edition</div>
           <button
             onClick={handleSave}
             className="px-5 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-500 text-white shadow-glow transition-all flex items-center gap-1.5 cursor-pointer"
