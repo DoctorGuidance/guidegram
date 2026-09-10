@@ -1,6 +1,6 @@
 # 🚀 Guidegram v1.6.0 — Official Telegram Desktop Parity & Infinite History Architecture
 
-> **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, 64Gram & Telegraph Power Features, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
+> **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, Advanced Power Preferences, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
 
 ---
 
@@ -48,6 +48,7 @@ Guidegram v1.6.0 delivers full parity with the official **Telegram Desktop (TDes
 ---
 
 ## 🐛 Bug Fixes & Reliability Improvements
+- Sanitized all user-facing branding and mod references to native Guidegram branding.
 - Fixed message history cutoff that prevented viewing older messages in active groups.
 - Resolved private chat filtering limitation where only 1 DM was visible in busy accounts.
 - Fixed historical timestamp resolution bug in `getHistoricalMessages`.
@@ -56,6 +57,8 @@ Guidegram v1.6.0 delivers full parity with the official **Telegram Desktop (TDes
 ---
 
 ## 📊 Full Commit Log (v1.5.0...v1.6.0)
+- `bf2601d` - chore(branding): sanitize internal mod references to native Guidegram branding
+- `4011897` - docs(release): update official release notes for v1.6.0
 - `bc1a126` - chore(release): bump version to 1.6.0
 - `4031a31` - fix(stats): default group stats to today and auto-fetch historical periods
 - `b9d524e` - feat(chat): implement infinite history scroll and deep dialog pagination for desktop parity
