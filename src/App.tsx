@@ -699,6 +699,7 @@ export const App: React.FC = () => {
               activeTab={activeTab}
               searchQuery={searchQuery}
               showChatId={config?.showChatId ?? true}
+              ghostMode={ghostMode}
               cloudFolders={cloudFolders}
               onSearchChange={setSearchQuery}
               onSelectChat={handleSelectChat}

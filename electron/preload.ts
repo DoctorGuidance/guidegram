@@ -23,6 +23,12 @@ import {
   ActiveSessionItem,
   TranslatedTextResult,
   CloudFolderItem,
+  StickerSetItem,
+  StickerItem,
+  StoryItemPayload,
+  PeerStoriesPayload,
+  ChannelBoostStatus,
+  TwoFactorStatus,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -193,6 +199,36 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:translate-message', { accountId, chatId, messageId, toLang }),
   getCloudFolders: (accountId: string): Promise<CloudFolderItem[]> =>
     ipcRenderer.invoke('telegram:get-cloud-folders', { accountId }),
+
+  // MTProto Stickers, Stories, Boosts & 2FA
+  getInstalledStickerSets: (accountId: string): Promise<StickerSetItem[]> =>
+    ipcRenderer.invoke('telegram:get-installed-stickers', { accountId }),
+  getStickerSet: (accountId: string, setId: string, accessHash: string): Promise<StickerSetItem | null> =>
+    ipcRenderer.invoke('telegram:get-stickerset', { accountId, setId, accessHash }),
+  sendSticker: (
+    accountId: string,
+    chatId: string,
+    documentId: string,
+    accessHash: string,
+    fileRef?: string,
+    replyToMsgId?: number
+  ): Promise<boolean> =>
+    ipcRenderer.invoke('telegram:send-sticker', { accountId, chatId, documentId, accessHash, fileRef, replyToMsgId }),
+  getStickerData: (
+    accountId: string,
+    documentId: string,
+    accessHash: string,
+    fileRef?: string
+  ): Promise<{ format: 'lottie' | 'image' | 'video'; url?: string; data?: any } | null> =>
+    ipcRenderer.invoke('telegram:get-sticker-data', { accountId, documentId, accessHash, fileRef }),
+  getPeerStories: (accountId: string, peerId: string): Promise<PeerStoriesPayload | null> =>
+    ipcRenderer.invoke('telegram:get-peer-stories', { accountId, peerId }),
+  readStories: (accountId: string, peerId: string, maxId: number): Promise<boolean> =>
+    ipcRenderer.invoke('telegram:read-stories', { accountId, peerId, maxId }),
+  getChannelBoostStatus: (accountId: string, channelId: string): Promise<ChannelBoostStatus | null> =>
+    ipcRenderer.invoke('telegram:get-channel-boosts', { accountId, channelId }),
+  getTwoFactorStatus: (accountId: string): Promise<TwoFactorStatus | null> =>
+    ipcRenderer.invoke('telegram:get-two-factor-status', { accountId }),
 
   // Proxy & Settings
   testProxyPing: (proxy: ProxyConfig) =>

@@ -1195,6 +1195,81 @@ function setupIpcHandlers() {
     }
   })
 
+  // Stickers IPC
+  ipcMain.handle('telegram:get-installed-stickers', async (_event, { accountId }) => {
+    try {
+      return await accountManager.getInstalledStickerSets(accountId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getInstalledStickerSets error:`, err)
+      return []
+    }
+  })
+
+  ipcMain.handle('telegram:get-stickerset', async (_event, { accountId, setId, accessHash }) => {
+    try {
+      return await accountManager.getStickerSet(accountId, setId, accessHash)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getStickerSet error:`, err)
+      return null
+    }
+  })
+
+  ipcMain.handle('telegram:send-sticker', async (_event, { accountId, chatId, documentId, accessHash, fileRef, replyToMsgId }) => {
+    try {
+      return await accountManager.sendSticker(accountId, chatId, documentId, accessHash, fileRef, replyToMsgId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] sendSticker error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:get-sticker-data', async (_event, { accountId, documentId, accessHash, fileRef }) => {
+    try {
+      return await accountManager.getStickerData(accountId, documentId, accessHash, fileRef)
+    } catch (err: any) {
+      return null
+    }
+  })
+
+  // Stories IPC
+  ipcMain.handle('telegram:get-peer-stories', async (_event, { accountId, peerId }) => {
+    try {
+      return await accountManager.getPeerStories(accountId, peerId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getPeerStories error:`, err)
+      return null
+    }
+  })
+
+  ipcMain.handle('telegram:read-stories', async (_event, { accountId, peerId, maxId }) => {
+    try {
+      return await accountManager.readStories(accountId, peerId, maxId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] readStories error:`, err)
+      return false
+    }
+  })
+
+  // Channel Boosts IPC
+  ipcMain.handle('telegram:get-channel-boosts', async (_event, { accountId, channelId }) => {
+    try {
+      return await accountManager.getChannelBoostStatus(accountId, channelId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getChannelBoostStatus error:`, err)
+      return null
+    }
+  })
+
+  // 2FA Security IPC
+  ipcMain.handle('telegram:get-two-factor-status', async (_event, { accountId }) => {
+    try {
+      return await accountManager.getTwoFactorStatus(accountId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getTwoFactorStatus error:`, err)
+      return null
+    }
+  })
+
   ipcMain.handle('system:get-portable-locator', async () => {
     return readPortableLocator()
   })

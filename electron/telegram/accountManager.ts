@@ -33,6 +33,12 @@ import {
   ActiveSessionItem,
   TranslatedTextResult,
   CloudFolderItem,
+  StickerSetItem,
+  StickerItem,
+  StoryItemPayload,
+  PeerStoriesPayload,
+  ChannelBoostStatus,
+  TwoFactorStatus,
 } from './types'
 
 export interface ClientHolder {
@@ -2883,6 +2889,254 @@ export class AccountManager {
     } catch (err) {
       Logger.error(`[AccountManager] Failed to fetch cloud folders:`, err)
       return []
+    }
+  }
+
+  public async getInstalledStickerSets(accountId: string): Promise<StickerSetItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return []
+    try {
+      const res: any = await holder.client.invoke(
+        new Api.messages.GetAllStickers({ hash: BigInt(0) as any })
+      )
+      if (!res || !Array.isArray(res.sets)) return []
+      return res.sets.map((s: any) => ({
+        id: s.id ? s.id.toString() : '',
+        accessHash: s.accessHash ? s.accessHash.toString() : '',
+        title: s.title || 'Stickers',
+        shortName: s.shortName || '',
+        count: Number(s.count || 0),
+        stickers: [],
+      }))
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to fetch sticker sets:`, err)
+      return []
+    }
+  }
+
+  public async getStickerSet(
+    accountId: string,
+    setId: string,
+    accessHash: string
+  ): Promise<StickerSetItem | null> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return null
+    try {
+      const res: any = await holder.client.invoke(
+        new Api.messages.GetStickerSet({
+          stickerset: new Api.InputStickerSetID({
+            id: BigInt(setId) as any,
+            accessHash: BigInt(accessHash) as any,
+          }),
+          hash: 0,
+        })
+      )
+      if (!res || !res.set) return null
+      const stickers: StickerItem[] = Array.isArray(res.documents)
+        ? res.documents.map((doc: any) => {
+            const stickerAttr = doc.attributes?.find(
+              (a: any) => a.className === 'DocumentAttributeSticker'
+            )
+            const imgAttr = doc.attributes?.find(
+              (a: any) => a.className === 'DocumentAttributeImageSize'
+            )
+            return {
+              id: doc.id ? doc.id.toString() : '',
+              accessHash: doc.accessHash ? doc.accessHash.toString() : '',
+              fileReferenceHex: doc.fileReference ? doc.fileReference.toString('hex') : '',
+              mimeType: doc.mimeType || 'image/webp',
+              emoticon: stickerAttr?.alt || '⭐',
+              isAnimated: doc.mimeType === 'application/x-tgsticker',
+              isVideo: doc.mimeType === 'video/webm',
+              width: imgAttr?.w,
+              height: imgAttr?.h,
+            }
+          })
+        : []
+
+      return {
+        id: res.set.id.toString(),
+        accessHash: res.set.accessHash.toString(),
+        title: res.set.title || 'Sticker Pack',
+        shortName: res.set.shortName || '',
+        count: Number(res.set.count || stickers.length),
+        stickers,
+      }
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to fetch stickerset details:`, err)
+      return null
+    }
+  }
+
+  public async sendSticker(
+    accountId: string,
+    chatId: string,
+    documentId: string,
+    accessHash: string,
+    fileRef?: string,
+    replyToMsgId?: number
+  ): Promise<boolean> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) throw new Error('Client not connected')
+    try {
+      const entity = await holder.client.getInputEntity(chatId)
+      const inputDoc = new Api.InputDocument({
+        id: BigInt(documentId) as any,
+        accessHash: BigInt(accessHash) as any,
+        fileReference: fileRef ? Buffer.from(fileRef, 'hex') : Buffer.alloc(0),
+      })
+      await holder.client.sendFile(entity, {
+        file: inputDoc as any,
+        replyTo: replyToMsgId,
+      })
+      return true
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to send sticker:`, err)
+      throw err
+    }
+  }
+
+  public async getStickerData(
+    accountId: string,
+    documentId: string,
+    accessHash: string,
+    fileRef?: string
+  ): Promise<{ format: 'lottie' | 'image' | 'video'; url?: string; data?: any } | null> {
+    const lottiePath = path.join(this.mediaDir, `sticker_${documentId}.json`)
+    if (fs.existsSync(lottiePath)) {
+      try {
+        const raw = await fs.promises.readFile(lottiePath, 'utf-8')
+        return { format: 'lottie', data: JSON.parse(raw) }
+      } catch (_) {}
+    }
+
+    const imgPath = path.join(this.mediaDir, `sticker_${documentId}.webp`)
+    if (fs.existsSync(imgPath)) {
+      return { format: 'image', url: `guidegram-media://local/${encodeURIComponent(imgPath)}` }
+    }
+
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return null
+
+    try {
+      const buffer = await holder.client.downloadMedia(
+        new Api.MessageMediaDocument({
+          document: new Api.Document({
+            id: BigInt(documentId) as any,
+            accessHash: BigInt(accessHash) as any,
+            fileReference: fileRef ? Buffer.from(fileRef, 'hex') : Buffer.alloc(0),
+            date: 0,
+            mimeType: 'image/webp',
+            size: BigInt(0) as any,
+            dcId: 0,
+            attributes: [],
+          }),
+        }),
+        {}
+      )
+
+      if (!buffer || !(buffer instanceof Buffer)) return null
+
+      if (buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+        try {
+          const unzipped = zlib.gunzipSync(buffer)
+          const json = JSON.parse(unzipped.toString('utf-8'))
+          await fs.promises.writeFile(lottiePath, JSON.stringify(json), 'utf-8')
+          return { format: 'lottie', data: json }
+        } catch (_) {}
+      }
+
+      await fs.promises.writeFile(imgPath, buffer)
+      return { format: 'image', url: `guidegram-media://local/${encodeURIComponent(imgPath)}` }
+    } catch {
+      return null
+    }
+  }
+
+  public async getPeerStories(accountId: string, peerId: string): Promise<PeerStoriesPayload | null> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return null
+    try {
+      const entity = await holder.client.getInputEntity(peerId)
+      const res: any = await holder.client.invoke(
+        new Api.stories.GetPeerStories({ peer: entity })
+      )
+      const peerStories = res?.stories
+      if (!peerStories || !Array.isArray(peerStories.stories)) return null
+
+      const stories: StoryItemPayload[] = peerStories.stories
+        .filter((s: any) => s.className !== 'StoryItemDeleted' && s.className !== 'StoryItemSkipped')
+        .map((s: any) => ({
+          id: s.id,
+          date: s.date ? s.date * 1000 : Date.now(),
+          expireDate: s.expireDate ? s.expireDate * 1000 : Date.now() + 86400000,
+          caption: s.caption,
+          isVideo: Boolean(s.media?.document?.mimeType?.includes('video')),
+          viewsCount: s.views?.viewsCount,
+        }))
+
+      return {
+        peerId,
+        maxReadId: peerStories.maxReadId,
+        stories,
+      }
+    } catch (err) {
+      Logger.warn(`[AccountManager] Failed to get peer stories for ${peerId}:`, err)
+      return null
+    }
+  }
+
+  public async readStories(accountId: string, peerId: string, maxId: number): Promise<boolean> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return false
+    try {
+      const entity = await holder.client.getInputEntity(peerId)
+      await holder.client.invoke(new Api.stories.ReadStories({ peer: entity, maxId }))
+      return true
+    } catch (err) {
+      Logger.warn(`[AccountManager] Failed to mark stories read:`, err)
+      return false
+    }
+  }
+
+  public async getChannelBoostStatus(accountId: string, channelId: string): Promise<ChannelBoostStatus | null> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return null
+    try {
+      const entity = await holder.client.getInputEntity(channelId)
+      const res: any = await holder.client.invoke(
+        new Api.premium.GetBoostsStatus({ peer: entity })
+      )
+      if (!res) return null
+      return {
+        level: Number(res.level || 0),
+        boosts: Number(res.boosts || 0),
+        currentLevelBoosts: Number(res.currentLevelBoosts || 0),
+        nextLevelBoosts: res.nextLevelBoosts ? Number(res.nextLevelBoosts) : undefined,
+        boostUrl: res.boostUrl || '',
+        myBoost: Boolean(res.myBoost),
+      }
+    } catch (err) {
+      Logger.warn(`[AccountManager] Failed to get channel boosts for ${channelId}:`, err)
+      return null
+    }
+  }
+
+  public async getTwoFactorStatus(accountId: string): Promise<TwoFactorStatus | null> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return null
+    try {
+      const res: any = await holder.client.invoke(new Api.account.GetPassword())
+      if (!res) return null
+      return {
+        hasPassword: Boolean(res.hasPassword),
+        hasRecovery: Boolean(res.hasRecovery),
+        hint: res.hint || '',
+        emailPattern: res.loginEmailPattern || res.emailUnconfirmedPattern || '',
+      }
+    } catch (err) {
+      Logger.warn(`[AccountManager] Failed to get 2FA status:`, err)
+      return null
     }
   }
 

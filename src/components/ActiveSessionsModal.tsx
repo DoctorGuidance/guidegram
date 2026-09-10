@@ -11,8 +11,11 @@ import {
   RefreshCw,
   CheckCircle,
   Clock,
+  Lock,
+  ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react'
-import { ActiveSessionItem } from '../types/telegram'
+import { ActiveSessionItem, TwoFactorStatus } from '../types/telegram'
 import { useI18n } from '../i18n'
 import { isRTL } from '../utils/textUtils'
 
@@ -29,6 +32,7 @@ export const ActiveSessionsModal: React.FC<ActiveSessionsModalProps> = ({
 }) => {
   const { t } = useI18n()
   const [sessions, setSessions] = useState<ActiveSessionItem[]>([])
+  const [twoFactor, setTwoFactor] = useState<TwoFactorStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [terminatingHash, setTerminatingHash] = useState<string | null>(null)
   const [terminatingAll, setTerminatingAll] = useState(false)
@@ -43,6 +47,10 @@ export const ActiveSessionsModal: React.FC<ActiveSessionsModalProps> = ({
       if (window.guidegram?.getActiveSessions) {
         const list = await window.guidegram.getActiveSessions(accountId)
         setSessions(list || [])
+      }
+      if (window.guidegram?.getTwoFactorStatus) {
+        const tf = await window.guidegram.getTwoFactorStatus(accountId)
+        setTwoFactor(tf)
       }
     } catch (err: any) {
       setError(err?.message || 'Failed to load sessions')
@@ -184,6 +192,42 @@ export const ActiveSessionsModal: React.FC<ActiveSessionsModalProps> = ({
             </div>
           ) : (
             <>
+              {/* Two-Step Verification (2FA) Status Card */}
+              {twoFactor && (
+                <div className="p-4 rounded-xl bg-gray-900/90 border border-gray-800 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        twoFactor.hasPassword
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                      }`}
+                    >
+                      {twoFactor.hasPassword ? <ShieldCheck className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-white">Two-Step Verification (2FA)</span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            twoFactor.hasPassword
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-amber-500/20 text-amber-300'
+                          }`}
+                        >
+                          {twoFactor.hasPassword ? 'Protected' : 'Not Set'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {twoFactor.hasPassword
+                          ? `Cloud password protected${twoFactor.hasRecovery ? ' • Recovery email configured' : ''}`
+                          : 'Set a cloud password in Telegram settings to secure your account'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Current Session */}
               {currentSession && (
                 <div>

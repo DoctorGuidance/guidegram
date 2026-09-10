@@ -32,6 +32,12 @@ import type {
   ActiveSessionItem,
   TranslatedTextResult,
   CloudFolderItem,
+  StickerItem,
+  StickerSetItem,
+  StoryItemPayload,
+  PeerStoriesPayload,
+  ChannelBoostStatus,
+  TwoFactorStatus,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -75,4 +81,10 @@ export type {
   ActiveSessionItem,
   TranslatedTextResult,
   CloudFolderItem,
+  StickerItem,
+  StickerSetItem,
+  StoryItemPayload,
+  PeerStoriesPayload,
+  ChannelBoostStatus,
+  TwoFactorStatus,
 }

@@ -5,6 +5,7 @@ import { TabCategory } from './ChatTabs'
 import { Avatar } from './Avatar'
 import { isRTL } from '../utils/textUtils'
 import { CustomEmojiView } from './ChatViewport'
+import { StoryViewerModal } from './StoryViewerModal'
 import { useI18n } from '../i18n'
 
 interface ChatListProps {
@@ -14,6 +15,7 @@ interface ChatListProps {
   activeTab: TabCategory
   searchQuery: string
   showChatId?: boolean
+  ghostMode?: boolean
   cloudFolders?: CloudFolderItem[]
   onSearchChange: (query: string) => void
   onSelectChat: (chatId: string) => void
@@ -29,6 +31,7 @@ export const ChatList: React.FC<ChatListProps> = ({
   activeTab,
   searchQuery,
   showChatId = true,
+  ghostMode = false,
   cloudFolders,
   onSearchChange,
   onSelectChat,
@@ -40,6 +43,7 @@ export const ChatList: React.FC<ChatListProps> = ({
   const [globalPeers, setGlobalPeers] = useState<DialogItem[]>([])
   const [globalMessages, setGlobalMessages] = useState<MessageItem[]>([])
   const [isSearchingGlobal, setIsSearchingGlobal] = useState(false)
+  const [viewingStoryPeer, setViewingStoryPeer] = useState<{ id: string; title: string } | null>(null)
 
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     try {
@@ -421,6 +425,17 @@ export const ChatList: React.FC<ChatListProps> = ({
           filteredDialogs.map((dialog) => renderDialogItem(dialog))
         )}
       </div>
+
+      {viewingStoryPeer && account && (
+        <StoryViewerModal
+          isOpen={!!viewingStoryPeer}
+          onClose={() => setViewingStoryPeer(null)}
+          accountId={account.id}
+          peerId={viewingStoryPeer.id}
+          peerTitle={viewingStoryPeer.title}
+          ghostMode={ghostMode}
+        />
+      )}
     </div>
   )
 
@@ -439,7 +454,20 @@ export const ChatList: React.FC<ChatListProps> = ({
         }`}
       >
         <div className="flex items-center gap-3">
-          <div className="relative shrink-0">
+          <div
+            className={`relative shrink-0 ${
+              dialog.isUser && !dialog.isBot
+                ? 'p-0.5 rounded-full ring-2 ring-primary-500/70 hover:ring-accent-violet transition-all cursor-pointer'
+                : ''
+            }`}
+            onClick={(e) => {
+              if (dialog.isUser && !dialog.isBot) {
+                e.stopPropagation()
+                setViewingStoryPeer({ id: dialog.id, title: dialog.title })
+              }
+            }}
+            title={dialog.isUser && !dialog.isBot ? 'View Stories (Stealth Mode)' : undefined}
+          >
             <Avatar
               accountId={dialog.accountId}
               peerId={dialog.id}

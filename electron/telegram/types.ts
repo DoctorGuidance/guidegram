@@ -409,3 +409,56 @@ export interface CloudFolderItem {
   excludePeerIds: string[]
   pinnedPeerIds: string[]
 }
+
+export interface StickerItem {
+  id: string
+  accessHash: string
+  fileReferenceHex: string
+  mimeType: string
+  emoticon: string
+  isAnimated: boolean
+  isVideo: boolean
+  width?: number
+  height?: number
+}
+
+export interface StickerSetItem {
+  id: string
+  accessHash: string
+  title: string
+  shortName: string
+  count: number
+  stickers: StickerItem[]
+}
+
+export interface StoryItemPayload {
+  id: number
+  date: number
+  expireDate: number
+  caption?: string
+  mediaUrl?: string
+  isVideo?: boolean
+  viewsCount?: number
+}
+
+export interface PeerStoriesPayload {
+  peerId: string
+  maxReadId?: number
+  stories: StoryItemPayload[]
+}
+
+export interface ChannelBoostStatus {
+  level: number
+  boosts: number
+  currentLevelBoosts: number
+  nextLevelBoosts?: number
+  boostUrl: string
+  myBoost?: boolean
+}
+
+export interface TwoFactorStatus {
+  hasPassword: boolean
+  hasRecovery: boolean
+  hint?: string
+  emailPattern?: string
+}

@@ -61,14 +61,16 @@ import {
   Cake,
   Tv,
   Languages,
+  Zap,
 } from 'lucide-react'
-import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload, ForumTopicItem, ScheduledMessageItem, MessageReactionItem } from '../types/telegram'
+import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload, ForumTopicItem, ScheduledMessageItem, MessageReactionItem, StickerItem, ChannelBoostStatus } from '../types/telegram'
 import lottie from 'lottie-web'
 import { Avatar } from './Avatar'
 import { VideoPlayer } from './VideoPlayer'
 import { GroupStatsModal } from './GroupStatsModal'
 import { ForumTopicsBar } from './ForumTopicsBar'
 import { ScheduledMessagesModal } from './ScheduledMessagesModal'
+import { StickerPickerDrawer } from './StickerPickerDrawer'
 import { useI18n } from '../i18n'
 import { isRTL, formatFileSize, formatDuration, formatNumber } from '../utils/textUtils'
 
@@ -516,6 +518,24 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
   // Optimistic Message Reactions (MTProto messages.sendReaction)
   const [reactionOverrides, setReactionOverrides] = useState<Record<number, MessageReactionItem[]>>({})
+
+  // MTProto Native Stickers Drawer
+  const [isStickerDrawerOpen, setIsStickerDrawerOpen] = useState(false)
+
+  // MTProto Channel Boost Status (premium.getBoostsStatus)
+  const [boostStatus, setBoostStatus] = useState<ChannelBoostStatus | null>(null)
+
+  // Fetch Channel Boost Status
+  useEffect(() => {
+    setBoostStatus(null)
+    if (!chat?.accountId || !chat?.id || (!chat.isChannel && !chatDetails?.isChannel)) return
+
+    window.guidegram?.getChannelBoostStatus?.(chat.accountId, chat.id)
+      .then((status) => {
+        if (status) setBoostStatus(status)
+      })
+      .catch(() => {})
+  }, [chat?.accountId, chat?.id, chat?.isChannel, chatDetails?.isChannel, isInfoOpen])
 
   // MTProto Native Message Translation (messages.translateText)
   const [translations, setTranslations] = useState<Record<number, string>>({})
@@ -1613,6 +1633,28 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     setInputText('')
     setReplyMessage(null)
     setDismissedComposerUrl(null)
+  }
+
+  // MTProto Native Send Sticker
+  const handleSendSticker = async (sticker: StickerItem) => {
+    if (!chat?.accountId || !chat?.id) return
+    try {
+      const targetReplyId = replyMessage?.id ?? (activeTopicId !== null ? activeTopicId : undefined)
+      await window.guidegram?.sendSticker?.(
+        chat.accountId,
+        chat.id,
+        sticker.id,
+        sticker.accessHash,
+        sticker.fileReferenceHex,
+        targetReplyId
+      )
+      setIsStickerDrawerOpen(false)
+      setReplyMessage(null)
+      showToast('Sticker sent!')
+    } catch (err: any) {
+      console.error('Failed to send sticker:', err)
+      showToast(`Failed to send sticker: ${err.message || err}`)
+    }
   }
 
   // Message Reactions Toggle (MTProto messages.sendReaction)
@@ -4098,6 +4140,20 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   <Paperclip className="w-4 h-4" />
                 </button>
 
+                {/* Sticker Picker Drawer Toggle Button (Telegram Desktop v7.0) */}
+                <button
+                  type="button"
+                  onClick={() => setIsStickerDrawerOpen((prev) => !prev)}
+                  className={`p-2.5 rounded-xl transition-colors cursor-pointer shrink-0 ${
+                    isStickerDrawerOpen
+                      ? 'text-accent-violet bg-dark-750'
+                      : 'text-gray-400 hover:text-accent-violet hover:bg-dark-800'
+                  }`}
+                  title="Stickers & Animated Packs"
+                >
+                  <Smile className="w-4 h-4" />
+                </button>
+
                 {/* AI Text Tools Button (Telegram Desktop v6.7 & v7.0.9) */}
                 <div className="relative shrink-0">
                   {isAiMenuOpen && (
@@ -4662,6 +4718,57 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   <span className="text-xs font-bold text-gray-100">
                     {formatNumber(chatDetails.membersCount)}
                   </span>
+                </div>
+              )}
+
+              {/* Channel Boost Status Card (MTProto premium.getBoostsStatus & Telegram Desktop v5.0+) */}
+              {boostStatus && (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-dark-850 to-dark-800 border border-amber-500/20 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <Zap className="w-4 h-4 fill-current" />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <span>Level {boostStatus.level}</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">
+                            {boostStatus.boosts} boosts
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-gray-400">Channel Level & Boosts</p>
+                      </div>
+                    </div>
+                    {boostStatus.boostUrl && (
+                      <button
+                        type="button"
+                        onClick={() => window.guidegram?.openExternal?.(boostStatus.boostUrl!)}
+                        className="text-[10px] text-accent-cyan hover:underline cursor-pointer"
+                      >
+                        Boost Link
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Level Progress Bar */}
+                  {boostStatus.nextLevelBoosts ? (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-gray-400">
+                        <span>Progress to Level {boostStatus.level + 1}</span>
+                        <span className="font-mono text-gray-300">
+                          {boostStatus.boosts} / {boostStatus.nextLevelBoosts}
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-500 to-primary-500 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(100, Math.round((boostStatus.boosts / boostStatus.nextLevelBoosts) * 100))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -5411,6 +5518,17 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           accountId={chat.accountId}
           chatId={chat.id}
           chatTitle={chat.title}
+        />
+      )}
+
+      {/* 9. MTProto Native Stickers Drawer (Telegram Desktop v7.0) */}
+      {isStickerDrawerOpen && chat && (
+        <StickerPickerDrawer
+          isOpen={isStickerDrawerOpen}
+          onClose={() => setIsStickerDrawerOpen(false)}
+          accountId={chat.accountId}
+          chatId={chat.id}
+          onSelectSticker={handleSendSticker}
         />
       )}
     </div>
