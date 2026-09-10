@@ -57,6 +57,8 @@ export const App: React.FC = () => {
     mode: 'group',
   })
   const [forwardMessage, setForwardMessage] = useState<MessageItem | null>(null)
+  const [isLoadingMoreDialogs, setIsLoadingMoreDialogs] = useState(false)
+  const hasMoreDialogsRef = useRef(true)
 
   // Resizable Sidebar Splitter State (default 320px, min 240px, max 550px)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -287,8 +289,9 @@ export const App: React.FC = () => {
   const loadDialogsForAccount = async (accountId: string) => {
     if (!window.guidegram?.getDialogs) return
     try {
+      hasMoreDialogsRef.current = true
       loadCloudFoldersForAccount(accountId)
-      const dialogs = await window.guidegram.getDialogs(accountId)
+      const dialogs = await window.guidegram.getDialogs(accountId, 350)
       setDialogsByAccount((prev) => ({ ...prev, [accountId]: dialogs }))
       if (dialogs.length > 0 && !activeChatId) {
         setActiveChatId(dialogs[0].id)
@@ -299,10 +302,50 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleLoadMoreDialogs = async () => {
+    if (!activeAccountId || !window.guidegram?.getDialogs || isLoadingMoreDialogs || !hasMoreDialogsRef.current) return
+    const currentList = dialogsByAccount[activeAccountId] || []
+    if (currentList.length === 0) return
+
+    setIsLoadingMoreDialogs(true)
+    try {
+      const lastDialog = currentList[currentList.length - 1]
+      const offsetDate = lastDialog?.lastMessageDate ? Math.floor(lastDialog.lastMessageDate / 1000) : undefined
+      const nextBatch = await window.guidegram.getDialogs(activeAccountId, 150, offsetDate)
+
+      if (!nextBatch || nextBatch.length === 0) {
+        hasMoreDialogsRef.current = false
+      } else {
+        setDialogsByAccount((prev) => {
+          const existing = prev[activeAccountId] || []
+          const existingMap = new Map<string, DialogItem>()
+          for (const d of existing) {
+            existingMap.set(d.id, d)
+          }
+          let addedCount = 0
+          for (const d of nextBatch) {
+            if (!existingMap.has(d.id)) {
+              existingMap.set(d.id, d)
+              addedCount++
+            }
+          }
+          if (addedCount === 0) {
+            hasMoreDialogsRef.current = false
+          }
+          return { ...prev, [activeAccountId]: Array.from(existingMap.values()) }
+        })
+      }
+    } catch (err) {
+      console.warn('Failed to load more dialogs:', err)
+    } finally {
+      setIsLoadingMoreDialogs(false)
+    }
+  }
+
   const loadMessages = async (accountId: string, chatId: string) => {
     if (!window.guidegram?.getMessages) return
     try {
-      const msgs = await window.guidegram.getMessages(accountId, chatId, 40)
+      const msgs = await window.guidegram.getMessages(accountId, chatId, 60)
       setMessagesByChat((prev) => ({ ...prev, [chatId]: msgs }))
       window.guidegram.markAsRead(accountId, chatId)
     } catch (err) {
@@ -827,6 +870,8 @@ export const App: React.FC = () => {
               onSearchChange={setSearchQuery}
               onSelectChat={handleSelectChat}
               onSelectPeer={handleSelectUserOrChat}
+              isLoadingMoreDialogs={isLoadingMoreDialogs}
+              onLoadMoreDialogs={handleLoadMoreDialogs}
             />
           </div>
 

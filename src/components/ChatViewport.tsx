@@ -65,6 +65,7 @@ import {
   AtSign,
   Phone,
   ChevronLeft,
+  RefreshCw,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload, ForumTopicItem, ScheduledMessageItem, MessageReactionItem, StickerItem, ChannelBoostStatus, AutoDownloadConfig } from '../types/telegram'
 import lottie from 'lottie-web'
@@ -550,6 +551,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const [forumTopics, setForumTopics] = useState<ForumTopicItem[]>([])
   const [activeTopicId, setActiveTopicId] = useState<number | null>(null)
 
+  // Infinite Scroll & Message History Pagination
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false)
+  const isLoadingOlderRef = useRef(false)
+  const hasMoreOlderRef = useRef(true)
+
   // Scheduled Messages Modal (MTProto messages.getScheduledHistory)
   const [isScheduledListOpen, setIsScheduledListOpen] = useState(false)
 
@@ -853,7 +859,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     adjustTextareaHeight()
   }, [inputText, adjustTextareaHeight])
 
-  // Throttled scroll listener detecting > 300px from bottom (Feature 19)
+  // Throttled scroll listener detecting > 300px from bottom (Feature 19) & Infinite scroll to top
   const handleScroll = useCallback(() => {
     if (isScrollingRef.current) return
     isScrollingRef.current = true
@@ -866,10 +872,54 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         if (distanceFromBottom <= 50) {
           setUnreadScrollCount(0)
         }
+
+        // Infinite Scroll: Fetch older messages when near top (< 120px)
+        if (
+          el.scrollTop < 120 &&
+          !isLoadingOlderRef.current &&
+          hasMoreOlderRef.current &&
+          messages.length > 0 &&
+          chat &&
+          window.guidegram?.getMessages
+        ) {
+          const oldestMsg = messages[0]
+          if (oldestMsg && oldestMsg.id > 1) {
+            isLoadingOlderRef.current = true
+            setIsLoadingOlder(true)
+            const prevScrollHeight = el.scrollHeight
+            const prevScrollTop = el.scrollTop
+
+            window.guidegram
+              .getMessages(chat.accountId, chat.id, 50, oldestMsg.id)
+              .then((olderChunk) => {
+                if (!olderChunk || olderChunk.length === 0) {
+                  hasMoreOlderRef.current = false
+                } else {
+                  if (onMergeHistoricalMessages) {
+                    onMergeHistoricalMessages(olderChunk)
+                  }
+                  requestAnimationFrame(() => {
+                    if (messagesContainerRef.current) {
+                      const newScrollHeight = messagesContainerRef.current.scrollHeight
+                      messagesContainerRef.current.scrollTop =
+                        newScrollHeight - prevScrollHeight + prevScrollTop
+                    }
+                  })
+                }
+              })
+              .catch((err) => {
+                console.warn('[ChatViewport] Failed to fetch older messages:', err)
+              })
+              .finally(() => {
+                isLoadingOlderRef.current = false
+                setIsLoadingOlder(false)
+              })
+          }
+        }
       }
       isScrollingRef.current = false
     })
-  }, [])
+  }, [messages, chat, onMergeHistoricalMessages])
 
   const handleScrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -882,6 +932,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     // 1. Detect Chat Switch
     if (chat?.id !== previousChatIdRef.current) {
       previousChatIdRef.current = chat?.id || null
+      hasMoreOlderRef.current = true
+      isLoadingOlderRef.current = false
+      setIsLoadingOlder(false)
       setShowScrollBottom(false)
       setUnreadScrollCount(0)
       setReplyMessage(null)
@@ -3183,6 +3236,12 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             if (e.target === e.currentTarget) setSelectedMessage(null)
           }}
         >
+        {isLoadingOlder && (
+          <div className="flex items-center justify-center gap-2 py-2 text-[11px] text-accent-cyan font-medium animate-in fade-in duration-150">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent-cyan" />
+            <span>بارگذاری پیام‌های قبلی...</span>
+          </div>
+        )}
         {filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-xs text-gray-400 gap-3">
             {(chat.isBot || chatDetails?.isBot) && !searchQuery ? (

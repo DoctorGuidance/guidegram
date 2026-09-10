@@ -862,15 +862,28 @@ export class AccountManager {
   }
 
   /**
-   * Get dialog list for an account (Optimized for instant loading)
+   * Get dialog list for an account (Deep loading & pagination enabled)
    */
-  public async getDialogs(accountId: string, limit = 150): Promise<DialogItem[]> {
+  public async getDialogs(
+    accountId: string,
+    limit = 350,
+    offsetDate?: number,
+    offsetId?: number
+  ): Promise<DialogItem[]> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) {
       throw new Error(`Account ${accountId} is still connecting or disconnected.`)
     }
 
-    const dialogs = await holder.client.getDialogs({ limit })
+    const options: any = { limit }
+    if (typeof offsetDate === 'number' && offsetDate > 0) {
+      options.offsetDate = offsetDate
+    }
+    if (typeof offsetId === 'number' && offsetId > 0) {
+      options.offsetId = offsetId
+    }
+
+    const dialogs = await holder.client.getDialogs(options)
     const nowSec = Math.floor(Date.now() / 1000)
 
     const dialogItems = dialogs.map((d: any) => {

@@ -833,14 +833,17 @@ function setupIpcHandlers() {
     return accountManager.logoutAccount(accountId)
   })
 
-  ipcMain.handle('telegram:get-dialogs', async (_event, { accountId }) => {
-    try {
-      return await accountManager.getDialogs(accountId)
-    } catch (err: any) {
-      Logger.error(`[IPC] getDialogs failed for ${accountId}:`, err)
-      throw err
+  ipcMain.handle(
+    'telegram:get-dialogs',
+    async (_event, { accountId, limit, offsetDate, offsetId }) => {
+      try {
+        return await accountManager.getDialogs(accountId, limit, offsetDate, offsetId)
+      } catch (err: any) {
+        Logger.error(`[IPC] getDialogs failed for ${accountId}:`, err)
+        throw err
+      }
     }
-  })
+  )
 
   ipcMain.handle('telegram:get-contacts', async (_event, { accountId }) => {
     try {

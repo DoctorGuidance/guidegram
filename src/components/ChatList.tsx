@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, Pin, ShieldCheck, X, Clock, Trash2, Globe, MessageSquare, Radio, Users, User, Archive } from 'lucide-react'
+import { Search, Pin, ShieldCheck, X, Clock, Trash2, Globe, MessageSquare, Radio, Users, User, Archive, RefreshCw } from 'lucide-react'
 import { DialogItem, AccountInfo, MessageItem, CloudFolderItem } from '../types/telegram'
 import { TabCategory } from './ChatTabs'
 import { Avatar } from './Avatar'
@@ -17,9 +17,11 @@ interface ChatListProps {
   showChatId?: boolean
   ghostMode?: boolean
   cloudFolders?: CloudFolderItem[]
+  isLoadingMoreDialogs?: boolean
   onSearchChange: (query: string) => void
   onSelectChat: (chatId: string) => void
   onSelectPeer?: (target: string) => void
+  onLoadMoreDialogs?: () => void
 }
 
 type SearchFilterCategory = 'all' | 'channels' | 'groups' | 'private' | 'archive'
@@ -33,9 +35,11 @@ export const ChatList: React.FC<ChatListProps> = ({
   showChatId = true,
   ghostMode = false,
   cloudFolders,
+  isLoadingMoreDialogs = false,
   onSearchChange,
   onSelectChat,
   onSelectPeer,
+  onLoadMoreDialogs,
 }) => {
   const { t, isRTL: isAppRtl, formatNumber, formatSendersCount } = useI18n()
   const [isSearchFocused, setIsSearchFocused] = useState(false)
@@ -352,7 +356,18 @@ export const ChatList: React.FC<ChatListProps> = ({
       </div>
 
       {/* Chat List Viewport */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div
+        onScroll={(e) => {
+          const el = e.currentTarget
+          if (
+            !searchQuery.trim() &&
+            el.scrollTop + el.clientHeight >= el.scrollHeight - 180
+          ) {
+            onLoadMoreDialogs?.()
+          }
+        }}
+        className="flex-1 overflow-y-auto min-h-0"
+      >
         {/* If user is searching and has results */}
         {searchQuery.trim().length > 0 ? (
           <div className="space-y-3 p-1.5">
@@ -460,6 +475,13 @@ export const ChatList: React.FC<ChatListProps> = ({
           <div className="p-8 text-center text-xs text-gray-400">{t('app.no_chats')}</div>
         ) : (
           filteredDialogs.map((dialog) => renderDialogItem(dialog))
+        )}
+
+        {isLoadingMoreDialogs && (
+          <div className="flex items-center justify-center gap-2 py-3 text-[11px] text-accent-cyan font-medium animate-in fade-in duration-150">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent-cyan" />
+            <span>بارگذاری چت‌های بیشتر...</span>
+          </div>
         )}
       </div>
 

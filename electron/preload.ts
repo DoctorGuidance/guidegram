@@ -64,8 +64,13 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:reconnect-account', { accountId }),
 
   // Dialogs & Messages
-  getDialogs: (accountId: string) =>
-    ipcRenderer.invoke('telegram:get-dialogs', { accountId }),
+  getDialogs: (
+    accountId: string,
+    limit?: number,
+    offsetDate?: number,
+    offsetId?: number
+  ): Promise<DialogItem[]> =>
+    ipcRenderer.invoke('telegram:get-dialogs', { accountId, limit, offsetDate, offsetId }),
   getContacts: (accountId: string): Promise<ContactItem[]> =>
     ipcRenderer.invoke('telegram:get-contacts', { accountId }),
   getMessages: (
