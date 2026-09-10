@@ -20,6 +20,9 @@ import {
   ForumTopicItem,
   ScheduledMessageItem,
   StarGiftItem,
+  ActiveSessionItem,
+  TranslatedTextResult,
+  CloudFolderItem,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -180,6 +183,16 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:send-reaction', { accountId, chatId, messageId, reactionEmoji }),
   getSavedStarGifts: (accountId: string, userId?: string): Promise<StarGiftItem[]> =>
     ipcRenderer.invoke('telegram:get-star-gifts', { accountId, userId }),
+
+  // MTProto Sessions, Cloud Folders & Translation
+  getActiveSessions: (accountId: string): Promise<ActiveSessionItem[]> =>
+    ipcRenderer.invoke('telegram:get-active-sessions', { accountId }),
+  terminateSession: (accountId: string, hash: string): Promise<boolean> =>
+    ipcRenderer.invoke('telegram:terminate-session', { accountId, hash }),
+  translateMessage: (accountId: string, chatId: string, messageId: number, toLang?: string): Promise<TranslatedTextResult> =>
+    ipcRenderer.invoke('telegram:translate-message', { accountId, chatId, messageId, toLang }),
+  getCloudFolders: (accountId: string): Promise<CloudFolderItem[]> =>
+    ipcRenderer.invoke('telegram:get-cloud-folders', { accountId }),
 
   // Proxy & Settings
   testProxyPing: (proxy: ProxyConfig) =>

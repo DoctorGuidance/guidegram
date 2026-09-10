@@ -14,10 +14,12 @@ import {
   Check,
   Radio,
   Gift,
+  Smartphone,
 } from 'lucide-react'
 import { AccountInfo } from '../types/telegram'
 import { Avatar } from './Avatar'
 import { StarGiftsModal } from './StarGiftsModal'
+import { ActiveSessionsModal } from './ActiveSessionsModal'
 
 interface MainMenuDrawerProps {
   isOpen: boolean
@@ -48,6 +50,7 @@ export const MainMenuDrawer: React.FC<MainMenuDrawerProps> = ({
 }) => {
   const [isAccountsExpanded, setIsAccountsExpanded] = useState(false)
   const [isStarGiftsOpen, setIsStarGiftsOpen] = useState(false)
+  const [isSessionsOpen, setIsSessionsOpen] = useState(false)
 
   if (!isOpen) return null
 
@@ -208,6 +211,29 @@ export const MainMenuDrawer: React.FC<MainMenuDrawerProps> = ({
             </span>
           </button>
 
+          {/* Active Sessions / Devices */}
+          <button
+            type="button"
+            onClick={() => {
+              onClose()
+              setIsSessionsOpen(true)
+            }}
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-gray-200 hover:text-white hover:bg-dark-800 transition-colors text-xs font-medium cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div className="text-left">
+                <div className="font-semibold">Devices & Sessions</div>
+                <div className="text-[10px] text-gray-400">Active Telegram Sessions & Security</div>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[10px] font-bold">
+              MTProto
+            </span>
+          </button>
+
           {/* Proxy Manager */}
           <button
             type="button"
@@ -279,6 +305,15 @@ export const MainMenuDrawer: React.FC<MainMenuDrawerProps> = ({
           onClose={() => setIsStarGiftsOpen(false)}
           accountId={activeAccount.id}
           userName={activeAccount.firstName}
+        />
+      )}
+
+      {/* Active Sessions Modal */}
+      {activeAccount && (
+        <ActiveSessionsModal
+          isOpen={isSessionsOpen}
+          onClose={() => setIsSessionsOpen(false)}
+          accountId={activeAccount.id}
         />
       )}
     </div>

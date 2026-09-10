@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Search, Pin, ShieldCheck, X, Clock, Trash2, Globe, MessageSquare, Radio, Users, User, Archive } from 'lucide-react'
-import { DialogItem, AccountInfo, MessageItem } from '../types/telegram'
+import { DialogItem, AccountInfo, MessageItem, CloudFolderItem } from '../types/telegram'
 import { TabCategory } from './ChatTabs'
 import { Avatar } from './Avatar'
 import { isRTL } from '../utils/textUtils'
@@ -14,6 +14,7 @@ interface ChatListProps {
   activeTab: TabCategory
   searchQuery: string
   showChatId?: boolean
+  cloudFolders?: CloudFolderItem[]
   onSearchChange: (query: string) => void
   onSelectChat: (chatId: string) => void
   onSelectPeer?: (target: string) => void
@@ -28,6 +29,7 @@ export const ChatList: React.FC<ChatListProps> = ({
   activeTab,
   searchQuery,
   showChatId = true,
+  cloudFolders,
   onSearchChange,
   onSelectChat,
   onSelectPeer,
@@ -92,6 +94,18 @@ export const ChatList: React.FC<ChatListProps> = ({
     if (activeTab === 'channels' && !dialog.isChannel) return false
     if (activeTab === 'bots' && !dialog.isBot) return false
     if (activeTab === 'unread' && dialog.unreadCount === 0) return false
+
+    // MTProto Cloud Folders match
+    if (activeTab.startsWith('folder:')) {
+      const folderId = Number(activeTab.replace('folder:', ''))
+      const folder = cloudFolders?.find((f) => f.id === folderId)
+      if (folder) {
+        if (folder.excludePeerIds?.includes(dialog.id)) return false
+        if (folder.includePeerIds?.length > 0 && !folder.includePeerIds.includes(dialog.id)) {
+          return false
+        }
+      }
+    }
 
     return true
   })

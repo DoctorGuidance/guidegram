@@ -29,6 +29,9 @@ import type {
   ForumTopicItem,
   ScheduledMessageItem,
   StarGiftItem,
+  ActiveSessionItem,
+  TranslatedTextResult,
+  CloudFolderItem,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -69,4 +72,7 @@ export type {
   ForumTopicItem,
   ScheduledMessageItem,
   StarGiftItem,
+  ActiveSessionItem,
+  TranslatedTextResult,
+  CloudFolderItem,
 }

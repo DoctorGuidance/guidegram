@@ -21,6 +21,7 @@ import {
   UpdateInfo,
   SendMessageOptions,
   SendMediaOptions,
+  CloudFolderItem,
 } from './types/telegram'
 import logoImg from './assets/logo.png'
 
@@ -33,6 +34,7 @@ export const App: React.FC = () => {
   const [messagesByChat, setMessagesByChat] = useState<Record<string, MessageItem[]>>({})
 
   const [activeTab, setActiveTab] = useState<TabCategory>('all')
+  const [cloudFolders, setCloudFolders] = useState<CloudFolderItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [ghostMode, setGhostMode] = useState(false)
   const [config, setConfig] = useState<AppConfig | null>(null)
@@ -682,11 +684,13 @@ export const App: React.FC = () => {
             className="shrink-0 flex flex-col h-full bg-dark-850 overflow-hidden"
           >
             <ChatTabs
+              accountId={currentAccount?.id}
               activeTab={activeTab}
               onTabChange={setActiveTab}
               unreadCounts={unreadCounts}
               markAllReadEnabled={config?.markAllReadEnabled ?? true}
               onMarkAllAsRead={handleMarkAllAsRead}
+              onCloudFoldersLoaded={setCloudFolders}
             />
             <ChatList
               account={currentAccount}
@@ -695,6 +699,7 @@ export const App: React.FC = () => {
               activeTab={activeTab}
               searchQuery={searchQuery}
               showChatId={config?.showChatId ?? true}
+              cloudFolders={cloudFolders}
               onSearchChange={setSearchQuery}
               onSelectChat={handleSelectChat}
               onSelectPeer={handleSelectUserOrChat}

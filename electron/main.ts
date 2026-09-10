@@ -1159,6 +1159,42 @@ function setupIpcHandlers() {
     }
   })
 
+  ipcMain.handle('telegram:get-active-sessions', async (_event, { accountId }) => {
+    try {
+      return await accountManager.getActiveSessions(accountId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getActiveSessions error:`, err)
+      return []
+    }
+  })
+
+  ipcMain.handle('telegram:terminate-session', async (_event, { accountId, hash }) => {
+    try {
+      return await accountManager.terminateSession(accountId, hash)
+    } catch (err: any) {
+      Logger.warn(`[IPC] terminateSession error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:translate-message', async (_event, { accountId, chatId, messageId, toLang }) => {
+    try {
+      return await accountManager.translateMessage(accountId, chatId, messageId, toLang)
+    } catch (err: any) {
+      Logger.warn(`[IPC] translateMessage error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:get-cloud-folders', async (_event, { accountId }) => {
+    try {
+      return await accountManager.getCloudFolders(accountId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getCloudFolders error:`, err)
+      return []
+    }
+  })
+
   ipcMain.handle('system:get-portable-locator', async () => {
     return readPortableLocator()
   })

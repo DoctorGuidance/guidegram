@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:portable": "tsc && vite build && electron-builder --win dir",
-    "test": "node tests/m1_stress_verification.mjs && node tests/m2_stress_verification.mjs && node tests/m3_stress_verification.mjs && node tests/m4_premium_emoji_verification.mjs && node tests/m5_mtproto_features.mjs",
+    "test": "node tests/m1_stress_verification.mjs && node tests/m2_stress_verification.mjs && node tests/m3_stress_verification.mjs && node tests/m4_premium_emoji_verification.mjs && node tests/m5_mtproto_features.mjs && node tests/m6_mtproto_features.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

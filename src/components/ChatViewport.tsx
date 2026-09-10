@@ -60,6 +60,7 @@ import {
   Gift,
   Cake,
   Tv,
+  Languages,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload, ForumTopicItem, ScheduledMessageItem, MessageReactionItem } from '../types/telegram'
 import lottie from 'lottie-web'
@@ -515,6 +516,10 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
   // Optimistic Message Reactions (MTProto messages.sendReaction)
   const [reactionOverrides, setReactionOverrides] = useState<Record<number, MessageReactionItem[]>>({})
+
+  // MTProto Native Message Translation (messages.translateText)
+  const [translations, setTranslations] = useState<Record<number, string>>({})
+  const [translatingIds, setTranslatingIds] = useState<Record<number, boolean>>({})
 
   // Fetch Forum Topics when a forum/group chat is opened
   useEffect(() => {
@@ -1653,6 +1658,35 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     } catch (err) {
       console.warn('Failed to send reaction:', err)
       showToast('Failed to send reaction')
+    }
+  }
+
+  // MTProto Native Message Translation (messages.translateText)
+  const handleTranslateMessage = async (msgId: number) => {
+    if (translations[msgId]) {
+      setTranslations((prev) => {
+        const next = { ...prev }
+        delete next[msgId]
+        return next
+      })
+      return
+    }
+    if (!chat?.accountId || !chat?.id) return
+    setTranslatingIds((prev) => ({ ...prev, [msgId]: true }))
+    try {
+      if (window.guidegram?.translateMessage) {
+        const res = await window.guidegram.translateMessage(chat.accountId, chat.id, msgId, 'fa')
+        if (res?.text) {
+          setTranslations((prev) => ({ ...prev, [msgId]: res.text }))
+          showToast('Message translated (Persian)')
+        } else {
+          showToast('No translation returned')
+        }
+      }
+    } catch (err: any) {
+      showToast('Translation error: ' + (err?.message || 'Failed'))
+    } finally {
+      setTranslatingIds((prev) => ({ ...prev, [msgId]: false }))
     }
   }
 
@@ -3144,6 +3178,26 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         <Copy className="w-3.5 h-3.5" />
                       </button>
 
+                      {/* Translate Button (MTProto messages.translateText) */}
+                      {msg.text && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleTranslateMessage(msg.id)
+                          }}
+                          disabled={translatingIds[msg.id]}
+                          title="Translate to Persian (Alt+T)"
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            translations[msg.id]
+                              ? 'text-accent-cyan bg-accent-cyan/15'
+                              : 'text-gray-400 hover:text-accent-cyan hover:bg-dark-750'
+                          }`}
+                        >
+                          <Languages className={`w-3.5 h-3.5 ${translatingIds[msg.id] ? 'animate-spin text-accent-cyan' : ''}`} />
+                        </button>
+                      )}
+
                       {onDeleteMessage && canDeleteMessage(msg) && (
                         <button
                           type="button"
@@ -3269,6 +3323,38 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         />
                       )
                     })()}
+
+                    {/* MTProto Live Translation Banner */}
+                    {translations[msg.id] && (
+                      <div className="mt-2 pt-2 border-t border-white/10 bg-dark-900/60 rounded-xl p-3 border border-accent-cyan/25 flex flex-col gap-1.5 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-accent-cyan">
+                          <div className="flex items-center gap-1.5">
+                            <Languages className="w-3.5 h-3.5" />
+                            <span>ترجمه زنده تلگرام (Persian)</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setTranslations((prev) => {
+                                const next = { ...prev }
+                                delete next[msg.id]
+                                return next
+                              })
+                            }}
+                            className="text-gray-400 hover:text-white p-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div
+                          dir="rtl"
+                          className="text-gray-100 text-xs leading-relaxed select-text font-sans whitespace-pre-wrap"
+                        >
+                          {translations[msg.id]}
+                        </div>
+                      </div>
+                    )}
 
 
                     {/* Telegram Reactions Pills (❤️ 12, 🔥 5) */}
@@ -3501,6 +3587,26 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
+
+                      {/* Translate Button (MTProto messages.translateText) */}
+                      {msg.text && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleTranslateMessage(msg.id)
+                          }}
+                          disabled={translatingIds[msg.id]}
+                          title="Translate to Persian (Alt+T)"
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            translations[msg.id]
+                              ? 'text-accent-cyan bg-accent-cyan/15'
+                              : 'text-gray-400 hover:text-accent-cyan hover:bg-dark-750'
+                          }`}
+                        >
+                          <Languages className={`w-3.5 h-3.5 ${translatingIds[msg.id] ? 'animate-spin text-accent-cyan' : ''}`} />
+                        </button>
+                      )}
 
                       {onDeleteMessage && canDeleteMessage(msg) && (
                         <button

@@ -378,3 +378,34 @@ export interface StarGiftItem {
   transferStars?: number
 }
 
+export interface ActiveSessionItem {
+  hash: string
+  deviceModel: string
+  platform: string
+  systemVersion: string
+  appName: string
+  appVersion: string
+  dateActive: number
+  dateCreated: number
+  ip: string
+  country: string
+  region: string
+  isCurrent: boolean
+  isOfficialApp?: boolean
+  isPasswordPending?: boolean
+}
+
+export interface TranslatedTextResult {
+  text: string
+  toLang: string
+}
+
+export interface CloudFolderItem {
+  id: number
+  title: string
+  emoticon?: string
+  unreadCount?: number
+  includePeerIds: string[]
+  excludePeerIds: string[]
+  pinnedPeerIds: string[]
+}

@@ -30,6 +30,9 @@ import {
   ForumTopicItem,
   ScheduledMessageItem,
   StarGiftItem,
+  ActiveSessionItem,
+  TranslatedTextResult,
+  CloudFolderItem,
 } from './types'
 
 export interface ClientHolder {
@@ -2765,6 +2768,120 @@ export class AccountManager {
       }))
     } catch (err) {
       Logger.error(`[AccountManager] Failed to fetch Star Gifts:`, err)
+      return []
+    }
+  }
+
+  public async getActiveSessions(accountId: string): Promise<ActiveSessionItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return []
+    try {
+      const res: any = await holder.client.invoke(new Api.account.GetAuthorizations())
+      if (!res || !Array.isArray(res.authorizations)) return []
+      return res.authorizations.map((a: any) => ({
+        hash: a.hash ? a.hash.toString() : '0',
+        deviceModel: a.deviceModel || 'Unknown Device',
+        platform: a.platform || 'Unknown Platform',
+        systemVersion: a.systemVersion || '',
+        appName: a.appName || 'Telegram App',
+        appVersion: a.appVersion || '',
+        dateActive: a.dateActive ? a.dateActive * 1000 : Date.now(),
+        dateCreated: a.dateCreated ? a.dateCreated * 1000 : Date.now(),
+        ip: a.ip || '',
+        country: a.country || '',
+        region: a.region || '',
+        isCurrent: Boolean(a.current || (a.flags && (a.flags & 1))),
+        isOfficialApp: Boolean(a.officialApp || (a.flags && (a.flags & 2))),
+        isPasswordPending: Boolean(a.passwordPending || (a.flags && (a.flags & 4))),
+      }))
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to fetch active sessions:`, err)
+      return []
+    }
+  }
+
+  public async terminateSession(accountId: string, hash: string): Promise<boolean> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return false
+    try {
+      if (hash === 'all' || hash === '0') {
+        await holder.client.invoke(new Api.auth.ResetAuthorizations())
+      } else {
+        await holder.client.invoke(new Api.account.ResetAuthorization({ hash: BigInt(hash) as any }))
+      }
+      return true
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to terminate session:`, err)
+      throw err
+    }
+  }
+
+  public async translateMessage(
+    accountId: string,
+    chatId: string,
+    messageId: number,
+    toLang: string = 'fa'
+  ): Promise<TranslatedTextResult> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) throw new Error('Account client not active')
+    try {
+      const entity = await holder.client.getInputEntity(chatId)
+      const res: any = await holder.client.invoke(
+        new Api.messages.TranslateText({
+          peer: entity,
+          id: [messageId],
+          toLang,
+        })
+      )
+      const first = res?.result?.[0]
+      const text = first?.text || ''
+      return { text, toLang }
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to translate message:`, err)
+      throw err
+    }
+  }
+
+  public async getCloudFolders(accountId: string): Promise<CloudFolderItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) return []
+    try {
+      const res: any = await holder.client.invoke(new Api.messages.GetDialogFilters())
+      if (!res || !Array.isArray(res.filters)) return []
+
+      const extractPeerId = (p: any): string => {
+        if (!p) return ''
+        if (p.userId) return p.userId.toString()
+        if (p.chatId) return `-${p.chatId.toString()}`
+        if (p.channelId) return `-100${p.channelId.toString()}`
+        return ''
+      }
+
+      return res.filters
+        .filter((f: any) => f.className !== 'DialogFilterDefault' && f.id !== 0)
+        .map((f: any) => {
+          const title = typeof f.title === 'string' ? f.title : (f.title?.text || '')
+          const includePeerIds = Array.isArray(f.includePeers)
+            ? f.includePeers.map(extractPeerId).filter(Boolean)
+            : []
+          const excludePeerIds = Array.isArray(f.excludePeers)
+            ? f.excludePeers.map(extractPeerId).filter(Boolean)
+            : []
+          const pinnedPeerIds = Array.isArray(f.pinnedPeers)
+            ? f.pinnedPeers.map(extractPeerId).filter(Boolean)
+            : []
+
+          return {
+            id: f.id,
+            title: title || 'Folder',
+            emoticon: f.emoticon,
+            includePeerIds,
+            excludePeerIds,
+            pinnedPeerIds,
+          }
+        })
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to fetch cloud folders:`, err)
       return []
     }
   }

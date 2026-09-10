@@ -1,30 +1,59 @@
 import React from 'react'
-import { MessageSquare, Users, Radio, Bot, BellRing, Layers, CheckCheck } from 'lucide-react'
+import { MessageSquare, Users, Radio, Bot, BellRing, Layers, CheckCheck, Folder } from 'lucide-react'
+import { CloudFolderItem } from '../types/telegram'
 
-export type TabCategory = 'all' | 'users' | 'groups' | 'channels' | 'bots' | 'unread'
+export type TabCategory = 'all' | 'users' | 'groups' | 'channels' | 'bots' | 'unread' | string
 
 interface ChatTabsProps {
+  accountId?: string
   activeTab: TabCategory
   onTabChange: (tab: TabCategory) => void
-  unreadCounts: Record<TabCategory, number>
+  unreadCounts: Record<string, number>
   markAllReadEnabled?: boolean
   onMarkAllAsRead?: (category?: TabCategory) => Promise<boolean> | void
+  onCloudFoldersLoaded?: (folders: CloudFolderItem[]) => void
 }
 
 export const ChatTabs: React.FC<ChatTabsProps> = ({
+  accountId,
   activeTab,
   onTabChange,
   unreadCounts,
   markAllReadEnabled = true,
   onMarkAllAsRead,
+  onCloudFoldersLoaded,
 }) => {
   const [isMarking, setIsMarking] = React.useState(false)
+  const [cloudFolders, setCloudFolders] = React.useState<CloudFolderItem[]>([])
   const [tabContextMenu, setTabContextMenu] = React.useState<{
     x: number
     y: number
     tabId: TabCategory
     tabLabel: string
   } | null>(null)
+
+  // Load cloud folders whenever active account changes
+  React.useEffect(() => {
+    if (!accountId) {
+      setCloudFolders([])
+      return
+    }
+    let isMounted = true
+    if (window.guidegram?.getCloudFolders) {
+      window.guidegram
+        .getCloudFolders(accountId)
+        .then((folders) => {
+          if (isMounted && Array.isArray(folders)) {
+            setCloudFolders(folders)
+            onCloudFoldersLoaded?.(folders)
+          }
+        })
+        .catch(() => {})
+    }
+    return () => {
+      isMounted = false
+    }
+  }, [accountId])
 
   // Close context menu on global click or Escape
   React.useEffect(() => {
@@ -40,7 +69,7 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
     }
   }, [])
 
-  const tabs: { id: TabCategory; label: string; icon: React.ReactNode }[] = [
+  const standardTabs: { id: TabCategory; label: string; icon: React.ReactNode }[] = [
     { id: 'all', label: 'All', icon: <Layers className="w-3.5 h-3.5" /> },
     { id: 'users', label: 'Personal', icon: <MessageSquare className="w-3.5 h-3.5" /> },
     { id: 'groups', label: 'Groups', icon: <Users className="w-3.5 h-3.5" /> },
@@ -48,6 +77,18 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
     { id: 'bots', label: 'Bots', icon: <Bot className="w-3.5 h-3.5" /> },
     { id: 'unread', label: 'Unread', icon: <BellRing className="w-3.5 h-3.5" /> },
   ]
+
+  const folderTabs: { id: TabCategory; label: string; icon: React.ReactNode }[] = cloudFolders.map((f) => ({
+    id: `folder:${f.id}`,
+    label: f.title,
+    icon: f.emoticon ? (
+      <span className="text-xs leading-none">{f.emoticon}</span>
+    ) : (
+      <Folder className="w-3.5 h-3.5 text-accent-cyan" />
+    ),
+  }))
+
+  const allTabs = [...standardTabs, ...folderTabs]
 
   const totalUnread = unreadCounts.all || 0
   const currentTabUnread = unreadCounts[activeTab] || 0
@@ -66,7 +107,7 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
   return (
     <div className="w-full shrink-0 flex items-center gap-1 px-2.5 py-2 border-b border-white/5 overflow-x-auto scrollbar-none titlebar-no-drag relative">
       <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-none">
-        {tabs.map((tab) => {
+        {allTabs.map((tab) => {
           const isActive = activeTab === tab.id
           const count = unreadCounts[tab.id] || 0
 
@@ -112,7 +153,7 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
           disabled={isMarking}
           title={
             activeTab !== 'all'
-              ? `Mark ${tabs.find((t) => t.id === activeTab)?.label} as read`
+              ? `Mark ${allTabs.find((t) => t.id === activeTab)?.label} as read`
               : 'Mark all dialogs as read'
           }
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-accent-cyan hover:text-white bg-accent-cyan/10 hover:bg-accent-cyan/20 border border-accent-cyan/20 transition-all shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -122,7 +163,7 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
             {isMarking
               ? 'Marking...'
               : activeTab !== 'all'
-              ? `Mark ${tabs.find((t) => t.id === activeTab)?.label} Read`
+              ? `Mark ${allTabs.find((t) => t.id === activeTab)?.label} Read`
               : 'Mark All Read'}
           </span>
         </button>
