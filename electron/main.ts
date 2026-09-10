@@ -1104,6 +1104,61 @@ function setupIpcHandlers() {
     }
   })
 
+  // Forum Topics, Scheduled Messages, Reactions & Star Gifts Handlers
+  ipcMain.handle('telegram:get-forum-topics', async (_event, { accountId, chatId }) => {
+    try {
+      return await accountManager.getForumTopics(accountId, chatId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getForumTopics error:`, err)
+      return []
+    }
+  })
+
+  ipcMain.handle('telegram:get-scheduled-messages', async (_event, { accountId, chatId }) => {
+    try {
+      return await accountManager.getScheduledMessages(accountId, chatId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getScheduledMessages error:`, err)
+      return []
+    }
+  })
+
+  ipcMain.handle('telegram:send-scheduled-message-now', async (_event, { accountId, chatId, messageId }) => {
+    try {
+      return await accountManager.sendScheduledMessageNow(accountId, chatId, messageId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] sendScheduledMessageNow error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:delete-scheduled-messages', async (_event, { accountId, chatId, messageIds }) => {
+    try {
+      return await accountManager.deleteScheduledMessages(accountId, chatId, messageIds)
+    } catch (err: any) {
+      Logger.warn(`[IPC] deleteScheduledMessages error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:send-reaction', async (_event, { accountId, chatId, messageId, reactionEmoji }) => {
+    try {
+      return await accountManager.sendReaction(accountId, chatId, messageId, reactionEmoji)
+    } catch (err: any) {
+      Logger.warn(`[IPC] sendReaction error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:get-star-gifts', async (_event, { accountId, userId }) => {
+    try {
+      return await accountManager.getSavedStarGifts(accountId, userId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getStarGifts error:`, err)
+      return []
+    }
+  })
+
   ipcMain.handle('system:get-portable-locator', async () => {
     return readPortableLocator()
   })

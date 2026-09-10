@@ -27,6 +27,9 @@ import {
   SendMediaOptions,
   BotCallbackResult,
   CustomEmojiPayload,
+  ForumTopicItem,
+  ScheduledMessageItem,
+  StarGiftItem,
 } from './types'
 
 export interface ClientHolder {
@@ -2597,6 +2600,173 @@ export class AccountManager {
       return 'document'
     }
     return undefined
+  }
+
+  /**
+   * Fetch forum topics for a supergroup
+   */
+  public async getForumTopics(accountId: string, chatId: string): Promise<ForumTopicItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) throw new Error('Client not connected')
+    try {
+      const entity = await holder.client.getEntity(chatId)
+      const res: any = await holder.client.invoke(
+        new Api.channels.GetForumTopics({
+          channel: entity,
+          limit: 100,
+          offsetDate: 0,
+          offsetId: 0,
+          offsetTopic: 0,
+        })
+      )
+      if (!res || !Array.isArray(res.topics)) return []
+      return res.topics.map((t: any) => ({
+        id: t.id,
+        title: t.title || 'General Topic',
+        iconColor: t.iconColor,
+        iconEmojiId: t.iconEmojiId ? t.iconEmojiId.toString() : undefined,
+        topMessageId: t.topMessage,
+        readInboxMaxId: t.readInboxMaxId,
+        unreadCount: t.unreadCount || 0,
+        isClosed: t.closed || false,
+        isHidden: t.hidden || false,
+        isPinned: t.pinned || false,
+        date: t.date ? t.date * 1000 : Date.now(),
+      }))
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to get forum topics for ${chatId}:`, err)
+      return []
+    }
+  }
+
+  /**
+   * Fetch scheduled messages in a chat
+   */
+  public async getScheduledMessages(accountId: string, chatId: string): Promise<ScheduledMessageItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) throw new Error('Client not connected')
+    try {
+      const entity = await holder.client.getEntity(chatId)
+      const res: any = await holder.client.invoke(
+        new Api.messages.GetScheduledHistory({
+          peer: entity,
+          hash: helpers.returnBigInt(0),
+        })
+      )
+      if (!res || !Array.isArray(res.messages)) return []
+      return res.messages.map((m: any) => ({
+        id: m.id,
+        text: m.message,
+        date: m.date ? m.date * 1000 : Date.now(),
+        scheduledDate: m.date ? m.date * 1000 : Date.now(),
+        isOutgoing: m.out || false,
+        mediaType: m.media ? this.detectMediaType(m.media) : undefined,
+        replyToMsgId: m.replyTo?.replyToMsgId,
+      }))
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to get scheduled messages for ${chatId}:`, err)
+      return []
+    }
+  }
+
+  /**
+   * Send a scheduled message immediately
+   */
+  public async sendScheduledMessageNow(accountId: string, chatId: string, messageId: number): Promise<boolean> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) throw new Error('Client not connected')
+    try {
+      const entity = await holder.client.getEntity(chatId)
+      await holder.client.invoke(
+        new Api.messages.SendScheduledMessages({
+          peer: entity,
+          id: [messageId],
+        })
+      )
+      return true
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to send scheduled message ${messageId}:`, err)
+      throw err
+    }
+  }
+
+  /**
+   * Delete scheduled messages
+   */
+  public async deleteScheduledMessages(accountId: string, chatId: string, messageIds: number[]): Promise<boolean> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) throw new Error('Client not connected')
+    try {
+      const entity = await holder.client.getEntity(chatId)
+      await holder.client.invoke(
+        new Api.messages.DeleteScheduledMessages({
+          peer: entity,
+          id: messageIds,
+        })
+      )
+      return true
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to delete scheduled messages:`, err)
+      throw err
+    }
+  }
+
+  /**
+   * Send reaction to a message
+   */
+  public async sendReaction(accountId: string, chatId: string, messageId: number, reactionEmoji: string): Promise<boolean> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) throw new Error('Client not connected')
+    try {
+      const entity = await holder.client.getEntity(chatId)
+      await holder.client.invoke(
+        new Api.messages.SendReaction({
+          peer: entity,
+          msgId: messageId,
+          reaction: reactionEmoji ? [new Api.ReactionEmoji({ emoticon: reactionEmoji })] : [],
+        })
+      )
+      return true
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to send reaction:`, err)
+      throw err
+    }
+  }
+
+  /**
+   * Fetch Star Gifts received by user or peer
+   */
+  public async getSavedStarGifts(accountId: string, userId?: string): Promise<StarGiftItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder?.client) throw new Error('Client not connected')
+    try {
+      const targetPeer = userId ? await holder.client.getEntity(userId) : new Api.InputUserSelf()
+      const res: any = await holder.client.invoke(
+        new Api.payments.GetSavedStarGifts({
+          peer: targetPeer,
+          offset: '',
+          limit: 50,
+        })
+      )
+      if (!res || !Array.isArray(res.gifts)) return []
+      return res.gifts.map((g: any) => ({
+        id: g.gift?.id ? g.gift.id.toString() : (g.id ? g.id.toString() : ''),
+        stars: Number(g.gift?.stars || 0),
+        convertStars: g.gift?.convertStars ? Number(g.gift.convertStars) : undefined,
+        fromId: g.fromId ? (g.fromId.userId || g.fromId.channelId || '').toString() : undefined,
+        fromName: g.name,
+        message: g.message?.text,
+        date: g.date ? g.date * 1000 : Date.now(),
+        isAnonymous: g.anonymous || false,
+        isNameHidden: g.nameHidden || false,
+        isSaved: g.saved || false,
+        canExportAt: g.canExportAt ? g.canExportAt * 1000 : undefined,
+        transferStars: g.transferStars ? Number(g.transferStars) : undefined,
+      }))
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to fetch Star Gifts:`, err)
+      return []
+    }
   }
 
   public getAccounts(): AccountInfo[] {

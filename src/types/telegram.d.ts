@@ -26,6 +26,9 @@ import type {
   BotCallbackResult,
   GlobalSearchResult,
   PortableLocatorInfo,
+  ForumTopicItem,
+  ScheduledMessageItem,
+  StarGiftItem,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -63,4 +66,7 @@ export type {
   CustomEmojiPayload,
   GlobalSearchResult,
   PortableLocatorInfo,
+  ForumTopicItem,
+  ScheduledMessageItem,
+  StarGiftItem,
 }

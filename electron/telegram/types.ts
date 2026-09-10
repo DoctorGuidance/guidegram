@@ -88,6 +88,7 @@ export interface DialogItem {
   folderId?: number
   customEmojiStatusId?: string
   isPremium?: boolean
+  isForum?: boolean
 }
 
 export interface InlineButton {
@@ -337,3 +338,43 @@ export interface PortableLocatorInfo {
   version: string
   lastSeen: number
 }
+
+export interface ForumTopicItem {
+  id: number
+  title: string
+  iconColor?: number
+  iconEmojiId?: string
+  topMessageId: number
+  readInboxMaxId: number
+  unreadCount: number
+  isClosed?: boolean
+  isHidden?: boolean
+  isPinned?: boolean
+  date: number
+}
+
+export interface ScheduledMessageItem {
+  id: number
+  text?: string
+  date: number
+  scheduledDate: number
+  isOutgoing: boolean
+  mediaType?: string
+  replyToMsgId?: number
+}
+
+export interface StarGiftItem {
+  id: string
+  stars: number
+  convertStars?: number
+  fromId?: string
+  fromName?: string
+  message?: string
+  date: number
+  isAnonymous?: boolean
+  isNameHidden?: boolean
+  isSaved?: boolean
+  canExportAt?: number
+  transferStars?: number
+}
+

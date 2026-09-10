@@ -17,6 +17,9 @@ import {
   WebPagePreview,
   BotCallbackResult,
   CustomEmojiPayload,
+  ForumTopicItem,
+  ScheduledMessageItem,
+  StarGiftItem,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -163,6 +166,20 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:search-global', { accountId, query, filterType, limit }),
   getHistoricalMessages: (accountId: string, chatId: string, limit?: number, offsetDate?: number): Promise<MessageItem[]> =>
     ipcRenderer.invoke('telegram:get-historical-messages', { accountId, chatId, limit, offsetDate }),
+
+  // Forum Topics, Scheduled Messages, Reactions & Star Gifts
+  getForumTopics: (accountId: string, chatId: string): Promise<ForumTopicItem[]> =>
+    ipcRenderer.invoke('telegram:get-forum-topics', { accountId, chatId }),
+  getScheduledMessages: (accountId: string, chatId: string): Promise<ScheduledMessageItem[]> =>
+    ipcRenderer.invoke('telegram:get-scheduled-messages', { accountId, chatId }),
+  sendScheduledMessageNow: (accountId: string, chatId: string, messageId: number): Promise<boolean> =>
+    ipcRenderer.invoke('telegram:send-scheduled-message-now', { accountId, chatId, messageId }),
+  deleteScheduledMessages: (accountId: string, chatId: string, messageIds: number[]): Promise<boolean> =>
+    ipcRenderer.invoke('telegram:delete-scheduled-messages', { accountId, chatId, messageIds }),
+  sendReaction: (accountId: string, chatId: string, messageId: number, reactionEmoji: string): Promise<boolean> =>
+    ipcRenderer.invoke('telegram:send-reaction', { accountId, chatId, messageId, reactionEmoji }),
+  getSavedStarGifts: (accountId: string, userId?: string): Promise<StarGiftItem[]> =>
+    ipcRenderer.invoke('telegram:get-star-gifts', { accountId, userId }),
 
   // Proxy & Settings
   testProxyPing: (proxy: ProxyConfig) =>

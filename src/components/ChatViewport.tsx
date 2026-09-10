@@ -61,11 +61,13 @@ import {
   Cake,
   Tv,
 } from 'lucide-react'
-import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload } from '../types/telegram'
+import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload, ForumTopicItem, ScheduledMessageItem, MessageReactionItem } from '../types/telegram'
 import lottie from 'lottie-web'
 import { Avatar } from './Avatar'
 import { VideoPlayer } from './VideoPlayer'
 import { GroupStatsModal } from './GroupStatsModal'
+import { ForumTopicsBar } from './ForumTopicsBar'
+import { ScheduledMessagesModal } from './ScheduledMessagesModal'
 import { useI18n } from '../i18n'
 import { isRTL, formatFileSize, formatDuration, formatNumber } from '../utils/textUtils'
 
@@ -503,6 +505,35 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   useEffect(() => {
     setIsMuted(!!chat?.isMuted)
   }, [chat?.id, chat?.isMuted])
+
+  // Forum Topics (MTProto channels.getForumTopics)
+  const [forumTopics, setForumTopics] = useState<ForumTopicItem[]>([])
+  const [activeTopicId, setActiveTopicId] = useState<number | null>(null)
+
+  // Scheduled Messages Modal (MTProto messages.getScheduledHistory)
+  const [isScheduledListOpen, setIsScheduledListOpen] = useState(false)
+
+  // Optimistic Message Reactions (MTProto messages.sendReaction)
+  const [reactionOverrides, setReactionOverrides] = useState<Record<number, MessageReactionItem[]>>({})
+
+  // Fetch Forum Topics when a forum/group chat is opened
+  useEffect(() => {
+    setActiveTopicId(null)
+    setForumTopics([])
+    setReactionOverrides({})
+    if (!chat?.accountId || !chat?.id) return
+
+    if (chat.isGroup || chat.isForum) {
+      window.guidegram?.getForumTopics?.(chat.accountId, chat.id)
+        .then((topics) => {
+          if (topics && topics.length > 0) {
+            setForumTopics(topics)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [chat?.accountId, chat?.id, chat?.isGroup, chat?.isForum])
+
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false)
   const [isBotMenuOpen, setIsBotMenuOpen] = useState(false)
   const [callingBotBtnId, setCallingBotBtnId] = useState<string | null>(null)
@@ -968,8 +999,18 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       }
     }
 
+    // 3. Filter by active Forum Topic
+    if (activeTopicId !== null) {
+      result = result.filter(
+        (m) =>
+          m.id === activeTopicId ||
+          m.replyToMsgId === activeTopicId ||
+          (m.replyTo && m.replyTo.replyToMsgId === activeTopicId)
+      )
+    }
+
     return result
-  }, [messages, searchQuery, searchSenderFilter])
+  }, [messages, searchQuery, searchSenderFilter, activeTopicId])
 
   useEffect(() => {
     setSearchMatchIndex(0)
@@ -1557,7 +1598,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
     // Handle standard text message (Feature 15 & 16)
     if (!inputText.trim()) return
-    onSendMessage(inputText.trim(), replyMessage?.id, options)
+    const targetReplyId = replyMessage?.id ?? (activeTopicId !== null ? activeTopicId : undefined)
+    onSendMessage(inputText.trim(), targetReplyId, options)
     if (options?.silent) {
       showToast('Message sent without sound')
     } else if (options?.scheduleDate) {
@@ -1566,6 +1608,52 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     setInputText('')
     setReplyMessage(null)
     setDismissedComposerUrl(null)
+  }
+
+  // Message Reactions Toggle (MTProto messages.sendReaction)
+  const handleToggleReaction = async (msg: MessageItem, emoji: string) => {
+    if (!chat?.accountId || !chat?.id) return
+    const currentRx = reactionOverrides[msg.id] ?? msg.reactions ?? []
+    const existingReaction = currentRx.find((r) => r.emoji === emoji)
+    const isAlreadyChosen = !!existingReaction?.chosen
+    const emojiToSend = isAlreadyChosen ? '' : emoji
+
+    // Optimistic local state update
+    const nextRx = [...currentRx]
+    const foundIdx = nextRx.findIndex((r) => r.emoji === emoji)
+    if (isAlreadyChosen) {
+      if (foundIdx >= 0) {
+        if (nextRx[foundIdx].count <= 1) {
+          nextRx.splice(foundIdx, 1)
+        } else {
+          nextRx[foundIdx] = {
+            ...nextRx[foundIdx],
+            count: nextRx[foundIdx].count - 1,
+            chosen: false,
+          }
+        }
+      }
+    } else {
+      if (foundIdx >= 0) {
+        nextRx[foundIdx] = {
+          ...nextRx[foundIdx],
+          count: nextRx[foundIdx].count + 1,
+          chosen: true,
+        }
+      } else {
+        nextRx.push({ emoji, count: 1, chosen: true })
+      }
+    }
+    setReactionOverrides((prev) => ({ ...prev, [msg.id]: nextRx }))
+
+    try {
+      if (window.guidegram?.sendReaction) {
+        await window.guidegram.sendReaction(chat.accountId, chat.id, msg.id, emojiToSend)
+      }
+    } catch (err) {
+      console.warn('Failed to send reaction:', err)
+      showToast('Failed to send reaction')
+    }
   }
 
   // Handle Send as .txt File (Telegram Desktop v6.7.8)
@@ -2678,6 +2766,15 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             <Search className="w-4 h-4" />
           </button>
 
+          {/* Scheduled Messages Modal Trigger */}
+          <button
+            onClick={() => setIsScheduledListOpen(true)}
+            title="Scheduled Messages (پیام‌های زمان‌بندی‌شده)"
+            className="p-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-gray-400 hover:text-accent-violet border border-white/10 transition-colors cursor-pointer"
+          >
+            <Clock className="w-4 h-4 text-accent-violet" />
+          </button>
+
           {/* Group Statistics Modal Trigger */}
           {chat.isGroup && (
             <button
@@ -2855,6 +2952,15 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
         )
       })()}
 
+      {/* Forum Topics Bar for Supergroups */}
+      {forumTopics.length > 0 && (
+        <ForumTopicsBar
+          topics={forumTopics}
+          activeTopicId={activeTopicId}
+          onSelectTopic={(topicId) => setActiveTopicId(topicId)}
+        />
+      )}
+
       {/* 2. Messages Feed Outer Relative Wrapper */}
       <div className="flex-1 min-h-0 relative flex flex-col">
         <div
@@ -2939,6 +3045,35 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 }`}
               >
                 <div className="relative max-w-[80%] md:max-w-[70%] flex items-end gap-1.5">
+                  {/* Quick Reactions Bar on Message Hover (Telegram Desktop v7.0) */}
+                  {hoveredMessage?.id === msg.id && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className={`absolute -top-7.5 z-30 flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-dark-850/95 backdrop-blur-md border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100 ${
+                        msg.isOutgoing ? 'right-2' : 'left-2'
+                      }`}
+                    >
+                      {['👍', '❤️', '🔥', '🎉', '👏', '😂', '😮', '😢'].map((emoji) => {
+                        const isChosen = (reactionOverrides[msg.id] ?? msg.reactions ?? []).some(
+                          (r) => r.emoji === emoji && r.chosen
+                        )
+                        return (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => handleToggleReaction(msg, emoji)}
+                            className={`hover:scale-135 active:scale-95 transition-all text-xs sm:text-sm cursor-pointer px-1 py-0.5 rounded-full ${
+                              isChosen ? 'bg-primary-500/30 ring-1 ring-primary-400' : 'hover:bg-white/10'
+                            }`}
+                            title={`${isChosen ? 'Remove' : 'React with'} ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
                   {/* Outgoing Message Action Bar */}
                   {msg.isOutgoing && (
                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md">
@@ -3137,23 +3272,33 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
 
                     {/* Telegram Reactions Pills (❤️ 12, 🔥 5) */}
-                    {msg.reactions && msg.reactions.length > 0 && (
-                      <div className="flex items-center gap-1 flex-wrap mt-2 pt-1">
-                        {msg.reactions.map((rx, rIdx) => (
-                          <div
-                            key={rIdx}
-                            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-transform hover:scale-105 select-none ${
-                              rx.chosen
-                                ? 'bg-primary-500/25 border-primary-400 text-primary-200'
-                                : 'bg-black/30 border-white/10 text-gray-200'
-                            }`}
-                          >
-                            <span>{rx.emoji}</span>
-                            <span className="text-[10px] opacity-80">{rx.count}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {(() => {
+                      const effectiveRx = reactionOverrides[msg.id] ?? msg.reactions ?? []
+                      if (effectiveRx.length === 0) return null
+                      return (
+                        <div className="flex items-center gap-1 flex-wrap mt-2 pt-1">
+                          {effectiveRx.map((rx, rIdx) => (
+                            <button
+                              key={rIdx}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleToggleReaction(msg, rx.emoji)
+                              }}
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-all hover:scale-105 active:scale-95 select-none cursor-pointer ${
+                                rx.chosen
+                                  ? 'bg-primary-500/25 border-primary-400 text-primary-200'
+                                  : 'bg-black/30 border-white/10 text-gray-200 hover:bg-black/40'
+                              }`}
+                              title={`${rx.chosen ? 'Remove reaction' : 'React with'} ${rx.emoji}`}
+                            >
+                              <span>{rx.emoji}</span>
+                              <span className="text-[10px] opacity-80">{rx.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
 
                     {/* Message Footer: ID + Seconds Timestamp + Status */}
                     <div
@@ -4086,6 +4231,23 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                           <div className="flex flex-col">
                             <span className="font-semibold text-gray-100">Schedule Message...</span>
                             <span className="text-[10px] text-gray-400">Send at specific time</span>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSendMenuOpen(false)
+                            setIsScheduledListOpen(true)
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer group"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-primary-500/15 text-primary-400 flex items-center justify-center shrink-0 group-hover:bg-primary-500/25 transition-colors">
+                            <Calendar className="w-4 h-4" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-100">Scheduled Queue...</span>
+                            <span className="text-[10px] text-gray-400">View & manage pending</span>
                           </div>
                         </button>
                       </div>
@@ -5132,6 +5294,17 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           chat={chat}
           chatDetails={chatDetails}
           messages={messages}
+        />
+      )}
+
+      {/* 8. Scheduled Messages Modal */}
+      {isScheduledListOpen && chat && (
+        <ScheduledMessagesModal
+          isOpen={isScheduledListOpen}
+          onClose={() => setIsScheduledListOpen(false)}
+          accountId={chat.accountId}
+          chatId={chat.id}
+          chatTitle={chat.title}
         />
       )}
     </div>
