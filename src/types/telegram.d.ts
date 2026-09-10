@@ -21,10 +21,11 @@ import type {
   OpenFileDialogOptions,
   OpenFileDialogResult,
   SendMediaOptions,
-  SendMessageOptions,
   UploadProgressPayload,
   DownloadProgressPayload,
   BotCallbackResult,
+  GlobalSearchResult,
+  PortableLocatorInfo,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -60,4 +61,6 @@ export type {
   DownloadProgressPayload,
   BotCallbackResult,
   CustomEmojiPayload,
+  GlobalSearchResult,
+  PortableLocatorInfo,
 }

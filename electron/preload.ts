@@ -8,6 +8,8 @@ import {
   UpdateInfo,
   ChatDetails,
   MessageItem,
+  DialogItem,
+  PortableLocatorInfo,
   OpenFileDialogOptions,
   OpenFileDialogResult,
   SendMediaOptions,
@@ -154,6 +156,14 @@ const guidegramAPI = {
   getLinkPreview: (url: string): Promise<WebPagePreview | null> =>
     ipcRenderer.invoke('web:get-link-preview', { url }),
 
+  // Global Telegram Search & Historical Messages
+  searchPublicPeers: (accountId: string, query: string): Promise<DialogItem[]> =>
+    ipcRenderer.invoke('telegram:search-public-peers', { accountId, query }),
+  searchGlobal: (accountId: string, query: string, filterType?: string, limit?: number): Promise<MessageItem[]> =>
+    ipcRenderer.invoke('telegram:search-global', { accountId, query, filterType, limit }),
+  getHistoricalMessages: (accountId: string, chatId: string, limit?: number, offsetDate?: number): Promise<MessageItem[]> =>
+    ipcRenderer.invoke('telegram:get-historical-messages', { accountId, chatId, limit, offsetDate }),
+
   // Proxy & Settings
   testProxyPing: (proxy: ProxyConfig) =>
     ipcRenderer.invoke('telegram:test-proxy-ping', { proxy }),
@@ -161,6 +171,10 @@ const guidegramAPI = {
   updateConfig: (partial: Partial<AppConfig>) =>
     ipcRenderer.invoke('telegram:update-config', { partial }),
   getPortableDataPath: () => ipcRenderer.invoke('system:get-portable-data-path'),
+  getPortableLocator: (): Promise<PortableLocatorInfo | null> =>
+    ipcRenderer.invoke('system:get-portable-locator'),
+  syncFromPortable: (sourceDataPath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('system:sync-from-portable', { sourceDataPath }),
 
   // Software Updates
   getAppVersion: (): Promise<string> =>

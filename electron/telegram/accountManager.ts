@@ -208,6 +208,7 @@ export class AccountManager {
   private inFlightDownloads = new Map<string, Promise<string | null>>()
   private activeMediaDownloads = new Map<string, { abort: () => void; isCancelled: () => boolean }>()
   private customEmojiCache = new Map<string, string>() // documentId -> streamUrl
+  private botButtonCache = new Map<string, Buffer>() // `${chatId}_${msgId}_${row}_${col}` or `${chatId}_${msgId}_${data}` -> Buffer
 
   constructor(store: SessionStore, onEvent?: (event: string, payload: any) => void) {
     this.store = store
@@ -944,14 +945,15 @@ export class AccountManager {
       let replyMarkup: { rows: InlineButton[][] } | undefined = undefined
       if (m.replyMarkup && (m.replyMarkup as any).rows) {
         replyMarkup = {
-          rows: (m.replyMarkup as any).rows.map((row: any) =>
-            (row.buttons || []).map((btn: any) => {
+          rows: (m.replyMarkup as any).rows.map((row: any, rIdx: number) =>
+            (row.buttons || []).map((btn: any, bIdx: number) => {
               let callbackData: string | undefined = undefined
               if (btn.data) {
                 try {
-                  callbackData = Buffer.isBuffer(btn.data)
-                    ? btn.data.toString('utf-8')
-                    : String(btn.data)
+                  const rawBuf = Buffer.isBuffer(btn.data) ? btn.data : Buffer.from(btn.data)
+                  callbackData = rawBuf.toString('base64')
+                  this.botButtonCache.set(`${chatId}_${m.id}_${rIdx}_${bIdx}`, rawBuf)
+                  this.botButtonCache.set(`${chatId}_${m.id}_${callbackData}`, rawBuf)
                 } catch (_) {
                   callbackData = String(btn.data)
                 }
@@ -1329,38 +1331,62 @@ export class AccountManager {
       throw new Error(`Account ${accountId} is still connecting or disconnected.`)
     }
 
-    // Try native GramJS message.click(i, j) if coordinates provided
+    // 1. Resolve raw buffer from memory cache or decode base64
+    let rawDataBuf: Buffer | undefined = undefined
     if (typeof row === 'number' && typeof col === 'number') {
-      try {
-        const msgs = await holder.client.getMessages(chatId, { ids: [messageId] })
-        if (msgs && msgs.length > 0) {
-          const clickRes: any = await msgs[0].click({ i: row, j: col })
-          if (clickRes) {
-            return {
-              message: clickRes.message || (typeof clickRes === 'string' ? clickRes : undefined),
-              alert: clickRes.alert || false,
-              url: clickRes.url || (typeof clickRes === 'string' && clickRes.startsWith('http') ? clickRes : undefined),
-            }
-          }
+      rawDataBuf = this.botButtonCache.get(`${chatId}_${messageId}_${row}_${col}`)
+    }
+    if (!rawDataBuf && data) {
+      rawDataBuf = this.botButtonCache.get(`${chatId}_${messageId}_${data}`)
+      if (!rawDataBuf) {
+        try {
+          rawDataBuf = Buffer.from(data, 'base64')
+        } catch (_) {
+          rawDataBuf = Buffer.from(data, 'utf-8')
         }
-      } catch (clickErr) {
-        Logger.debug(`[AccountManager] msgs[0].click({ i: ${row}, j: ${col} }) fallback:`, clickErr)
       }
     }
 
-    const peer = await holder.client.getInputEntity(chatId)
-    const result: any = await holder.client.invoke(
-      new Api.messages.GetBotCallbackAnswer({
-        peer,
-        msgId: messageId,
-        data: data ? Buffer.from(data, 'utf-8') : undefined,
-      })
-    )
+    // 2. Direct fast invocation via MTProto GetBotCallbackAnswer
+    try {
+      const peer = await holder.client.getInputEntity(chatId)
+      const result: any = await holder.client.invoke(
+        new Api.messages.GetBotCallbackAnswer({
+          peer,
+          msgId: messageId,
+          data: rawDataBuf,
+        })
+      )
 
-    return {
-      message: result?.message || undefined,
-      alert: result?.alert || false,
-      url: result?.url || undefined,
+      return {
+        message: result?.message || undefined,
+        alert: result?.alert || false,
+        url: result?.url || undefined,
+      }
+    } catch (directErr: any) {
+      Logger.warn(`[AccountManager] Direct GetBotCallbackAnswer failed, attempting message.click fallback:`, directErr?.message)
+
+      // Fallback: try native message.click(i, j) if coordinates provided
+      if (typeof row === 'number' && typeof col === 'number') {
+        try {
+          const msgs = await holder.client.getMessages(chatId, { ids: messageId })
+          const targetMsg = Array.isArray(msgs) ? msgs[0] : msgs
+          if (targetMsg && typeof targetMsg.click === 'function') {
+            const clickRes: any = await targetMsg.click({ i: row, j: col })
+            if (clickRes) {
+              return {
+                message: clickRes.message || (typeof clickRes === 'string' ? clickRes : undefined),
+                alert: clickRes.alert || false,
+                url: clickRes.url || (typeof clickRes === 'string' && clickRes.startsWith('http') ? clickRes : undefined),
+              }
+            }
+          }
+        } catch (clickErr: any) {
+          Logger.warn(`[AccountManager] msgs.click fallback also failed:`, clickErr?.message)
+        }
+      }
+
+      throw directErr
     }
   }
 
@@ -1494,6 +1520,182 @@ export class AccountManager {
     }
 
     return dialogItem
+  }
+
+  /**
+   * Search global public peers (channels, groups, bots, users) across Telegram
+   */
+  public async searchPublicPeers(accountId: string, query: string): Promise<DialogItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client || !query.trim()) return []
+
+    try {
+      const res: any = await holder.client.invoke(
+        new Api.contacts.Search({
+          q: query.trim(),
+          limit: 25,
+        })
+      )
+
+      const results: DialogItem[] = []
+      const entities = [...(res.chats || []), ...(res.users || [])]
+      for (const ent of entities) {
+        const id = ent.id?.toString()
+        if (!id) continue
+        const title = ent.title || (ent.firstName ? `${ent.firstName} ${ent.lastName || ''}`.trim() : ent.username || 'Chat')
+        const isChannel = ent.className === 'Channel' && !ent.megagroup
+        const isGroup = ent.className === 'Chat' || (ent.className === 'Channel' && !!ent.megagroup)
+        const isUser = ent.className === 'User'
+        const isBot = isUser && !!ent.bot
+
+        results.push({
+          id,
+          accountId,
+          title,
+          unreadCount: 0,
+          unreadMentionsCount: 0,
+          unreadSendersCount: 0,
+          isMuted: false,
+          isUser,
+          isGroup,
+          isChannel,
+          isBot,
+          isPinned: false,
+          lastMessageDate: Date.now(),
+          avatarInitials: title.substring(0, 2).toUpperCase(),
+          avatarUrl: undefined,
+          username: ent.username || undefined,
+          isPremium: ent.premium === true,
+        })
+      }
+      return results
+    } catch (err: any) {
+      Logger.warn(`[AccountManager] searchPublicPeers error:`, err?.message)
+      return []
+    }
+  }
+
+  /**
+   * Search global messages across Telegram with query, hashtag, or filter
+   */
+  public async searchGlobal(accountId: string, query: string, filterType = 'all', limit = 40): Promise<MessageItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client || !query.trim()) return []
+
+    try {
+      let filter: any = new Api.InputMessagesFilterEmpty()
+      if (filterType === 'photos') filter = new Api.InputMessagesFilterPhotos()
+      else if (filterType === 'videos') filter = new Api.InputMessagesFilterVideo()
+      else if (filterType === 'documents') filter = new Api.InputMessagesFilterDocument()
+      else if (filterType === 'audio') filter = new Api.InputMessagesFilterMusic()
+      else if (filterType === 'voice') filter = new Api.InputMessagesFilterVoice()
+      else if (filterType === 'urls') filter = new Api.InputMessagesFilterUrl()
+
+      const res: any = await holder.client.invoke(
+        new Api.messages.SearchGlobal({
+          q: query.trim(),
+          filter,
+          minDate: 0,
+          maxDate: 0,
+          offsetRate: 0,
+          offsetPeer: new Api.InputPeerEmpty(),
+          offsetId: 0,
+          limit,
+        })
+      )
+
+      const usersMap = new Map<string, any>()
+      const chatsMap = new Map<string, any>()
+      for (const u of (res.users || [])) usersMap.set(u.id?.toString(), u)
+      for (const c of (res.chats || [])) chatsMap.set(c.id?.toString(), c)
+
+      const results: MessageItem[] = []
+      for (const m of (res.messages || [])) {
+        if (!m || m.className === 'MessageEmpty') continue
+        const peer = m.peerId
+        let cId = ''
+        let chatTitle = ''
+        if (peer) {
+          if (peer.channelId) {
+            cId = peer.channelId.toString()
+            const c = chatsMap.get(cId)
+            if (c) chatTitle = c.title || ''
+          } else if (peer.chatId) {
+            cId = peer.chatId.toString()
+            const c = chatsMap.get(cId)
+            if (c) chatTitle = c.title || ''
+          } else if (peer.userId) {
+            cId = peer.userId.toString()
+            const u = usersMap.get(cId)
+            if (u) chatTitle = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || ''
+          }
+        }
+
+        const senderId = m.fromId ? (m.fromId.userId || m.fromId.channelId || '').toString() : undefined
+        let senderName = chatTitle || 'User'
+        if (senderId && usersMap.has(senderId)) {
+          const u = usersMap.get(senderId)
+          senderName = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || senderName
+        }
+
+        const entities = this.parseEntities(m.entities)
+        results.push({
+          id: m.id,
+          chatId: cId || m.id.toString(),
+          accountId,
+          senderId,
+          senderName,
+          text: m.message || '',
+          date: m.date ? m.date * 1000 : Date.now(),
+          isOutgoing: m.out || false,
+          entities,
+          postAuthor: (m as any).postAuthor || undefined,
+        })
+      }
+      return results
+    } catch (err: any) {
+      Logger.warn(`[AccountManager] searchGlobal error:`, err?.message)
+      return []
+    }
+  }
+
+  /**
+   * Fetch historical messages for statistics analysis
+   */
+  public async getHistoricalMessages(
+    accountId: string,
+    chatId: string,
+    limit = 300,
+    offsetDate?: number
+  ): Promise<MessageItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client) return []
+
+    try {
+      const messages = await holder.client.getMessages(chatId, {
+        limit,
+        offsetDate: offsetDate ? Math.floor(offsetDate / 1000) : undefined,
+      })
+
+      return messages.map((m: any) => {
+        const entities = this.parseEntities(m.entities)
+        return {
+          id: m.id,
+          chatId,
+          accountId,
+          senderId: m.senderId?.toString(),
+          senderName: m.sender?.firstName || m.sender?.title || 'Unknown',
+          text: m.message || '',
+          date: m.date * 1000,
+          isOutgoing: m.out || false,
+          entities,
+          mediaType: this.detectMediaType(m.media),
+        }
+      })
+    } catch (err: any) {
+      Logger.warn(`[AccountManager] getHistoricalMessages error:`, err?.message)
+      return []
+    }
   }
 
   /**
@@ -2145,15 +2347,17 @@ export class AccountManager {
 
       let replyMarkup: { rows: InlineButton[][] } | undefined = undefined
       if (msg.replyMarkup && (msg.replyMarkup as any).rows) {
+        const cId = msg.chatId?.toString() || ''
         replyMarkup = {
-          rows: (msg.replyMarkup as any).rows.map((row: any) =>
-            (row.buttons || []).map((btn: any) => {
+          rows: (msg.replyMarkup as any).rows.map((row: any, rIdx: number) =>
+            (row.buttons || []).map((btn: any, bIdx: number) => {
               let callbackData: string | undefined = undefined
               if (btn.data) {
                 try {
-                  callbackData = Buffer.isBuffer(btn.data)
-                    ? btn.data.toString('utf-8')
-                    : String(btn.data)
+                  const rawBuf = Buffer.isBuffer(btn.data) ? btn.data : Buffer.from(btn.data)
+                  callbackData = rawBuf.toString('base64')
+                  this.botButtonCache.set(`${cId}_${msg.id}_${rIdx}_${bIdx}`, rawBuf)
+                  this.botButtonCache.set(`${cId}_${msg.id}_${callbackData}`, rawBuf)
                 } catch (_) {
                   callbackData = String(btn.data)
                 }
@@ -2351,7 +2555,7 @@ export class AccountManager {
     if (!Array.isArray(rawEntities) || rawEntities.length === 0) return undefined
     return rawEntities.map((ent: any) => {
       let type = 'unknown'
-      const cName = ent.className || ent.constructor?.name || ''
+      const cName = ent.className || ent.constructor?.name || ent._ || ''
       if (cName === 'MessageEntityBold') type = 'bold'
       else if (cName === 'MessageEntityItalic') type = 'italic'
       else if (cName === 'MessageEntityCode') type = 'code'
@@ -2359,9 +2563,17 @@ export class AccountManager {
       else if (cName === 'MessageEntityTextUrl') type = 'text_url'
       else if (cName === 'MessageEntityUrl') type = 'url'
       else if (cName === 'MessageEntityMention') type = 'mention'
+      else if (cName === 'MessageEntityMentionName') type = 'mention_name'
+      else if (cName === 'MessageEntityHashtag') type = 'hashtag'
+      else if (cName === 'MessageEntityCashtag') type = 'cashtag'
+      else if (cName === 'MessageEntityBotCommand') type = 'bot_command'
       else if (cName === 'MessageEntityStrike') type = 'strike'
       else if (cName === 'MessageEntityUnderline') type = 'underline'
       else if (cName === 'MessageEntitySpoiler') type = 'spoiler'
+      else if (cName === 'MessageEntityBlockquote') type = 'blockquote'
+      else if (cName === 'MessageEntityBankCard') type = 'bank_card'
+      else if (cName === 'MessageEntityPhone') type = 'phone'
+      else if (cName === 'MessageEntityEmail') type = 'email'
       else if (cName === 'MessageEntityCustomEmoji') type = 'custom_emoji'
 
       return {

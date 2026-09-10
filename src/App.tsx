@@ -527,6 +527,67 @@ export const App: React.FC = () => {
     unread: currentDialogs.filter((d) => d.unreadCount > 0).length,
   }
 
+  // Global keyboard shortcut handler (Escape key)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Priority 1: Close topmost modals / overlays
+        if (forwardMessage) {
+          setForwardMessage(null)
+          return
+        }
+        if (isCloseConfirmOpen) {
+          setIsCloseConfirmOpen(false)
+          return
+        }
+        if (isAddAccountOpen) {
+          setIsAddAccountOpen(false)
+          return
+        }
+        if (isProxyModalOpen) {
+          setIsProxyModalOpen(false)
+          return
+        }
+        if (isSettingsOpen) {
+          setIsSettingsOpen(false)
+          return
+        }
+        if (isMainMenuOpen) {
+          setIsMainMenuOpen(false)
+          return
+        }
+        // Priority 2: Clear search query if active
+        if (searchQuery.trim().length > 0) {
+          setSearchQuery('')
+          return
+        }
+        // Priority 3: Close Unified Inbox
+        if (isUnifiedInboxOpen) {
+          setIsUnifiedInboxOpen(false)
+          return
+        }
+        // Priority 4: Deselect active chat (Telegram Desktop ESC behavior)
+        if (activeChatId) {
+          setActiveChatId(null)
+          return
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    forwardMessage,
+    isCloseConfirmOpen,
+    isAddAccountOpen,
+    isProxyModalOpen,
+    isSettingsOpen,
+    isMainMenuOpen,
+    searchQuery,
+    isUnifiedInboxOpen,
+    activeChatId,
+  ])
+
   // Smooth Loading Splash
   if (!isLoaded) {
     return (
@@ -636,6 +697,7 @@ export const App: React.FC = () => {
               showChatId={config?.showChatId ?? true}
               onSearchChange={setSearchQuery}
               onSelectChat={handleSelectChat}
+              onSelectPeer={handleSelectUserOrChat}
             />
           </div>
 

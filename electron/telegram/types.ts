@@ -326,4 +326,14 @@ export interface BotCallbackResult {
   url?: string
 }
 
+export interface GlobalSearchResult {
+  chats: DialogItem[]
+  messages: MessageItem[]
+}
 
+export interface PortableLocatorInfo {
+  executablePath: string
+  dataPath: string
+  version: string
+  lastSeen: number
+}

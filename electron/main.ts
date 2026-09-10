@@ -33,6 +33,38 @@ const portableDataDir = isDev
 
 app.setPath('userData', portableDataDir)
 
+// System-wide Portable Locator path: %APPDATA%\Guidegram\portable_locator.json
+const systemAppDataDir = app.getPath('appData')
+const locatorDir = path.join(systemAppDataDir, 'Guidegram')
+const locatorFile = path.join(locatorDir, 'portable_locator.json')
+
+function registerPortableLocator(currentExe: string, currentDataDir: string) {
+  try {
+    if (!fs.existsSync(locatorDir)) {
+      fs.mkdirSync(locatorDir, { recursive: true })
+    }
+    const info = {
+      executablePath: currentExe,
+      dataPath: currentDataDir,
+      version: app.getVersion() || '1.2.4',
+      lastSeen: Date.now(),
+    }
+    fs.writeFileSync(locatorFile, JSON.stringify(info, null, 2), 'utf-8')
+  } catch (_) {}
+}
+
+function readPortableLocator(): any {
+  try {
+    if (fs.existsSync(locatorFile)) {
+      const content = fs.readFileSync(locatorFile, 'utf-8')
+      return JSON.parse(content)
+    }
+  } catch (_) {}
+  return null
+}
+
+registerPortableLocator(app.getPath('exe'), portableDataDir)
+
 // Initialize File Logging System
 Logger.initialize(portableDataDir)
 
@@ -1042,6 +1074,80 @@ function setupIpcHandlers() {
 
   ipcMain.handle('system:get-portable-data-path', async () => {
     return sessionStore.getDataDirectory()
+  })
+
+  // Global Telegram Search & Historical Messages Handlers
+  ipcMain.handle('telegram:search-public-peers', async (_event, { accountId, query }) => {
+    try {
+      return await accountManager.searchPublicPeers(accountId, query)
+    } catch (err: any) {
+      Logger.warn(`[IPC] searchPublicPeers error:`, err)
+      return []
+    }
+  })
+
+  ipcMain.handle('telegram:search-global', async (_event, { accountId, query, filterType, limit }) => {
+    try {
+      return await accountManager.searchGlobal(accountId, query, filterType, limit)
+    } catch (err: any) {
+      Logger.warn(`[IPC] searchGlobal error:`, err)
+      return []
+    }
+  })
+
+  ipcMain.handle('telegram:get-historical-messages', async (_event, { accountId, chatId, limit, offsetDate }) => {
+    try {
+      return await accountManager.getHistoricalMessages(accountId, chatId, limit, offsetDate)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getHistoricalMessages error:`, err)
+      return []
+    }
+  })
+
+  ipcMain.handle('system:get-portable-locator', async () => {
+    return readPortableLocator()
+  })
+
+  ipcMain.handle('system:sync-from-portable', async (_event, { sourceDataPath }) => {
+    try {
+      if (!sourceDataPath || !fs.existsSync(sourceDataPath)) {
+        return { success: false, error: 'Source directory does not exist' }
+      }
+      const targetDir = sessionStore.getDataDirectory()
+      if (path.resolve(sourceDataPath) === path.resolve(targetDir)) {
+        return { success: false, error: 'Source and destination are the same folder' }
+      }
+
+      // Copy config.json and sessions
+      const sourceConfig = path.join(sourceDataPath, 'config.json')
+      const targetConfig = path.join(targetDir, 'config.json')
+      if (fs.existsSync(sourceConfig)) {
+        await fs.promises.copyFile(sourceConfig, targetConfig)
+      }
+
+      const sourceSessions = path.join(sourceDataPath, 'sessions')
+      const targetSessions = path.join(targetDir, 'sessions')
+      if (fs.existsSync(sourceSessions)) {
+        if (!fs.existsSync(targetSessions)) fs.mkdirSync(targetSessions, { recursive: true })
+        const files = await fs.promises.readdir(sourceSessions)
+        for (const file of files) {
+          await fs.promises.copyFile(path.join(sourceSessions, file), path.join(targetSessions, file))
+        }
+      }
+
+      // Re-initialize session store
+      sessionStore = new SessionStore(targetDir)
+      accountManager = new AccountManager(sessionStore, (event, payload) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(event, payload)
+        }
+      })
+
+      return { success: true }
+    } catch (err: any) {
+      Logger.error(`[System] syncFromPortable error:`, err)
+      return { success: false, error: err?.message || 'Failed to sync data' }
+    }
   })
 
   // System Diagnostics & Logging Handlers

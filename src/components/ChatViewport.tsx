@@ -66,6 +66,7 @@ import lottie from 'lottie-web'
 import { Avatar } from './Avatar'
 import { VideoPlayer } from './VideoPlayer'
 import { GroupStatsModal } from './GroupStatsModal'
+import { useI18n } from '../i18n'
 import { isRTL, formatFileSize, formatDuration, formatNumber } from '../utils/textUtils'
 
 interface ChatViewportProps {
@@ -481,6 +482,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const [copiedChatId, setCopiedChatId] = useState(false)
   const [selectedMessage, setSelectedMessage] = useState<MessageItem | null>(null)
   const [hoveredMessage, setHoveredMessage] = useState<MessageItem | null>(null)
+  const { t } = useI18n()
   const [toast, setToast] = useState<string | null>(null)
 
   // Media cache in component state (cacheKey -> dataUrl or guidegram-media url)
@@ -1722,13 +1724,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
    * 3. Clickable URLs, tg:// deep links, t.me links, @mentions
    * 4. BiDi / RTL text direction
    */
-  const renderFormattedText = (text: string, entities?: MessageEntityItem[]) => {
+  const renderFormattedText = (text: string, entities?: MessageEntityItem[], msgAccountId?: string) => {
     if (!text) return null
-
-    // Extract custom_emoji entities
-    const customEmojis = (entities || []).filter(
-      (e) => (e.type === 'custom_emoji' || e.documentId) && e.documentId
-    )
+    const effectiveAccountId = msgAccountId || chat?.accountId || ''
 
     // Helper to highlight active search query in plain text
     const highlightQuery = (val: string, keyBase: string): React.ReactNode => {
@@ -1751,19 +1749,175 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       )
     }
 
-    // Helper to render inline tokens (links, mentions, code, bold, italic)
-    const renderInlineTokens = (str: string, keyPrefix: string) => {
-      // Token regex for URLs, Telegram links, mentions, markdown bold/italic/code/strike/spoiler
-      const tokenRegex =
-        /(```[\s\S]*?```|`[^`\n]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\|\|[^|]+\|\||\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s]+|tg:\/\/[^\s]+|\bt\.me\/[a-zA-Z0-9_]+(?:\/[0-9]+)?|@[a-zA-Z0-9_]{3,32})/g
+    // 1. If official Telegram entities are present, build rich element tree based on exact UTF-16 ranges
+    if (entities && entities.length > 0) {
+      const points = new Set<number>([0, text.length])
+      for (const ent of entities) {
+        if (typeof ent.offset === 'number' && typeof ent.length === 'number') {
+          points.add(Math.max(0, Math.min(text.length, ent.offset)))
+          points.add(Math.max(0, Math.min(text.length, ent.offset + ent.length)))
+        }
+      }
 
+      const sortedPoints = Array.from(points).sort((a, b) => a - b)
+      const segments: React.ReactNode[] = []
+
+      for (let i = 0; i < sortedPoints.length - 1; i++) {
+        const start = sortedPoints[i]
+        const end = sortedPoints[i + 1]
+        if (start >= end) continue
+
+        const subText = text.slice(start, end)
+        const activeEnts = entities.filter(
+          (e) => e.offset <= start && e.offset + e.length >= end
+        )
+
+        let node: React.ReactNode = highlightQuery(subText, `ent-${start}-${end}`)
+
+        const customEmojiEnt = activeEnts.find((e) => e.type === 'custom_emoji' && e.documentId)
+        if (customEmojiEnt) {
+          node = (
+            <CustomEmojiView
+              key={`ce-${start}`}
+              accountId={effectiveAccountId}
+              documentId={customEmojiEnt.documentId!}
+              fallback={subText}
+            />
+          )
+        } else {
+          for (const ent of activeEnts) {
+            const key = `ent-${ent.type}-${start}`
+            if (ent.type === 'bold') {
+              node = <strong key={key} className="font-bold text-white">{node}</strong>
+            } else if (ent.type === 'italic') {
+              node = <em key={key} className="italic text-gray-200">{node}</em>
+            } else if (ent.type === 'underline') {
+              node = <u key={key} className="underline text-gray-200">{node}</u>
+            } else if (ent.type === 'strike') {
+              node = <span key={key} className="line-through text-gray-400">{node}</span>
+            } else if (ent.type === 'spoiler') {
+              node = (
+                <span
+                  key={key}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.currentTarget.classList.toggle('blur-[4px]')
+                    e.currentTarget.classList.toggle('bg-white/15')
+                  }}
+                  title="Click to reveal spoiler"
+                  className="rounded px-1 bg-white/15 blur-[4px] hover:blur-[2px] transition-all cursor-pointer select-none active:blur-none"
+                >
+                  {node}
+                </span>
+              )
+            } else if (ent.type === 'blockquote') {
+              node = (
+                <blockquote
+                  key={key}
+                  className="my-1.5 pl-3 border-l-2 border-primary-400 bg-white/5 py-1 px-2.5 rounded-r-xl text-gray-300 italic"
+                >
+                  {node}
+                </blockquote>
+              )
+            } else if (ent.type === 'code') {
+              node = (
+                <code
+                  key={key}
+                  className="px-1.5 py-0.5 rounded-md bg-black/40 text-accent-cyan font-mono text-[11px] border border-white/10"
+                  dir="ltr"
+                >
+                  {node}
+                </code>
+              )
+            } else if (ent.type === 'pre') {
+              node = (
+                <pre
+                  key={key}
+                  className="my-1.5 p-3 rounded-xl bg-black/50 text-accent-cyan font-mono text-xs overflow-x-auto border border-white/10 select-text"
+                  dir="ltr"
+                >
+                  <code>{node}</code>
+                </pre>
+              )
+            } else if (ent.type === 'text_url' || ent.type === 'url') {
+              const url = ent.url || subText
+              node = (
+                <a
+                  key={key}
+                  href={url}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleSafeOpenUrl(url)
+                  }}
+                  className="text-accent-cyan underline hover:text-cyan-300 font-medium cursor-pointer"
+                  title={`Open ${url}`}
+                >
+                  {node}
+                </a>
+              )
+            } else if (ent.type === 'hashtag') {
+              node = (
+                <span
+                  key={key}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (onSelectUserOrChat) onSelectUserOrChat(subText)
+                  }}
+                  className="text-accent-cyan font-semibold hover:underline cursor-pointer"
+                  title={`Hashtag: ${subText}`}
+                >
+                  {node}
+                </span>
+              )
+            } else if (ent.type === 'mention') {
+              const username = subText.replace(/^@/, '')
+              node = (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (onSelectUserOrChat) onSelectUserOrChat(username)
+                    else window.guidegram?.openExternal?.(`https://t.me/${username}`)
+                  }}
+                  className="text-accent-cyan font-semibold hover:underline inline cursor-pointer"
+                  title={`Open @${username}`}
+                >
+                  {node}
+                </button>
+              )
+            }
+          }
+        }
+
+        segments.push(<React.Fragment key={`seg-${start}-${end}`}>{node}</React.Fragment>)
+      }
+
+      const textIsRtl = isRTL(text)
+      return (
+        <div
+          dir={textIsRtl ? 'rtl' : 'ltr'}
+          className={`whitespace-pre-wrap leading-relaxed break-words select-text ${
+            textIsRtl ? 'text-right font-persian' : 'text-left font-latin'
+          }`}
+        >
+          {segments}
+        </div>
+      )
+    }
+
+    // 2. Fallback: Parse markdown tokens if no entities provided
+    const tokenRegex =
+      /(```[\s\S]*?```|`[^`\n]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\|\|[^|]+\|\||\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s]+|tg:\/\/[^\s]+|\bt\.me\/[a-zA-Z0-9_]+(?:\/[0-9]+)?|@[a-zA-Z0-9_]{3,32}|#[a-zA-Z0-9_\u0600-\u06FF]+)/g
+
+    const renderInlineTokens = (str: string, keyPrefix: string) => {
       const parts = str.split(tokenRegex)
 
       return parts.map((part, index) => {
         if (!part) return null
         const partKey = `${keyPrefix}-${index}`
 
-        // Code block: ```lang\ncode\n```
         if (part.startsWith('```') && part.endsWith('```')) {
           const content = part.slice(3, -3).replace(/^\n/, '')
           return (
@@ -1777,7 +1931,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Inline code: `code`
         if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
           return (
             <code
@@ -1790,7 +1943,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Bold: **text**
         if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
           return (
             <strong key={partKey} className="font-bold text-white">
@@ -1799,7 +1951,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Italic: __text__
         if (part.startsWith('__') && part.endsWith('__') && part.length > 4) {
           return (
             <em key={partKey} className="italic text-gray-200">
@@ -1808,7 +1959,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Strikethrough: ~~text~~
         if (part.startsWith('~~') && part.endsWith('~~') && part.length > 4) {
           return (
             <span key={partKey} className="line-through text-gray-400">
@@ -1817,7 +1967,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Spoiler: ||text|| (Telegram Desktop click-to-reveal)
         if (part.startsWith('||') && part.endsWith('||') && part.length > 4) {
           return (
             <span
@@ -1835,7 +1984,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Markdown Link: [Title](url)
         const mdLinkMatch = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/)
         if (mdLinkMatch) {
           const [, title, url] = mdLinkMatch
@@ -1856,7 +2004,22 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Strip trailing punctuation from standalone URLs
+        if (part.startsWith('#')) {
+          return (
+            <span
+              key={partKey}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (onSelectUserOrChat) onSelectUserOrChat(part)
+              }}
+              className="text-accent-cyan font-semibold hover:underline cursor-pointer"
+              title={`Hashtag: ${part}`}
+            >
+              {part}
+            </span>
+          )
+        }
+
         let cleanPart = part
         let trailingPunct = ''
         if (
@@ -1871,7 +2034,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           }
         }
 
-        // Telegram Deep Link (tg://...)
         if (cleanPart.startsWith('tg://')) {
           return (
             <React.Fragment key={partKey}>
@@ -1891,7 +2053,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Telegram t.me link (e.g. t.me/username or https://t.me/username)
         const tMeMatch = cleanPart.match(/^(?:https?:\/\/)?t\.me\/([a-zA-Z0-9_]{3,32})(?:\/([0-9]+))?$/)
         if (tMeMatch) {
           const username = tMeMatch[1]
@@ -1918,7 +2079,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // Standard Web URL
         if (cleanPart.startsWith('http://') || cleanPart.startsWith('https://')) {
           return (
             <React.Fragment key={partKey}>
@@ -1939,7 +2099,6 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           )
         }
 
-        // User Mentions (@username)
         if (cleanPart.startsWith('@')) {
           const username = cleanPart.slice(1)
           return (
@@ -1966,80 +2125,21 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       })
     }
 
-    // Split paragraphs to handle BiDi and custom emojis per block
     const paragraphs = text.split('\n')
-    let currentGlobalOffset = 0
-
     return (
       <div className="space-y-1">
         {paragraphs.map((para, pIdx) => {
-          const paraStart = currentGlobalOffset
-          const paraEnd = currentGlobalOffset + para.length
-          currentGlobalOffset += para.length + 1 // +1 for '\n'
-
           if (!para) return <div key={pIdx} className="h-2" />
           const paraIsRtl = isRTL(para)
-
-          // Find custom emojis within this paragraph
-          const paraEmojis = customEmojis
-            .filter((e) => e.offset >= paraStart && e.offset < paraEnd)
-            .sort((a, b) => a.offset - b.offset)
-
-          let renderedContent: React.ReactNode
-
-          if (paraEmojis.length === 0) {
-            renderedContent = renderInlineTokens(para, `p-${pIdx}`)
-          } else {
-            const elements: React.ReactNode[] = []
-            let lastIdx = 0
-
-            paraEmojis.forEach((emojiEnt, eIdx) => {
-              const relOffset = emojiEnt.offset - paraStart
-              const relEnd = Math.min(para.length, relOffset + emojiEnt.length)
-
-              if (relOffset > lastIdx) {
-                const subStr = para.slice(lastIdx, relOffset)
-                elements.push(
-                  <React.Fragment key={`p-${pIdx}-t-${lastIdx}`}>
-                    {renderInlineTokens(subStr, `p-${pIdx}-sub-${lastIdx}`)}
-                  </React.Fragment>
-                )
-              }
-
-              const fallbackEmoji = para.slice(relOffset, relEnd)
-              elements.push(
-                <CustomEmojiView
-                  key={`p-${pIdx}-emoji-${eIdx}`}
-                  accountId={chat?.accountId || ''}
-                  documentId={emojiEnt.documentId!}
-                  fallback={fallbackEmoji}
-                />
-              )
-
-              lastIdx = relEnd
-            })
-
-            if (lastIdx < para.length) {
-              const tailStr = para.slice(lastIdx)
-              elements.push(
-                <React.Fragment key={`p-${pIdx}-tail-${lastIdx}`}>
-                  {renderInlineTokens(tailStr, `p-${pIdx}-tail`)}
-                </React.Fragment>
-              )
-            }
-
-            renderedContent = elements
-          }
-
           return (
             <div
               key={pIdx}
               dir={paraIsRtl ? 'rtl' : 'ltr'}
               className={`leading-relaxed break-words ${
-                paraIsRtl ? 'text-right font-sans' : 'text-left font-sans'
+                paraIsRtl ? 'text-right font-persian' : 'text-left font-latin'
               }`}
             >
-              {renderedContent}
+              {renderInlineTokens(para, `p-${pIdx}`)}
             </div>
           )
         })}
@@ -3020,7 +3120,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     {renderMediaCard(msg)}
 
                     {/* Formatted Message Body with Markdown & Entities & RTL */}
-                    {msg.text && renderFormattedText(msg.text, msg.entities)}
+                    {msg.text && renderFormattedText(msg.text, msg.entities, msg.accountId)}
 
                     {/* Feature 22: Rich Web Link Preview Card */}
                     {(() => {
@@ -3143,7 +3243,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                                             handleSafeOpenUrl(res.url)
                                           }
                                         } catch (cbErr: any) {
-                                          showToast('خطا در اجرای دکمه ربات: ' + (cbErr?.message || 'نامشخص'))
+                                          showToast(t('bot.callback_error', { error: cbErr?.message || 'Unknown' }))
                                         } finally {
                                           setCallingBotBtnId(null)
                                         }

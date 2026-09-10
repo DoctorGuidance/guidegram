@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   X,
   BarChart2,
@@ -17,9 +17,11 @@ import {
   TrendingUp,
   Share2,
   Check,
+  RefreshCw,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails } from '../types/telegram'
 import { Avatar } from './Avatar'
+import { useI18n } from '../i18n'
 
 interface GroupStatsModalProps {
   isOpen: boolean
@@ -58,11 +60,69 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
   chatDetails,
   messages,
 }) => {
+  const { t, language, formatNumber } = useI18n()
+  const isPersian = language === 'fa'
+
   const [timeframe, setTimeframe] = useState<Timeframe>('week')
   const [activeTab, setActiveTab] = useState<'overview' | 'senders' | 'hours' | 'words' | 'media' | 'joins'>('overview')
   const [copied, setCopied] = useState(false)
 
-  // 1. Filter messages by selected timeframe
+  // Accumulate local + server historical messages so stats can evaluate yesterday, week, month
+  const [allMessages, setAllMessages] = useState<MessageItem[]>(messages)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [hasMoreHistory, setHasMoreHistory] = useState(true)
+
+  useEffect(() => {
+    setAllMessages((prev) => {
+      const map = new Map<number, MessageItem>()
+      for (const m of messages) map.set(m.id, m)
+      for (const m of prev) map.set(m.id, m)
+      return Array.from(map.values())
+    })
+  }, [messages])
+
+  // Fetch older messages batch from MTProto server
+  const loadHistoryBatch = async (count = 150) => {
+    if (!window.guidegram?.getHistoricalMessages || !chat?.accountId) return
+    setIsLoadingHistory(true)
+    try {
+      const oldestDate = allMessages.length > 0
+        ? Math.min(...allMessages.map((m) => m.date))
+        : Date.now()
+      const offsetSeconds = Math.floor(oldestDate / 1000)
+
+      const older = await window.guidegram.getHistoricalMessages(
+        chat.accountId,
+        chat.id,
+        count,
+        offsetSeconds
+      )
+
+      if (older && older.length > 0) {
+        setAllMessages((prev) => {
+          const map = new Map<number, MessageItem>()
+          for (const m of prev) map.set(m.id, m)
+          for (const m of older) map.set(m.id, m)
+          return Array.from(map.values())
+        })
+      } else {
+        setHasMoreHistory(false)
+      }
+    } catch (err) {
+      console.error('Failed to load historical messages:', err)
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  const handleTimeframeChange = (tf: Timeframe) => {
+    setTimeframe(tf)
+    if (tf !== 'today' && allMessages.length < 150 && hasMoreHistory) {
+      loadHistoryBatch(200)
+    }
+  }
+
+  // 1. Filter messages by selected timeframe from full accumulated message pool
   const filteredMessages = useMemo(() => {
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
@@ -70,7 +130,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
     const weekStart = now.getTime() - 7 * 24 * 3600 * 1000
     const monthStart = now.getTime() - 30 * 24 * 3600 * 1000
 
-    return messages.filter((m) => {
+    return allMessages.filter((m) => {
       const msgTime = m.date
       if (timeframe === 'today') return msgTime >= todayStart
       if (timeframe === 'yesterday') return msgTime >= yesterdayStart && msgTime < todayStart
@@ -78,7 +138,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
       if (timeframe === 'month') return msgTime >= monthStart
       return true // all
     })
-  }, [messages, timeframe])
+  }, [allMessages, timeframe])
 
   // 2. Compute Top Senders & Roles
   const { topSenders, adminMessageCount, memberMessageCount, uniqueSendersCount } = useMemo(() => {
@@ -98,7 +158,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
 
     for (const m of filteredMessages) {
       const senderId = m.senderId || m.senderName || 'unknown'
-      const senderName = m.senderName || (m.isOutgoing ? 'You' : 'Member')
+      const senderName = m.senderName || (m.isOutgoing ? (isPersian ? 'شما' : 'You') : (isPersian ? 'عضو' : 'Member'))
       const isAdmin = Boolean((m.senderId && adminIds.has(m.senderId)) || !!m.senderRank || m.senderName?.includes('Admin'))
 
       if (isAdmin) adminCount++
@@ -126,7 +186,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
       memberMessageCount: memberCount,
       uniqueSendersCount: senderMap.size,
     }
-  }, [filteredMessages, chatDetails])
+  }, [filteredMessages, chatDetails, isPersian])
 
   // 3. Hourly Activity (24h)
   const { hourlyDistribution, peakHour, timeSegments } = useMemo(() => {
@@ -306,7 +366,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
         return true
       })
       .sort((a, b) => b.date - a.date)
-  }, [messages, timeframe])
+  }, [allMessages, timeframe])
 
   if (!isOpen) return null
 
@@ -346,11 +406,11 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
               <BarChart2 className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-bold text-gray-100 flex items-center gap-2 truncate font-persian">
-                <span>آمار گروه • Group Statistics</span>
+              <h2 className="text-base font-bold text-gray-100 flex items-center gap-2 truncate">
+                <span>{t('stats.title')}</span>
               </h2>
-              <p className="text-xs text-gray-400 truncate font-persian">
-                {chat.title} • {totalMessagesCount} پیام در این دوره
+              <p className="text-xs text-gray-400 truncate">
+                {chat.title} • {formatNumber(totalMessagesCount)} {t('stats.total_messages')}
               </p>
             </div>
           </div>
@@ -363,7 +423,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
               title="Copy Summary"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-accent-emerald" /> : <Share2 className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">{copied ? 'کپی شد' : 'کپی آمار'}</span>
+              <span className="hidden sm:inline">{copied ? t('stats.copied') : t('stats.copy_stats')}</span>
             </button>
 
             <button
@@ -379,66 +439,87 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
 
         {/* Timeframe Filter Tabs */}
         <div className="px-5 py-3 border-b border-white/5 bg-dark-850/70 flex items-center justify-between gap-2 overflow-x-auto text-xs">
-          <div className="text-[11px] font-semibold text-gray-400 font-persian shrink-0">
-            بازه زمانی:
+          <div className="text-[11px] font-semibold text-gray-400 shrink-0">
+            {t('stats.overview')}:
           </div>
           <div className="flex items-center gap-1 bg-dark-900/80 p-1 rounded-xl border border-white/5">
             <button
               type="button"
-              onClick={() => setTimeframe('today')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer font-persian ${
+              onClick={() => handleTimeframeChange('today')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                 timeframe === 'today'
                   ? 'bg-primary-600 text-white shadow-sm'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              امروز (Today)
+              {t('stats.today')}
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe('yesterday')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer font-persian ${
+              onClick={() => handleTimeframeChange('yesterday')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                 timeframe === 'yesterday'
                   ? 'bg-primary-600 text-white shadow-sm'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              دیروز (Yesterday)
+              {t('stats.yesterday')}
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe('week')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer font-persian ${
+              onClick={() => handleTimeframeChange('week')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                 timeframe === 'week'
                   ? 'bg-primary-600 text-white shadow-sm'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              ۱ هفته (7 Days)
+              {t('stats.week')}
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe('month')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer font-persian ${
+              onClick={() => handleTimeframeChange('month')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                 timeframe === 'month'
                   ? 'bg-primary-600 text-white shadow-sm'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              ۱ ماه (30 Days)
+              {t('stats.month')}
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe('all')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer font-persian ${
+              onClick={() => handleTimeframeChange('all')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                 timeframe === 'all'
                   ? 'bg-primary-600 text-white shadow-sm'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              کل تاریخچه (All)
+              {t('stats.all_time')}
             </button>
           </div>
+        </div>
+
+        {/* Historical messages loader indicator & action */}
+        <div className="px-5 py-2 bg-dark-900/90 border-b border-white/5 flex items-center justify-between text-xs text-gray-400">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-accent-cyan animate-pulse" />
+            <span>
+              {t('stats.messages_analyzed', { count: formatNumber(allMessages.length) })}
+            </span>
+          </div>
+          {hasMoreHistory && (
+            <button
+              type="button"
+              disabled={isLoadingHistory}
+              onClick={() => loadHistoryBatch(200)}
+              className="px-2.5 py-1 rounded-lg bg-primary-600/20 hover:bg-primary-600/30 text-primary-300 border border-primary-500/30 text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${isLoadingHistory ? 'animate-spin' : ''}`} />
+              <span>{isLoadingHistory ? t('stats.loading_history') : t('stats.load_more_history', { count: formatNumber(200) })}</span>
+            </button>
+          )}
         </div>
 
         {/* Navigation Tabs */}
@@ -446,74 +527,74 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
-            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 font-persian ${
+            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'overview'
                 ? 'border-primary-500 text-primary-400 font-bold'
                 : 'border-transparent hover:text-gray-200'
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
-            <span>خلاصه کل (Overview)</span>
+            <span>{t('stats.overview')}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('senders')}
-            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 font-persian ${
+            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'senders'
                 ? 'border-primary-500 text-primary-400 font-bold'
                 : 'border-transparent hover:text-gray-200'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>برترین ارسال‌کنندگان ({topSenders.length})</span>
+            <span>{t('stats.senders')} ({formatNumber(topSenders.length)})</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('hours')}
-            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 font-persian ${
+            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'hours'
                 ? 'border-primary-500 text-primary-400 font-bold'
                 : 'border-transparent hover:text-gray-200'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>ساعات اوج پیام‌ها</span>
+            <span>{t('stats.hours')}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('words')}
-            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 font-persian ${
+            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'words'
                 ? 'border-primary-500 text-primary-400 font-bold'
                 : 'border-transparent hover:text-gray-200'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>کلمات و ایموجی‌ها</span>
+            <span>{t('stats.words')}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('media')}
-            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 font-persian ${
+            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'media'
                 ? 'border-primary-500 text-primary-400 font-bold'
                 : 'border-transparent hover:text-gray-200'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>تفکیک رسانه‌ها</span>
+            <span>{t('stats.media')}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('joins')}
-            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 font-persian ${
+            className={`py-2.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'joins'
                 ? 'border-primary-500 text-primary-400 font-bold'
                 : 'border-transparent hover:text-gray-200'
             }`}
           >
             <Calendar className="w-3.5 h-3.5" />
-            <span>پیوستن اعضا ({memberJoins.length})</span>
+            <span>{t('stats.joins')} ({formatNumber(memberJoins.length)})</span>
           </button>
         </div>
 
@@ -525,38 +606,44 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
               {/* Stat Cards Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-3.5 rounded-2xl bg-dark-850/80 border border-white/5 flex flex-col">
-                  <span className="text-[11px] text-gray-400 font-medium font-persian">کل پیام‌ها</span>
-                  <span className="text-xl font-bold text-white mt-1">{totalMessagesCount}</span>
-                  <span className="text-[10px] text-primary-400 mt-0.5">در این بازه</span>
+                  <span className="text-[11px] text-gray-400 font-medium">{t('stats.total_messages')}</span>
+                  <span className="text-xl font-bold text-white mt-1">{formatNumber(totalMessagesCount)}</span>
+                  <span className="text-[10px] text-primary-400 mt-0.5">{isPersian ? 'در این بازه' : 'In this period'}</span>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-dark-850/80 border border-white/5 flex flex-col">
-                  <span className="text-[11px] text-gray-400 font-medium font-persian">اعضای فعال</span>
-                  <span className="text-xl font-bold text-accent-cyan mt-1">{uniqueSendersCount}</span>
-                  <span className="text-[10px] text-gray-400 mt-0.5">ارسال‌کننده پیام</span>
+                  <span className="text-[11px] text-gray-400 font-medium">{t('stats.unique_senders')}</span>
+                  <span className="text-xl font-bold text-accent-cyan mt-1">{formatNumber(uniqueSendersCount)}</span>
+                  <span className="text-[10px] text-gray-400 mt-0.5">{isPersian ? 'ارسال‌کننده پیام' : 'Active senders'}</span>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-dark-850/80 border border-white/5 flex flex-col">
-                  <span className="text-[11px] text-gray-400 font-medium font-persian">ساعت اوج چت</span>
+                  <span className="text-[11px] text-gray-400 font-medium">{isPersian ? 'ساعت اوج چت' : 'Peak Chat Hour'}</span>
                   <span className="text-xl font-bold text-amber-300 mt-1">
                     {peakHour.hour}:00
                   </span>
-                  <span className="text-[10px] text-gray-400 mt-0.5">با {peakHour.count} پیام</span>
+                  <span className="text-[10px] text-gray-400 mt-0.5">
+                    {isPersian ? `با ${formatNumber(peakHour.count)} پیام` : `With ${formatNumber(peakHour.count)} msgs`}
+                  </span>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-dark-850/80 border border-white/5 flex flex-col">
-                  <span className="text-[11px] text-gray-400 font-medium font-persian">میانگین طول پیام</span>
-                  <span className="text-xl font-bold text-accent-violet mt-1">{avgChars}</span>
-                  <span className="text-[10px] text-gray-400 mt-0.5">کاراکتر ({avgWords} کلمه)</span>
+                  <span className="text-[11px] text-gray-400 font-medium">{isPersian ? 'میانگین طول پیام' : 'Avg Message Length'}</span>
+                  <span className="text-xl font-bold text-accent-violet mt-1">{formatNumber(avgChars)}</span>
+                  <span className="text-[10px] text-gray-400 mt-0.5">
+                    {isPersian ? `کاراکتر (${formatNumber(avgWords)} کلمه)` : `chars (${formatNumber(avgWords)} words)`}
+                  </span>
                 </div>
               </div>
 
               {/* Admin vs Members breakdown */}
               <div className="p-4 rounded-2xl bg-dark-850/80 border border-white/5 space-y-2.5">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-gray-300 font-persian">سهم پیام‌های ادمین‌ها و کاربران</span>
-                  <span className="text-gray-400 font-mono">
-                    {adminMessageCount} Admin • {memberMessageCount} Member
+                  <span className="text-gray-300">
+                    {isPersian ? 'سهم پیام‌های ادمین‌ها و اعضا' : 'Admins vs Members Ratio'}
+                  </span>
+                  <span className="text-gray-400 font-mono text-[11px]">
+                    {formatNumber(adminMessageCount)} Admin • {formatNumber(memberMessageCount)} Member
                   </span>
                 </div>
                 {/* Ratio Bar */}
@@ -576,12 +663,12 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
                     title={`Members: ${memberMessageCount} msgs`}
                   />
                 </div>
-                <div className="flex justify-between text-[11px] text-gray-400 font-persian">
+                <div className="flex justify-between text-[11px] text-gray-400">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-accent-cyan" />
                     <span>
-                      پیام‌های ادمین‌ها:{' '}
-                      {totalMessagesCount > 0 ? Math.round((adminMessageCount / totalMessagesCount) * 100) : 0}%
+                      {isPersian ? 'پیام‌های ادمین‌ها: ' : 'Admin Messages: '}
+                      {formatNumber(totalMessagesCount > 0 ? Math.round((adminMessageCount / totalMessagesCount) * 100) : 0)}%
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">

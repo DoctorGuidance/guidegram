@@ -26,10 +26,14 @@ window.addEventListener('unhandledrejection', (event) => {
   } catch (_) {}
 })
 
+import { I18nProvider } from './i18n'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <I18nProvider>
+        <App />
+      </I18nProvider>
     </ErrorBoundary>
   </React.StrictMode>
 )
