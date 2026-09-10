@@ -107,16 +107,28 @@ export const ChatList: React.FC<ChatListProps> = ({
       const folderId = Number(activeTab.replace('folder:', ''))
       const folder = cloudFolders?.find((f) => f.id === folderId)
       if (folder) {
-        if (folder.excludePeerIds?.includes(dialog.id)) return false
+        const peerMatches = (list?: string[], targetId?: string): boolean => {
+          if (!list || list.length === 0 || !targetId) return false
+          if (list.includes(targetId)) return true
+          const cleanTarget = targetId.replace(/^-100/, '').replace(/^-/, '')
+          return list.some((id) => id.replace(/^-100/, '').replace(/^-/, '') === cleanTarget)
+        }
+
+        if (peerMatches(folder.excludePeerIds, dialog.id)) return false
         if (folder.excludeMuted && dialog.isMuted) return false
         if (folder.excludeRead && dialog.unreadCount === 0) return false
+        if (folder.excludeArchived && (dialog.folderId === 1 || (dialog as any).archived)) return false
+
+        const isIncluded = peerMatches(folder.includePeerIds, dialog.id) ||
+                           peerMatches(folder.pinnedPeerIds, dialog.id)
 
         const hasFlags = folder.contacts || folder.nonContacts || folder.groups || folder.broadcasts || folder.bots
-        const hasIncludePeers = folder.includePeerIds && folder.includePeerIds.length > 0
+        const hasIncludePeers = (folder.includePeerIds && folder.includePeerIds.length > 0) ||
+                                (folder.pinnedPeerIds && folder.pinnedPeerIds.length > 0)
 
         if (hasIncludePeers || hasFlags) {
           let matched = false
-          if (hasIncludePeers && folder.includePeerIds.includes(dialog.id)) {
+          if (isIncluded) {
             matched = true
           }
           if (folder.broadcasts && isBroadcast) {

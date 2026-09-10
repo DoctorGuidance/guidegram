@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Send,
   Forward,
@@ -75,6 +75,7 @@ import { ForumTopicsBar } from './ForumTopicsBar'
 import { ScheduledMessagesModal } from './ScheduledMessagesModal'
 import { StickerPickerDrawer } from './StickerPickerDrawer'
 import { useI18n } from '../i18n'
+import { copyTextToClipboard } from '../utils/clipboard'
 import { isRTL, formatFileSize, formatDuration, formatNumber } from '../utils/textUtils'
 
 interface ChatViewportProps {
@@ -542,8 +543,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
   // Sync isMuted state whenever selected chat changes or updates
   useEffect(() => {
-    setIsMuted(!!chat?.isMuted)
-  }, [chat?.id, chat?.isMuted])
+    setIsMuted(!!chat?.isMuted || !!chatDetails?.isMuted)
+  }, [chat?.id, chat?.isMuted, chatDetails?.isMuted])
 
   // Forum Topics (MTProto channels.getForumTopics)
   const [forumTopics, setForumTopics] = useState<ForumTopicItem[]>([])
@@ -554,6 +555,30 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
   // Optimistic Message Reactions (MTProto messages.sendReaction)
   const [reactionOverrides, setReactionOverrides] = useState<Record<number, MessageReactionItem[]>>({})
+  const [activeReactionPickerMsgId, setActiveReactionPickerMsgId] = useState<number | null>(null)
+  const [showAllReactions, setShowAllReactions] = useState(false)
+
+  // Allowed reactions list respecting channel/group settings
+  const allowedReactions = useMemo(() => {
+    if (chatDetails?.availableReactions !== undefined) {
+      if (chatDetails.availableReactions.length === 0) return []
+      const list = [...chatDetails.availableReactions]
+      if (chatDetails.canReactWithStars !== false && !list.includes('⭐')) {
+        list.push('⭐')
+      }
+      return list
+    }
+    return ['👍', '❤️', '🔥', '🎉', '👏', '😂', '😮', '😢', '😍', '🤔', '🤝', '⚡', '⭐']
+  }, [chatDetails?.availableReactions, chatDetails?.canReactWithStars])
+
+  useEffect(() => {
+    const handleCloseReactionMenu = () => {
+      setActiveReactionPickerMsgId(null)
+      setShowAllReactions(false)
+    }
+    window.addEventListener('click', handleCloseReactionMenu)
+    return () => window.removeEventListener('click', handleCloseReactionMenu)
+  }, [])
 
   // MTProto Native Stickers Drawer
   const [isStickerDrawerOpen, setIsStickerDrawerOpen] = useState(false)
@@ -1916,9 +1941,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     setInputText(result)
   }
 
-  const handleCopyChatId = () => {
+  const handleCopyChatId = async () => {
     if (!chat) return
-    navigator.clipboard.writeText(chat.id)
+    await copyTextToClipboard(chat.id)
     setCopiedChatId(true)
     showToast(`Copied Chat ID: ${chat.id}`)
     setTimeout(() => setCopiedChatId(false), 2000)
@@ -3232,38 +3257,71 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                 }`}
               >
                 <div className="relative max-w-[80%] md:max-w-[70%] flex items-end gap-1.5">
-                  {/* Quick Reactions Bar on Message Hover (Telegram Desktop v7.0) */}
-                  {hoveredMessage?.id === msg.id && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className={`absolute -top-7.5 z-30 flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-dark-850/95 backdrop-blur-md border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100 ${
-                        msg.isOutgoing ? 'right-2' : 'left-2'
-                      }`}
-                    >
-                      {['👍', '❤️', '🔥', '🎉', '👏', '😂', '😮', '😢'].map((emoji) => {
-                        const isChosen = (reactionOverrides[msg.id] ?? msg.reactions ?? []).some(
-                          (r) => r.emoji === emoji && r.chosen
-                        )
-                        return (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => handleToggleReaction(msg, emoji)}
-                            className={`hover:scale-135 active:scale-95 transition-all text-xs sm:text-sm cursor-pointer px-1 py-0.5 rounded-full ${
-                              isChosen ? 'bg-primary-500/30 ring-1 ring-primary-400' : 'hover:bg-white/10'
-                            }`}
-                            title={`${isChosen ? 'Remove' : 'React with'} ${emoji}`}
-                          >
-                            {emoji}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-
                   {/* Outgoing Message Action Bar */}
                   {msg.isOutgoing && (
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md">
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md relative">
+                      {/* Reaction Picker Button */}
+                      {allowedReactions.length > 0 && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setActiveReactionPickerMsgId((prev) => (prev === msg.id ? null : msg.id))
+                              setShowAllReactions(false)
+                            }}
+                            title="Add reaction"
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              activeReactionPickerMsgId === msg.id
+                                ? 'text-amber-400 bg-dark-750'
+                                : 'text-gray-400 hover:text-amber-400 hover:bg-dark-750'
+                            }`}
+                          >
+                            <Smile className="w-3.5 h-3.5" />
+                          </button>
+                          {activeReactionPickerMsgId === msg.id && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute bottom-full mb-2 right-0 z-50 p-2 rounded-2xl bg-dark-850/98 backdrop-blur-xl border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+                            >
+                              <div className="flex items-center gap-1 flex-wrap max-w-[220px]">
+                                {allowedReactions.slice(0, showAllReactions ? 36 : 6).map((emoji: string) => {
+                                  const isChosen = (reactionOverrides[msg.id] ?? msg.reactions ?? []).some(
+                                    (r) => r.emoji === emoji && r.chosen
+                                  )
+                                  return (
+                                    <button
+                                      key={emoji}
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleReaction(msg, emoji)
+                                        setActiveReactionPickerMsgId(null)
+                                      }}
+                                      className={`hover:scale-130 active:scale-95 transition-all text-sm cursor-pointer p-1 rounded-xl ${
+                                        isChosen ? 'bg-primary-500/30 ring-1 ring-primary-400' : 'hover:bg-white/10'
+                                      }`}
+                                      title={`${isChosen ? 'Remove' : 'React with'} ${emoji}`}
+                                    >
+                                      {emoji}
+                                    </button>
+                                  )
+                                })}
+                                {allowedReactions.length > 6 && !showAllReactions && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowAllReactions(true)}
+                                    className="p-1 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 text-xs font-bold transition-colors cursor-pointer"
+                                    title="Show all reactions"
+                                  >
+                                    +{allowedReactions.length - 6}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Reply Button */}
                       <button
                         type="button"
@@ -3310,20 +3368,18 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
                       <button
                         type="button"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation()
                           if (!msg.text || !msg.text.trim()) {
                             showToast(`Message #${msg.id} has no text to copy`)
                             return
                           }
-                          navigator.clipboard
-                            .writeText(msg.text)
-                            .then(() => {
-                              showToast(`Copied message #${msg.id} text`)
-                            })
-                            .catch(() => {
-                              showToast('Failed to copy text')
-                            })
+                          const ok = await copyTextToClipboard(msg.text)
+                          if (ok) {
+                            showToast(`Copied message #${msg.id} text`)
+                          } else {
+                            showToast('Failed to copy text')
+                          }
                         }}
                         title="Copy Text (Alt+C)"
                         className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-dark-750 transition-colors cursor-pointer"
@@ -3570,9 +3626,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       {showMessageId && (
                         <button
                           type="button"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation()
-                            navigator.clipboard.writeText(msg.id.toString())
+                            await copyTextToClipboard(msg.id.toString())
                             showToast(`Copied Message ID #${msg.id}`)
                           }}
                           title="Click to copy Message ID"
@@ -3655,11 +3711,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                                         }
                                       }
                                     }}
-                                    onContextMenu={(e) => {
+                                    onContextMenu={async (e) => {
                                       if (btn.data && copyCallbackData) {
                                         e.preventDefault()
                                         e.stopPropagation()
-                                        navigator.clipboard.writeText(btn.data)
+                                        await copyTextToClipboard(btn.data)
                                         showToast(`Copied callback data: "${btn.data}"`)
                                       }
                                     }}
@@ -3695,7 +3751,69 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
                   {/* Incoming Message Action Bar */}
                   {!msg.isOutgoing && (
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md">
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity self-center bg-dark-850/90 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-md relative">
+                      {/* Reaction Picker Button */}
+                      {allowedReactions.length > 0 && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setActiveReactionPickerMsgId((prev) => (prev === msg.id ? null : msg.id))
+                              setShowAllReactions(false)
+                            }}
+                            title="Add reaction"
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              activeReactionPickerMsgId === msg.id
+                                ? 'text-amber-400 bg-dark-750'
+                                : 'text-gray-400 hover:text-amber-400 hover:bg-dark-750'
+                            }`}
+                          >
+                            <Smile className="w-3.5 h-3.5" />
+                          </button>
+                          {activeReactionPickerMsgId === msg.id && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute bottom-full mb-2 left-0 z-50 p-2 rounded-2xl bg-dark-850/98 backdrop-blur-xl border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+                            >
+                              <div className="flex items-center gap-1 flex-wrap max-w-[220px]">
+                                {allowedReactions.slice(0, showAllReactions ? 36 : 6).map((emoji: string) => {
+                                  const isChosen = (reactionOverrides[msg.id] ?? msg.reactions ?? []).some(
+                                    (r) => r.emoji === emoji && r.chosen
+                                  )
+                                  return (
+                                    <button
+                                      key={emoji}
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleReaction(msg, emoji)
+                                        setActiveReactionPickerMsgId(null)
+                                      }}
+                                      className={`hover:scale-130 active:scale-95 transition-all text-sm cursor-pointer p-1 rounded-xl ${
+                                        isChosen ? 'bg-primary-500/30 ring-1 ring-primary-400' : 'hover:bg-white/10'
+                                      }`}
+                                      title={`${isChosen ? 'Remove' : 'React with'} ${emoji}`}
+                                    >
+                                      {emoji}
+                                    </button>
+                                  )
+                                })}
+                                {allowedReactions.length > 6 && !showAllReactions && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowAllReactions(true)}
+                                    className="p-1 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 text-xs font-bold transition-colors cursor-pointer"
+                                    title="Show all reactions"
+                                  >
+                                    +{allowedReactions.length - 6}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Reply Button (Feature 15) */}
                       <button
                         type="button"
@@ -3742,20 +3860,18 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
 
                       <button
                         type="button"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation()
                           if (!msg.text || !msg.text.trim()) {
                             showToast(`Message #${msg.id} has no text to copy`)
                             return
                           }
-                          navigator.clipboard
-                            .writeText(msg.text)
-                            .then(() => {
-                              showToast(`Copied message #${msg.id} text`)
-                            })
-                            .catch(() => {
-                              showToast('Failed to copy text')
-                            })
+                          const ok = await copyTextToClipboard(msg.text)
+                          if (ok) {
+                            showToast(`Copied message #${msg.id} text`)
+                          } else {
+                            showToast('Failed to copy text')
+                          }
                         }}
                         title="Copy Text (Alt+C)"
                         className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-dark-750 transition-colors cursor-pointer"
@@ -4923,8 +5039,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(`@${chatDetails.username}`)
+                      onClick={async () => {
+                        await copyTextToClipboard(`@${chatDetails.username}`)
                         showToast(`Copied @${chatDetails.username}`)
                       }}
                       className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-dark-750 transition-colors cursor-pointer"
@@ -4985,8 +5101,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       <BarChart2 className="w-4 h-4 text-accent-cyan" />
                     </div>
                     <div className="flex flex-col text-left">
-                      <span className="font-bold text-white">آمار پیشرفته گروه</span>
-                      <span className="text-[10px] text-gray-400">تحلیل اعضا، ساعات اوج، کلمات و ایموجی‌ها</span>
+                      <span className="font-bold text-white">{t('stats.title')}</span>
+                      <span className="text-[10px] text-gray-400">{t('stats.overview')}</span>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-accent-cyan" />
@@ -5173,9 +5289,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                             <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation()
-                                  navigator.clipboard.writeText(p.id)
+                                  await copyTextToClipboard(p.id)
                                   showToast(`Copied User ID: ${p.id}`)
                                 }}
                                 title={`Copy User ID (${p.id})`}
@@ -5397,8 +5513,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(userProfilePeerId)
+                    onClick={async () => {
+                      await copyTextToClipboard(userProfilePeerId)
                       showToast(`Copied User ID: ${userProfilePeerId}`)
                     }}
                     title="Copy User ID"
@@ -5419,8 +5535,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(`@${userProfileDetails.username}`)
+                      onClick={async () => {
+                        await copyTextToClipboard(`@${userProfileDetails.username}`)
                         showToast(`Copied @${userProfileDetails.username}`)
                       }}
                       title="Copy Username"
@@ -5442,8 +5558,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(userProfileDetails.phone!)
+                      onClick={async () => {
+                        await copyTextToClipboard(userProfileDetails.phone!)
                         showToast(`Copied Phone Number`)
                       }}
                       title="Copy Phone"
@@ -5569,8 +5685,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           {contextMenu.selectedText && (
             <button
               type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(contextMenu.selectedText!)
+              onClick={async () => {
+                await copyTextToClipboard(contextMenu.selectedText!)
                 setContextMenu(null)
                 showToast('Copied selected text')
               }}
@@ -5585,8 +5701,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           {contextMenu.message.text && (
             <button
               type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(contextMenu.message.text || '')
+              onClick={async () => {
+                await copyTextToClipboard(contextMenu.message.text || '')
                 setContextMenu(null)
                 showToast(`Copied message #${contextMenu.message.id} text`)
               }}
@@ -5600,11 +5716,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           {/* Copy Link to Message */}
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               const link = chat.username
                 ? `https://t.me/${chat.username}/${contextMenu.message.id}`
                 : `https://t.me/c/${chat.id.replace(/^-100/, '')}/${contextMenu.message.id}`
-              navigator.clipboard.writeText(link)
+              await copyTextToClipboard(link)
               setContextMenu(null)
               showToast('Copied link to message')
             }}
@@ -5617,8 +5733,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           {/* 64Gram Copy Message ID */}
           <button
             type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(contextMenu.message.id.toString())
+            onClick={async () => {
+              await copyTextToClipboard(contextMenu.message.id.toString())
               setContextMenu(null)
               showToast(`Copied Message ID #${contextMenu.message.id}`)
             }}
@@ -5632,8 +5748,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           {contextMenu.message.senderId && (
             <button
               type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(contextMenu.message.senderId!)
+              onClick={async () => {
+                await copyTextToClipboard(contextMenu.message.senderId!)
                 setContextMenu(null)
                 showToast(`Copied User ID: ${contextMenu.message.senderId}`)
               }}

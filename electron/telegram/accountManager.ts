@@ -935,6 +935,7 @@ export class AccountManager {
         username: entity.username || undefined,
         isPremium,
         customEmojiStatusId,
+        folderId: d.folderId !== undefined ? d.folderId : (d.dialog?.folderId !== undefined ? d.dialog.folderId : undefined),
       }
     })
 
@@ -2995,21 +2996,42 @@ export class AccountManager {
     const holder = this.clients.get(accountId)
     if (!holder?.client) return []
     try {
+      if (!holder.client.connected) {
+        try {
+          await holder.client.connect()
+        } catch (_) {}
+      }
       const res: any = await holder.client.invoke(new Api.messages.GetDialogFilters())
-      if (!res || !Array.isArray(res.filters)) return []
+      const rawFilters: any[] = Array.isArray(res)
+        ? res
+        : (Array.isArray(res?.filters) ? res.filters : [])
+
+      if (!rawFilters || rawFilters.length === 0) return []
 
       const extractPeerId = (p: any): string => {
         if (!p) return ''
-        if (p.userId) return p.userId.toString()
-        if (p.chatId) return `-${p.chatId.toString()}`
-        if (p.channelId) return `-100${p.channelId.toString()}`
+        if (p.className === 'InputPeerSelf') return accountId
+        if (p.userId !== undefined && p.userId !== null) return p.userId.toString()
+        if (p.chatId !== undefined && p.chatId !== null) {
+          const s = p.chatId.toString()
+          return s.startsWith('-') ? s : `-${s}`
+        }
+        if (p.channelId !== undefined && p.channelId !== null) {
+          const s = p.channelId.toString()
+          if (s.startsWith('-100')) return s
+          if (s.startsWith('-')) return `-100${s.slice(1)}`
+          return `-100${s}`
+        }
+        if (p.id !== undefined && p.id !== null) return p.id.toString()
         return ''
       }
 
-      return res.filters
-        .filter((f: any) => f.className !== 'DialogFilterDefault' && f.id !== 0)
+      return rawFilters
+        .filter((f: any) => f && f.className !== 'DialogFilterDefault' && f.id !== 0)
         .map((f: any) => {
-          const title = typeof f.title === 'string' ? f.title : (f.title?.text || '')
+          const title = typeof f.title === 'string'
+            ? f.title
+            : (f.title?.text || (typeof f.title?.toString === 'function' ? f.title.toString() : ''))
           const includePeerIds = Array.isArray(f.includePeers)
             ? f.includePeers.map(extractPeerId).filter(Boolean)
             : []

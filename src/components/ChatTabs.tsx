@@ -12,6 +12,7 @@ interface ChatTabsProps {
   markAllReadEnabled?: boolean
   onMarkAllAsRead?: (category?: TabCategory) => Promise<boolean> | void
   onCloudFoldersLoaded?: (folders: CloudFolderItem[]) => void
+  cloudFolders?: CloudFolderItem[]
 }
 
 export const ChatTabs: React.FC<ChatTabsProps> = ({
@@ -22,6 +23,7 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
   markAllReadEnabled = true,
   onMarkAllAsRead,
   onCloudFoldersLoaded,
+  cloudFolders: cloudFoldersProp,
 }) => {
   const [isMarking, setIsMarking] = React.useState(false)
   const [cloudFolders, setCloudFolders] = React.useState<CloudFolderItem[]>([])
@@ -39,19 +41,26 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
       return
     }
     let isMounted = true
-    if (window.guidegram?.getCloudFolders) {
-      window.guidegram
-        .getCloudFolders(accountId)
-        .then((folders) => {
-          if (isMounted && Array.isArray(folders)) {
-            setCloudFolders(folders)
-            onCloudFoldersLoaded?.(folders)
-          }
-        })
-        .catch(() => {})
+    const fetchFolders = () => {
+      if (window.guidegram?.getCloudFolders) {
+        window.guidegram
+          .getCloudFolders(accountId)
+          .then((folders) => {
+            if (isMounted && Array.isArray(folders) && folders.length > 0) {
+              setCloudFolders(folders)
+              onCloudFoldersLoaded?.(folders)
+            }
+          })
+          .catch(() => {})
+      }
     }
+
+    fetchFolders()
+    const timer = setTimeout(fetchFolders, 2500)
+
     return () => {
       isMounted = false
+      clearTimeout(timer)
     }
   }, [accountId])
 
@@ -78,7 +87,11 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
     { id: 'unread', label: 'Unread', icon: <BellRing className="w-3.5 h-3.5" /> },
   ]
 
-  const folderTabs: { id: TabCategory; label: string; icon: React.ReactNode }[] = cloudFolders.map((f) => ({
+  const effectiveFolders = (cloudFoldersProp && cloudFoldersProp.length > 0)
+    ? cloudFoldersProp
+    : cloudFolders
+
+  const folderTabs: { id: TabCategory; label: string; icon: React.ReactNode }[] = effectiveFolders.map((f) => ({
     id: `folder:${f.id}`,
     label: f.title,
     icon: f.emoticon ? (

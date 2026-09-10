@@ -54,7 +54,10 @@ const chatViewportCode = fs.readFileSync(path.join(process.cwd(), 'src/component
 assert(chatViewportCode.includes('<ForumTopicsBar'), 'ChatViewport.tsx renders ForumTopicsBar')
 assert(chatViewportCode.includes('<ScheduledMessagesModal'), 'ChatViewport.tsx renders ScheduledMessagesModal')
 assert(chatViewportCode.includes('handleToggleReaction'), 'ChatViewport.tsx implements handleToggleReaction')
-assert(chatViewportCode.includes('Quick Reactions Bar on Message Hover'), 'ChatViewport.tsx contains hover quick reaction bar')
+assert(
+  chatViewportCode.includes('Reaction Picker Button') || chatViewportCode.includes('Quick Reactions Bar'),
+  'ChatViewport.tsx contains reaction picker'
+)
 
 const mainMenuCode = fs.readFileSync(path.join(process.cwd(), 'src/components/MainMenuDrawer.tsx'), 'utf8')
 assert(mainMenuCode.includes('<StarGiftsModal'), 'MainMenuDrawer.tsx renders StarGiftsModal')

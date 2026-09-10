@@ -263,9 +263,22 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [accounts, isSettingsOpen, isProxyModalOpen, isAddAccountOpen, isUnifiedInboxOpen, isMainMenuOpen, isCloseConfirmOpen])
 
+  const loadCloudFoldersForAccount = async (accountId: string) => {
+    if (!window.guidegram?.getCloudFolders) return
+    try {
+      const folders = await window.guidegram.getCloudFolders(accountId)
+      if (Array.isArray(folders) && folders.length > 0) {
+        setCloudFolders(folders)
+      }
+    } catch (err) {
+      console.error('Failed to load cloud folders:', err)
+    }
+  }
+
   const loadDialogsForAccount = async (accountId: string) => {
     if (!window.guidegram?.getDialogs) return
     try {
+      loadCloudFoldersForAccount(accountId)
       const dialogs = await window.guidegram.getDialogs(accountId)
       setDialogsByAccount((prev) => ({ ...prev, [accountId]: dialogs }))
       if (dialogs.length > 0 && !activeChatId) {
@@ -599,6 +612,36 @@ export const App: React.FC = () => {
     unread: currentDialogs.filter((d) => d.unreadCount > 0).length,
   }
 
+  // Cloud folders unread counts
+  if (cloudFolders.length > 0) {
+    const peerMatches = (list?: string[], targetId?: string): boolean => {
+      if (!list || list.length === 0 || !targetId) return false
+      if (list.includes(targetId)) return true
+      const cleanTarget = targetId.replace(/^-100/, '').replace(/^-/, '')
+      return list.some((id) => id.replace(/^-100/, '').replace(/^-/, '') === cleanTarget)
+    }
+
+    for (const f of cloudFolders) {
+      unreadCounts[`folder:${f.id}`] = currentDialogs
+        .filter((d) => {
+          if (peerMatches(f.excludePeerIds, d.id)) return false
+          if (f.excludeMuted && d.isMuted) return false
+          if (f.excludeRead && d.unreadCount === 0) return false
+          if (f.excludeArchived && (d.folderId === 1 || (d as any).archived)) return false
+          const isIncluded = peerMatches(f.includePeerIds, d.id) || peerMatches(f.pinnedPeerIds, d.id)
+          const isBroadcast = d.isBroadcast ?? (d.isChannel && !d.isGroup)
+          const isGroup = d.isGroup || (d.isChannel && !isBroadcast)
+          if (isIncluded) return true
+          if (f.broadcasts && isBroadcast) return true
+          if (f.groups && isGroup) return true
+          if (f.bots && d.isBot) return true
+          if ((f.contacts || f.nonContacts) && d.isUser && !d.isBot) return true
+          return false
+        })
+        .reduce((acc, d) => acc + d.unreadCount, 0)
+    }
+  }
+
   // Global keyboard shortcut handler (Escape key)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -761,6 +804,7 @@ export const App: React.FC = () => {
               markAllReadEnabled={config?.markAllReadEnabled ?? true}
               onMarkAllAsRead={handleMarkAllAsRead}
               onCloudFoldersLoaded={setCloudFolders}
+              cloudFolders={cloudFolders}
             />
             <ChatList
               account={currentAccount}
