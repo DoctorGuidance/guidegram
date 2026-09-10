@@ -1,4 +1,4 @@
-# 🚀 Guidegram v1.3.0 — Stickers Drawer, Stealth Stories Engine, In-Chat Translation & Advanced Security
+# 🚀 Guidegram v1.3.1 — Automatic Media Download Controls & Channel Data Saver
 
 > **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, 64Gram & Telegraph Power Features, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
 
@@ -6,19 +6,31 @@
 
 <div align="center">
   <img src="resources/guidegram_logo_transparent.png" alt="Guidegram Logo" width="150" height="150" />
-  <h3>Guidegram v1.3.0</h3>
-  <p><strong>Animated Stickers Drawer • Stealth Stories Engine • In-Chat Translation • Channel Boosts • Active Sessions & 2FA • Cloud Folders</strong></p>
+  <h3>Guidegram v1.3.1</h3>
+  <p><strong>Automatic Media Download Controls • Channel Data Saver • Animated Stickers Drawer • Stealth Stories Engine • In-Chat Translation</strong></p>
 </div>
 
 ---
 
-### 🌟 What's New in v1.3.0
+### 🌟 What's New in v1.3.1
 
-Guidegram v1.3.0 is a major milestone release that elevates Guidegram into a powerhouse desktop Telegram client, introducing high-demand Telegram Desktop and mobile capabilities with exclusive privacy superpowers.
+#### 📥 1. Granular Automatic Media Download Controls
+- **Full Parity with Telegram Desktop**: Complete per-media and per-chat type controls for **Photos**, **Videos**, and **Files** across:
+  - **Private Chats** (Direct 1-on-1 conversations)
+  - **Groups** (Small and supergroups)
+  - **Channels** (Broadcast channels)
+- **Configurable in Settings**: New dedicated section in the `Advanced` tab of Settings with a master toggle and individual category checkboxes.
+- **Deep Merge Compatibility**: Safely initializes with existing configurations without losing user preferences.
+
+#### 🛡️ 2. Channel Data Saver (Disabled by Default)
+- **Automatic Channel Photo Download Disabled by Default**: Viewing high-traffic channels will no longer eagerly download hundreds of high-resolution images in the background, saving bandwidth and disk space.
+- **On-Demand Loading Cards**: When automatic download is disabled, photos and media display an elegant placeholder card with a **"Click to load image"** button so you only download what you choose to see.
 
 ---
 
-#### 🎭 1. Animated Stickers Drawer (TGS Lottie & WebP)
+### 🌟 Features from v1.3.0 Included
+
+#### 🎭 3. Animated Stickers Drawer (TGS Lottie & WebP)
 - **Cloud Sticker Packs Sync**: Automatically queries and organizes all sticker sets installed on your Telegram account (`messages.getAllStickers` & `messages.getStickerSet`).
 - **Interactive TGS Vector Animations**: Real-time client-side `.tgs` gzip decompression with smooth vector animations rendered via `lottie-web`.
 - **Instant Click-to-Send**: Employs native MTProto `Api.InputDocument` references for instant zero-overhead delivery without re-uploading file bytes.

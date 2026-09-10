@@ -1,6 +1,6 @@
 {
   "name": "guidegram",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Next-generation portable multi-account desktop Telegram client",
   "author": "DoctorGuidance",
   "main": "dist-electron/main.js",
@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:portable": "tsc && vite build && electron-builder --win dir",
-    "test": "node tests/m1_stress_verification.mjs && node tests/m2_stress_verification.mjs && node tests/m3_stress_verification.mjs && node tests/m4_premium_emoji_verification.mjs && node tests/m5_mtproto_features.mjs && node tests/m6_mtproto_features.mjs && node tests/m7_stickers_stories_boosts.mjs",
+    "test": "node tests/m1_stress_verification.mjs && node tests/m2_stress_verification.mjs && node tests/m3_stress_verification.mjs && node tests/m4_premium_emoji_verification.mjs && node tests/m5_mtproto_features.mjs && node tests/m6_mtproto_features.mjs && node tests/m7_stickers_stories_boosts.mjs && node tests/m8_auto_download_control.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

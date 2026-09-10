@@ -36,8 +36,9 @@ import {
   MessageSquare,
   HardDrive,
   Database,
+  Radio,
 } from 'lucide-react'
-import { AppConfig, AccountInfo, CloseAction, UpdateInfo, UpdateProgress, PortableLocatorInfo } from '../types/telegram'
+import { AppConfig, AccountInfo, CloseAction, UpdateInfo, UpdateProgress, PortableLocatorInfo, AutoDownloadConfig } from '../types/telegram'
 import { useI18n } from '../i18n'
 
 interface SettingsModalProps {
@@ -122,6 +123,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [suppressLinkWarning, setSuppressLinkWarning] = useState(false)
   const [antiFingerprinting, setAntiFingerprinting] = useState(true)
 
+  // Automatic Media Download Configuration
+  const [autoDownload, setAutoDownload] = useState<AutoDownloadConfig>({
+    enabled: true,
+    photosInPrivate: true,
+    photosInGroups: true,
+    photosInChannels: false,
+    videosInPrivate: false,
+    videosInGroups: false,
+    videosInChannels: false,
+    filesInPrivate: false,
+    filesInGroups: false,
+    filesInChannels: false,
+    maxPhotoSizeMB: 5,
+    maxVideoSizeMB: 10,
+    maxFileSizeMB: 5,
+  })
+
   // Window Close Action Preference
   const [closeAction, setCloseAction] = useState<CloseAction>('ask')
 
@@ -178,6 +196,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setSuppressLinkWarning(cfg.suppressLinkWarning ?? false)
         setAntiFingerprinting(cfg.antiFingerprinting ?? true)
         setCloseAction(cfg.closeAction || 'ask')
+        if (cfg.autoDownload) {
+          setAutoDownload(cfg.autoDownload)
+        }
       })
       window.guidegram?.getPortableDataPath?.().then(setPortablePath)
       window.guidegram?.getPortableLocator?.().then((info) => {
@@ -272,6 +293,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       disableAnimations,
       suppressLinkWarning,
       antiFingerprinting,
+      autoDownload,
     })
     setConfig(updated)
     onConfigUpdated?.(updated)
@@ -762,7 +784,149 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
-                {/* 3. Performance & Animations Toggle */}
+                {/* 3. Automatic Media Download Controls */}
+                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
+                      <Download className="w-4 h-4 text-accent-cyan" />
+                      <span>Automatic Media Download</span>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-[11px] text-gray-400">Master Switch</span>
+                      <input
+                        type="checkbox"
+                        checked={autoDownload.enabled}
+                        onChange={(e) => setAutoDownload(prev => ({ ...prev, enabled: e.target.checked }))}
+                        className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="text-[11px] text-gray-400">
+                    Control which media types automatically download into memory or cache for each chat type.
+                  </div>
+
+                  <div className={`space-y-3 transition-opacity ${autoDownload.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                    {/* Private Chats */}
+                    <div className="bg-dark-900/60 p-3 rounded-xl border border-white/5 space-y-2">
+                      <div className="text-xs font-semibold text-gray-300 flex items-center justify-between">
+                        <span>Private Chats</span>
+                        <span className="text-[10px] text-gray-500">Direct 1-on-1 conversations</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-gray-300">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.photosInPrivate}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, photosInPrivate: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Photos</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.videosInPrivate}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, videosInPrivate: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Videos</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.filesInPrivate}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, filesInPrivate: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Files</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Groups */}
+                    <div className="bg-dark-900/60 p-3 rounded-xl border border-white/5 space-y-2">
+                      <div className="text-xs font-semibold text-gray-300 flex items-center justify-between">
+                        <span>Groups</span>
+                        <span className="text-[10px] text-gray-500">Small and supergroups</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-gray-300">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.photosInGroups}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, photosInGroups: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Photos</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.videosInGroups}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, videosInGroups: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Videos</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.filesInGroups}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, filesInGroups: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Files</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Channels */}
+                    <div className="bg-dark-900/60 p-3 rounded-xl border border-white/5 space-y-2">
+                      <div className="text-xs font-semibold text-gray-300 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          Channels
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Data Saver</span>
+                        </span>
+                        <span className="text-[10px] text-gray-500">Broadcast channels</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-gray-300">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.photosInChannels}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, photosInChannels: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Photos</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.videosInChannels}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, videosInChannels: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Videos</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoDownload.filesInChannels}
+                            onChange={(e) => setAutoDownload(prev => ({ ...prev, filesInChannels: e.target.checked }))}
+                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Files</span>
+                        </label>
+                      </div>
+                      <p className="text-[10px] text-gray-400 italic">
+                        * Photos in channels are disabled by default to prevent unwanted high-volume downloading when viewing channels.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Performance & Animations Toggle */}
                 <div className="space-y-2">
                   <ToggleItem
                     title="Disable UI Animations (Low-CPU Mode)"

@@ -729,6 +729,7 @@ export const App: React.FC = () => {
             alwaysDeleteBoth={config?.alwaysDeleteBoth ?? true}
             copyCallbackData={config?.copyCallbackData ?? true}
             suppressLinkWarning={config?.suppressLinkWarning ?? false}
+            autoDownload={config?.autoDownload}
             onSendMessage={handleSendMessage}
             onSendMedia={handleSendMedia}
             onOpenDirectForward={(msg) => setForwardMessage(msg)}

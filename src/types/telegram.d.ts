@@ -38,6 +38,7 @@ import type {
   PeerStoriesPayload,
   ChannelBoostStatus,
   TwoFactorStatus,
+  AutoDownloadConfig,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -87,4 +88,5 @@ export type {
   PeerStoriesPayload,
   ChannelBoostStatus,
   TwoFactorStatus,
+  AutoDownloadConfig,
 }

@@ -47,13 +47,35 @@ export class SessionStore {
       disableAnimations: false,
       suppressLinkWarning: false,
       antiFingerprinting: true,
+      autoDownload: {
+        enabled: true,
+        photosInPrivate: true,
+        photosInGroups: true,
+        photosInChannels: false, // OFF by default in channels to avoid flooding downloads!
+        videosInPrivate: false,
+        videosInGroups: false,
+        videosInChannels: false,
+        filesInPrivate: false,
+        filesInGroups: false,
+        filesInChannels: false,
+        maxPhotoSizeMB: 5,
+        maxVideoSizeMB: 10,
+        maxFileSizeMB: 5,
+      },
     }
 
     try {
       if (fs.existsSync(this.configFilePath)) {
         const raw = fs.readFileSync(this.configFilePath, 'utf-8')
         const parsed = JSON.parse(raw)
-        return { ...defaultConfig, ...parsed }
+        return {
+          ...defaultConfig,
+          ...parsed,
+          autoDownload: {
+            ...defaultConfig.autoDownload!,
+            ...(parsed.autoDownload || {}),
+          },
+        }
       }
     } catch (err) {
       console.error('[SessionStore] Failed to parse config.json, resetting to default:', err)

@@ -249,6 +249,22 @@ export interface UpdateInfo {
   hasUpdate: boolean
 }
 
+export interface AutoDownloadConfig {
+  enabled: boolean
+  photosInPrivate: boolean
+  photosInGroups: boolean
+  photosInChannels: boolean
+  videosInPrivate: boolean
+  videosInGroups: boolean
+  videosInChannels: boolean
+  filesInPrivate: boolean
+  filesInGroups: boolean
+  filesInChannels: boolean
+  maxPhotoSizeMB: number
+  maxVideoSizeMB: number
+  maxFileSizeMB: number
+}
+
 export interface AppConfig {
   apiId: number
   apiHash: string
@@ -272,6 +288,8 @@ export interface AppConfig {
   suppressLinkWarning?: boolean
   // Device & Privacy Spoofing
   antiFingerprinting?: boolean
+  // Automatic Media & Data Download (Telegram Desktop Parity)
+  autoDownload?: AutoDownloadConfig
 }
 
 export interface OpenFileDialogOptions {

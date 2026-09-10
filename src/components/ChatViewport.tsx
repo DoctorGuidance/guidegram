@@ -63,7 +63,7 @@ import {
   Languages,
   Zap,
 } from 'lucide-react'
-import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload, ForumTopicItem, ScheduledMessageItem, MessageReactionItem, StickerItem, ChannelBoostStatus } from '../types/telegram'
+import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload, ForumTopicItem, ScheduledMessageItem, MessageReactionItem, StickerItem, ChannelBoostStatus, AutoDownloadConfig } from '../types/telegram'
 import lottie from 'lottie-web'
 import { Avatar } from './Avatar'
 import { VideoPlayer } from './VideoPlayer'
@@ -87,6 +87,7 @@ interface ChatViewportProps {
   alwaysDeleteBoth?: boolean
   copyCallbackData?: boolean
   suppressLinkWarning?: boolean
+  autoDownload?: AutoDownloadConfig
   onSendMessage: (
     text: string,
     replyToMsgId?: number,
@@ -475,6 +476,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   alwaysDeleteBoth = true,
   copyCallbackData = true,
   suppressLinkWarning = false,
+  autoDownload,
   onSendMessage,
   onSendMedia,
   onOpenDirectForward,
@@ -2349,8 +2351,27 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     }
 
     if (msg.mediaType === 'photo') {
-      // Trigger lazy download if not present
-      if (!mediaUrl) {
+      const isChannel = !!chat?.isChannel
+      const isGroup = !!chat?.isGroup
+      const isPrivate = !isChannel && !isGroup
+
+      // Check auto-download policy
+      const shouldAutoDownloadPhoto = (() => {
+        const cfg = autoDownload || {
+          enabled: true,
+          photosInPrivate: true,
+          photosInGroups: true,
+          photosInChannels: false,
+        }
+        if (cfg.enabled === false) return false
+        if (isChannel) return !!cfg.photosInChannels
+        if (isGroup) return !!cfg.photosInGroups
+        if (isPrivate) return !!cfg.photosInPrivate
+        return false
+      })()
+
+      // Trigger lazy download ONLY if permitted by auto-download policy
+      if (!mediaUrl && shouldAutoDownloadPhoto) {
         requestMediaDownload(msg, false)
       }
 
@@ -2372,14 +2393,16 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
           ) : (
             <div
               onClick={() => requestMediaDownload(msg, false)}
-              className="w-72 h-48 bg-dark-850 flex flex-col items-center justify-center text-gray-400 gap-2 cursor-pointer hover:bg-dark-800 transition-colors"
+              className="w-72 h-48 bg-dark-850 flex flex-col items-center justify-center text-gray-400 gap-2 cursor-pointer hover:bg-dark-800 transition-colors group"
             >
               {loadingMediaIds[msg.id] ? (
                 <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
               ) : (
-                <Download className="w-6 h-6 text-primary-400" />
+                <div className="w-9 h-9 rounded-xl bg-white/5 group-hover:bg-primary-500/20 text-gray-300 group-hover:text-primary-400 flex items-center justify-center transition-colors">
+                  <Download className="w-5 h-5" />
+                </div>
               )}
-              <span className="text-[11px] font-medium">
+              <span className="text-[11px] font-medium text-gray-300">
                 {loadingMediaIds[msg.id] ? 'Loading image...' : 'Click to load image'}
               </span>
             </div>

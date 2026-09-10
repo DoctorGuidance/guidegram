@@ -120,6 +120,11 @@ No installation or developer tools required. Download the portable standalone re
 - Automatic bidirectional retrieval of server-side chat folders (`messages.getDialogFilters`).
 - Dynamic category tabs in the chat header with instant peer inclusion/exclusion filtering.
 
+### 21. 📥 Granular Automatic Media Download & Channel Data Saver
+- Complete granular auto-download settings across **Private Chats**, **Groups**, and **Channels** for **Photos**, **Videos**, and **Files**.
+- **Channel Data Saver (Enabled by Default)**: Channel photos and high-volume media are configured to manual on-demand loading by default, preventing unexpected network congestion and disk saturation when viewing large channels.
+- **On-Demand Loading Cards**: Interactive download button placeholders for media items, allowing you to load only the specific photos and documents you need.
+
 ---
 
 ## 🗺️ Vision & Continuous Evolution
