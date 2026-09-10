@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:portable": "tsc && vite build && electron-builder --win dir",
-    "test": "node tests/m1_stress_verification.mjs && node tests/m2_stress_verification.mjs && node tests/m3_stress_verification.mjs && node tests/m4_premium_emoji_verification.mjs && node tests/m5_mtproto_features.mjs && node tests/m6_mtproto_features.mjs && node tests/m7_stickers_stories_boosts.mjs && node tests/m8_auto_download_control.mjs && node tests/m9_updater_and_instance_lock.mjs && node tests/m10_storage_notifications_shortcuts.mjs && node tests/m11_data_shield_and_installer_safety.mjs && node tests/m12_names_profiles_replies_verification.mjs && node tests/m13_core_chat_parity_and_reactions.mjs",
+    "test": "node tests/m1_stress_verification.mjs && node tests/m2_stress_verification.mjs && node tests/m3_stress_verification.mjs && node tests/m4_premium_emoji_verification.mjs && node tests/m5_mtproto_features.mjs && node tests/m6_mtproto_features.mjs && node tests/m7_stickers_stories_boosts.mjs && node tests/m8_auto_download_control.mjs && node tests/m9_updater_and_instance_lock.mjs && node tests/m10_storage_notifications_shortcuts.mjs && node tests/m11_data_shield_and_installer_safety.mjs && node tests/m12_names_profiles_replies_verification.mjs && node tests/m13_core_chat_parity_and_reactions.mjs && node tests/m14_official_tdesktop_parity.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

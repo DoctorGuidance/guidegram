@@ -523,3 +523,47 @@ export interface TwoFactorStatus {
   hint?: string
   emailPattern?: string
 }
+
+export interface MyFullProfile {
+  id: string
+  firstName: string
+  lastName?: string
+  username?: string
+  phone?: string
+  bio?: string
+  avatarUrl?: string
+  isPremium?: boolean
+  customEmojiStatusId?: string
+  personalChannelId?: string
+  personalChannelTitle?: string
+  personalChannelUsername?: string
+  chatAutomationBot?: string
+  stargiftsCount?: number
+  birthday?: string
+  nameColor?: number
+  blockedCount?: number
+  activeSessionsCount?: number
+  hasTwoStepAuth?: boolean
+}
+
+export interface PrivacySecuritySettings {
+  twoStepVerification: boolean
+  autoDeleteMessages: 'off' | '1d' | '1w' | '1m'
+  localPasscode: boolean
+  passkeys: boolean
+  blockedUsersCount: number
+  connectedWebsitesCount: number
+  activeSessionsCount: number
+  phoneNumberPrivacy: string
+  lastSeenPrivacy: string
+  profilePhotosPrivacy: string
+  forwardedMessagesPrivacy: string
+  callsPrivacy: string
+  voiceMessagesPrivacy: string
+  messagesPrivacy: string
+  birthdayPrivacy: string
+  giftsPrivacy: string
+  bioPrivacy: string
+  savedMusicPrivacy: string
+  invitesPrivacy: string
+}

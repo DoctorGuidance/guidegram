@@ -31,6 +31,8 @@ import {
   ChannelBoostStatus,
   TwoFactorStatus,
   CacheStats,
+  MyFullProfile,
+  PrivacySecuritySettings,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -241,6 +243,14 @@ const guidegramAPI = {
     ipcRenderer.invoke('telegram:get-channel-boosts', { accountId, channelId }),
   getTwoFactorStatus: (accountId: string): Promise<TwoFactorStatus | null> =>
     ipcRenderer.invoke('telegram:get-two-factor-status', { accountId }),
+  getMyFullProfile: (accountId: string): Promise<MyFullProfile | null> =>
+    ipcRenderer.invoke('telegram:get-my-full-profile', { accountId }),
+  getPrivacySettings: (accountId: string): Promise<PrivacySecuritySettings> =>
+    ipcRenderer.invoke('telegram:get-privacy-settings', { accountId }),
+  createGroup: (accountId: string, title: string, userIds: string[]): Promise<DialogItem | null> =>
+    ipcRenderer.invoke('telegram:create-group', { accountId, title, userIds }),
+  createChannel: (accountId: string, title: string, about: string, isMegagroup?: boolean): Promise<DialogItem | null> =>
+    ipcRenderer.invoke('telegram:create-channel', { accountId, title, about, isMegagroup }),
 
   // Proxy & Settings
   testProxyPing: (proxy: ProxyConfig) =>

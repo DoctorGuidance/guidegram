@@ -11,6 +11,9 @@ import { ProxySettingsModal } from './components/ProxySettingsModal'
 import { SettingsModal } from './components/SettingsModal'
 import { UnifiedInbox } from './components/UnifiedInbox'
 import { MainMenuDrawer } from './components/MainMenuDrawer'
+import { MyProfileDrawer } from './components/MyProfileDrawer'
+import { ContactsModal } from './components/ContactsModal'
+import { CreateChatModal } from './components/CreateChatModal'
 import { CloseConfirmModal } from './components/CloseConfirmModal'
 import { UpdateBanner } from './components/UpdateBanner'
 import {
@@ -47,6 +50,12 @@ export const App: React.FC = () => {
   const [isUnifiedInboxOpen, setIsUnifiedInboxOpen] = useState(false)
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false)
   const [isMainMenuOpen, setIsMainMenuOpen] = useState(false)
+  const [isMyProfileOpen, setIsMyProfileOpen] = useState(false)
+  const [isContactsOpen, setIsContactsOpen] = useState(false)
+  const [createChatState, setCreateChatState] = useState<{ isOpen: boolean; mode: 'group' | 'channel' }>({
+    isOpen: false,
+    mode: 'group',
+  })
   const [forwardMessage, setForwardMessage] = useState<MessageItem | null>(null)
 
   // Resizable Sidebar Splitter State (default 320px, min 240px, max 550px)
@@ -882,9 +891,64 @@ export const App: React.FC = () => {
         }}
         ghostMode={ghostMode}
         onToggleGhostMode={handleToggleGhostMode}
+        onOpenProfile={() => {
+          setIsMainMenuOpen(false)
+          setIsMyProfileOpen(true)
+        }}
+        onOpenNewGroup={() => {
+          setIsMainMenuOpen(false)
+          setCreateChatState({ isOpen: true, mode: 'group' })
+        }}
+        onOpenNewChannel={() => {
+          setIsMainMenuOpen(false)
+          setCreateChatState({ isOpen: true, mode: 'channel' })
+        }}
+        onOpenContacts={() => {
+          setIsMainMenuOpen(false)
+          setIsContactsOpen(true)
+        }}
+        onOpenCalls={() => {
+          setIsMainMenuOpen(false)
+          setIsContactsOpen(true)
+        }}
+        onOpenArchivedChats={() => {
+          setIsMainMenuOpen(false)
+          setActiveTab('archived' as any)
+        }}
       />
 
-      {/* Modals */}
+      {/* Modals & Slide-over Drawers */}
+      <MyProfileDrawer
+        isOpen={isMyProfileOpen}
+        onClose={() => setIsMyProfileOpen(false)}
+        account={currentAccount}
+      />
+
+      <ContactsModal
+        isOpen={isContactsOpen}
+        accountId={currentAccount?.id}
+        onClose={() => setIsContactsOpen(false)}
+        onSelectContact={(contactId) => {
+          setIsContactsOpen(false)
+          handleSelectUserOrChat(contactId)
+        }}
+      />
+
+      <CreateChatModal
+        isOpen={createChatState.isOpen}
+        mode={createChatState.mode}
+        accountId={currentAccount?.id}
+        onClose={() => setCreateChatState((prev) => ({ ...prev, isOpen: false }))}
+        onChatCreated={(chat) => {
+          if (currentAccount) {
+            loadDialogsForAccount(currentAccount.id)
+          }
+          if (chat?.id) {
+            handleSelectChat(chat.id)
+          }
+        }}
+      />
+
       <AddAccountModal
         isOpen={isAddAccountOpen}
         onClose={() => setIsAddAccountOpen(false)}

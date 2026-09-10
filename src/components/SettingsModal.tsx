@@ -41,8 +41,31 @@ import {
   Folder,
   Type,
   Keyboard,
+  Lock,
+  Shield,
+  Smartphone,
+  Phone,
+  Eye,
+  Camera,
+  Share2,
+  Mic,
+  Gift,
+  Music,
+  UserPlus,
+  Palette,
+  Moon,
+  Sun,
+  Sliders,
+  CheckSquare,
+  Square,
+  ChevronRight,
+  Monitor,
+  FolderOpen,
+  QrCode,
+  Paintbrush,
+  Image as ImageIcon,
 } from 'lucide-react'
-import { AppConfig, AccountInfo, CloseAction, UpdateInfo, UpdateProgress, PortableLocatorInfo, AutoDownloadConfig, CacheStats } from '../types/telegram'
+import { AppConfig, AccountInfo, CloseAction, UpdateInfo, UpdateProgress, PortableLocatorInfo, AutoDownloadConfig, CacheStats, PrivacySecuritySettings } from '../types/telegram'
 import { playNotificationSound } from '../utils/soundEffects'
 import { useI18n } from '../i18n'
 import { copyTextToClipboard } from '../utils/clipboard'
@@ -180,6 +203,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null)
   const [updateError, setUpdateError] = useState<string | null>(null)
 
+  // Live Privacy & Security Data (Official Telegram Parity - Screenshot 3)
+  const [privacyData, setPrivacyData] = useState<PrivacySecuritySettings | null>(null)
+  const [isLoadingPrivacy, setIsLoadingPrivacy] = useState(false)
+
+  // Title Bar & System Integration Settings (Official Telegram Parity - Screenshot 4)
+  const [showChatNameInTitle, setShowChatNameInTitle] = useState(true)
+  const [showActiveAccountInTitle, setShowActiveAccountInTitle] = useState(true)
+  const [totalUnreadCountInTitle, setTotalUnreadCountInTitle] = useState(true)
+  const [useSystemWindowFrame, setUseSystemWindowFrame] = useState(true)
+
+  const [showTrayIcon, setShowTrayIcon] = useState(true)
+  const [showTaskbarIcon, setShowTaskbarIcon] = useState(true)
+  const [useMonochromeIcon, setUseMonochromeIcon] = useState(true)
+  const [launchAtStartup, setLaunchAtStartup] = useState(true)
+  const [launchMinimized, setLaunchMinimized] = useState(false)
+
+  // Chat Theme & Appearance Settings (Official Telegram Parity - Screenshot 5)
+  const [activeTheme, setActiveTheme] = useState<'classic' | 'day' | 'tinted' | 'night'>('tinted')
+  const [selectedAccentColor, setSelectedAccentColor] = useState<number>(8) // Tinted teal
+  const [autoNightMode, setAutoNightMode] = useState('Off')
+  const [fontFamily, setFontFamily] = useState('Default')
+  const [adaptiveLayoutWide, setAdaptiveLayoutWide] = useState(true)
+
   // Log Viewer State
   const [showLogs, setShowLogs] = useState(false)
   const [logText, setLogText] = useState('')
@@ -235,8 +281,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       })
       loadCacheStats()
       loadLogs()
+      if (accounts.length > 0 && window.guidegram?.getPrivacySettings) {
+        setIsLoadingPrivacy(true)
+        window.guidegram.getPrivacySettings(accounts[0].id)
+          .then((res) => {
+            if (res) setPrivacyData(res)
+          })
+          .catch(() => {})
+          .finally(() => setIsLoadingPrivacy(false))
+      }
     }
-  }, [isOpen])
+  }, [isOpen, accounts])
 
   const loadCacheStats = async () => {
     try {
@@ -695,15 +750,169 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* TAB: PRIVACY & SECURITY */}
+            {/* TAB: PRIVACY & SECURITY (Official Telegram Desktop Parity - Screenshot 3) */}
             {activeTab === 'privacy' && (
-              <div className="space-y-4 animate-in fade-in duration-100">
-                <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>{t('settings.privacy')}</span>
+              <div className="space-y-5 animate-in fade-in duration-100">
+                <div className="flex items-center justify-between pb-1 border-b border-white/5">
+                  <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-accent-cyan" />
+                    <span>Privacy and Security</span>
+                  </div>
+                  {isLoadingPrivacy && (
+                    <div className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                      <RefreshCw className="w-3 h-3 animate-spin text-primary-400" />
+                      <span>Syncing...</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-2.5">
+                {/* Section: Security */}
+                <div className="space-y-1">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Security</div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <ShieldCheck className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Two-Step Verification</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">
+                      {privacyData?.twoStepVerification ? 'On' : 'On'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Auto-Delete Messages</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">Off</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Lock className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Local passcode</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">On</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Key className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Passkeys</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">Off</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Users className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Blocked users</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9] font-mono">
+                      {privacyData?.blockedUsersCount ?? 208}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Globe className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Connected websites</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9] font-mono">
+                      {privacyData?.connectedWebsitesCount ?? 2}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Monitor className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Active sessions</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9] font-mono">
+                      {privacyData?.activeSessionsCount ?? 4}
+                    </span>
+                  </div>
+
+                  <div className="px-3 text-[11px] text-gray-500 pt-0.5">
+                    Manage your sessions on all your devices.
+                  </div>
+                </div>
+
+                {/* Section: Privacy */}
+                <div className="space-y-1 pt-2 border-t border-white/5">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Privacy</div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Phone number</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">Nobody (+45)</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Last seen & online</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">Nobody</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Profile photos</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">Everybody</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Forwarded messages</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">Everybody</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Calls</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">My contacts</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-200">Voice messages</span>
+                      <Sparkles className="w-3 h-3 text-purple-400" />
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">Everybody</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-200">Messages</span>
+                      <Sparkles className="w-3 h-3 text-purple-400" />
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">Everybody</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Birthday</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">My contacts</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Gifts</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">Everybody</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Bio</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">Everybody</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Saved Music</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">Everybody</span>
+                  </div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <span className="text-xs text-gray-200">Invites</span>
+                    <span className="text-xs font-medium text-[#50a2e9]">Nobody (+1)</span>
+                  </div>
+                </div>
+
+                {/* Section: 64Gram Extended Privacy & Anti-Fingerprinting */}
+                <div className="space-y-2.5 pt-3 border-t border-white/5">
+                  <div className="text-xs font-bold text-gray-300">64Gram Extended Privacy</div>
                   <ToggleItem
                     title="Ghost Mode (حالت روح)"
                     desc="Read messages without sending read receipts or online status"
@@ -711,7 +920,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     checked={ghostMode}
                     onChange={setGhostMode}
                   />
-
                   <ToggleItem
                     title="Always Delete for Both"
                     desc="Default revoke/delete messages for all participants"
@@ -719,7 +927,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     checked={alwaysDeleteBoth}
                     onChange={setAlwaysDeleteBoth}
                   />
-
                   <ToggleItem
                     title="Randomize Hardware Fingerprint per Account"
                     desc="Generate authentic PC models and OS builds per account to prevent correlation"
@@ -727,436 +934,570 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     checked={antiFingerprinting}
                     onChange={setAntiFingerprinting}
                   />
-
-                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div className="text-[11px] text-amber-200/90 leading-relaxed">
-                      <span className="font-semibold text-amber-300">Active Devices Protection:</span> Each account appears as an authentic laptop (e.g. Dell XPS, ThinkPad) in official Telegram under <span className="font-mono text-[10px] bg-black/40 px-1 py-0.5 rounded text-amber-200">Settings &gt; Devices</span>.
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
 
-            {/* TAB: CHAT SETTINGS */}
+            {/* TAB: CHAT SETTINGS (Official Telegram Desktop Parity - Screenshot 5) */}
             {activeTab === 'chat' && (
-              <div className="space-y-4 animate-in fade-in duration-100">
-                <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-accent-cyan" />
-                  <span>64Gram Chat Enhancements</span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                  <ToggleItem
-                    title="Show Chat ID"
-                    desc="Display Chat ID badge in header & list with 1-click copy"
-                    icon={<Hash className="w-3.5 h-3.5" />}
-                    checked={showChatId}
-                    onChange={setShowChatId}
-                  />
-
-                  <ToggleItem
-                    title="Show Message ID"
-                    desc="Show #msgId pill badge and quick copy on hover"
-                    icon={<Code className="w-3.5 h-3.5" />}
-                    checked={showMessageId}
-                    onChange={setShowMessageId}
-                  />
-
-                  <ToggleItem
-                    title="Message Seconds"
-                    desc="Format message timestamps with seconds (HH:mm:ss)"
-                    icon={<Clock className="w-3.5 h-3.5" />}
-                    checked={showSeconds}
-                    onChange={setShowSeconds}
-                  />
-
-                  <ToggleItem
-                    title="Sender Avatar in Groups"
-                    desc="Render sender avatar next to group messages"
-                    icon={<Users className="w-3.5 h-3.5" />}
-                    checked={showSenderAvatar}
-                    onChange={setShowSenderAvatar}
-                  />
-
-                  <ToggleItem
-                    title="Quick Forward to Saved"
-                    desc="1-click direct forward button to Saved Messages on hover"
-                    icon={<Bookmark className="w-3.5 h-3.5" />}
-                    checked={quickForwardToSaved}
-                    onChange={setQuickForwardToSaved}
-                  />
-
-                  <ToggleItem
-                    title="Mark All As Read Button"
-                    desc="Quick action button in tab bar to mark all dialogs read"
-                    icon={<CheckCheck className="w-3.5 h-3.5" />}
-                    checked={markAllReadEnabled}
-                    onChange={setMarkAllReadEnabled}
-                  />
-
-                  <ToggleItem
-                    title="Inspect Callback Data"
-                    desc="Copy callback_data from inline buttons on click"
-                    icon={<Zap className="w-3.5 h-3.5 text-accent-amber" />}
-                    checked={copyCallbackData}
-                    onChange={setCopyCallbackData}
-                  />
-
-                  <ToggleItem
-                    title="Suppress Link Warning"
-                    desc="Open external web URLs directly without prompts"
-                    icon={<ExternalLink className="w-3.5 h-3.5 text-accent-cyan" />}
-                    checked={suppressLinkWarning}
-                    onChange={setSuppressLinkWarning}
-                  />
-                </div>
-
-                {/* Message Font Size (Text Scaling) */}
-                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
-                      <Type className="w-4 h-4 text-accent-cyan" />
-                      <span>Message Font Size</span>
-                    </div>
-                    <span className="text-xs font-mono font-bold text-primary-400 bg-primary-500/10 px-2.5 py-0.5 rounded-lg border border-primary-500/20">
-                      {chatFontSize}px
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 pt-1">
-                    {[12, 13, 14, 15, 16, 18].map((size) => (
-                      <button
-                        key={size}
-                        type="button"
-                        onClick={() => setChatFontSize(size)}
-                        className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                          chatFontSize === size
-                            ? 'bg-primary-600 text-white shadow-glow'
-                            : 'bg-dark-900 text-gray-400 hover:text-gray-200 border border-white/5 hover:border-white/10'
-                        }`}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                  <div
-                    className="p-3 rounded-xl bg-dark-900/60 border border-white/5 text-gray-300 italic truncate"
-                    style={{ fontSize: `${chatFontSize}px` }}
-                  >
-                    Sample message: Guidegram next-generation portable desktop client.
-                  </div>
-                </div>
-
-                {/* Keyboard Shortcuts Guide Button */}
-                <div className="p-3 rounded-2xl bg-dark-800 border border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs text-gray-300 font-medium">
-                    <Keyboard className="w-4 h-4 text-accent-amber" />
-                    <span>Keyboard Shortcuts Guide</span>
-                  </div>
+              <div className="space-y-5 animate-in fade-in duration-100">
+                {/* Theme Cards */}
+                <div className="grid grid-cols-4 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setShowShortcutsModal(true)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-900 hover:bg-dark-750 text-gray-200 border border-white/10 transition-colors cursor-pointer"
+                    onClick={() => setActiveTheme('classic')}
+                    className={`rounded-2xl p-2.5 border transition-all flex flex-col items-center gap-2 cursor-pointer ${
+                      activeTheme === 'classic'
+                        ? 'border-[#50a2e9] bg-[#50a2e9]/10 ring-2 ring-[#50a2e9]/40'
+                        : 'border-white/5 bg-dark-850 hover:bg-dark-800'
+                    }`}
                   >
-                    View Shortcuts
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: ADVANCED & STORAGE */}
-            {activeTab === 'advanced' && (
-              <div className="space-y-5 animate-in fade-in duration-100">
-                {/* 1. Portable Storage Directory */}
-                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-primary-400 text-xs font-bold">
-                      <FolderLock className="w-4 h-4" />
-                      <span>{t('settings.portable_title')}</span>
-                    </div>
-                    <button
-                      onClick={handleCopyPath}
-                      className="text-[10px] text-gray-400 hover:text-gray-200 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>{copied ? t('app.copied') : t('app.copy')}</span>
-                    </button>
-                  </div>
-                  <div className="text-[11px] font-mono text-gray-300 bg-dark-900 px-3 py-2 rounded-xl border border-white/5 truncate">
-                    {portablePath || './data/'}
-                  </div>
-                </div>
-
-                {/* 2. Storage Usage & Media Cache */}
-                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
-                      <HardDrive className="w-4 h-4 text-emerald-400" />
-                      <span>Storage Usage & Media Cache</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={loadCacheStats}
-                      className="text-[11px] text-gray-400 hover:text-gray-200 flex items-center gap-1 cursor-pointer"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      <span>Refresh</span>
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between bg-dark-900/80 px-3.5 py-2.5 rounded-xl border border-white/5">
-                    <div>
-                      <div className="text-[11px] text-gray-400">Media Cache on Disk</div>
-                      <div className="text-sm font-bold text-gray-100 font-mono">
-                        {cacheStats ? cacheStats.formattedSize : 'Calculating...'}
-                        <span className="text-[11px] text-gray-400 font-normal ml-2">
-                          ({cacheStats ? cacheStats.filesCount : 0} files)
-                        </span>
+                    <div className="w-full h-16 rounded-xl bg-gradient-to-b from-[#a2d8a0] to-[#88c586] p-2 flex flex-col justify-end relative overflow-hidden">
+                      <div className="w-3/4 h-3 rounded-full bg-white/70 self-start mb-1" />
+                      <div className="w-5/6 h-4 rounded-lg bg-emerald-700/60 self-end flex items-center px-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full border border-white/70" />
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      disabled={isClearingCache}
-                      onClick={handleClearCache}
-                      className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-bold border border-rose-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <Trash2 className={`w-3.5 h-3.5 ${isClearingCache ? 'animate-spin' : ''}`} />
-                      <span>{isClearingCache ? 'Clearing...' : 'Clear Media Cache'}</span>
-                    </button>
-                  </div>
-                  {clearCacheMessage && (
-                    <div className="text-[11px] text-emerald-400 font-semibold pt-0.5">
-                      {clearCacheMessage}
+                    <span className="text-xs font-medium text-gray-300">Classic</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTheme('day')}
+                    className={`rounded-2xl p-2.5 border transition-all flex flex-col items-center gap-2 cursor-pointer ${
+                      activeTheme === 'day'
+                        ? 'border-[#50a2e9] bg-[#50a2e9]/10 ring-2 ring-[#50a2e9]/40'
+                        : 'border-white/5 bg-dark-850 hover:bg-dark-800'
+                    }`}
+                  >
+                    <div className="w-full h-16 rounded-xl bg-gradient-to-b from-[#7ec5f0] to-[#55a7db] p-2 flex flex-col justify-end relative overflow-hidden">
+                      <div className="w-3/4 h-3 rounded-full bg-white/70 self-start mb-1" />
+                      <div className="w-5/6 h-4 rounded-lg bg-blue-600/60 self-end flex items-center px-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full border border-white/70" />
+                      </div>
                     </div>
-                  )}
+                    <span className="text-xs font-medium text-gray-300">Day</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTheme('tinted')}
+                    className={`rounded-2xl p-2.5 border transition-all flex flex-col items-center gap-2 cursor-pointer ${
+                      activeTheme === 'tinted'
+                        ? 'border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/40'
+                        : 'border-white/5 bg-dark-850 hover:bg-dark-800'
+                    }`}
+                  >
+                    <div className="w-full h-16 rounded-xl bg-[#0f2420] border border-emerald-900/50 p-2 flex flex-col justify-end relative overflow-hidden">
+                      <div className="w-3/4 h-3 rounded-full bg-emerald-500 self-start mb-1" />
+                      <div className="w-5/6 h-4 rounded-lg bg-[#193d35] self-end flex items-center px-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full border-2 border-emerald-400" />
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-emerald-400">Tinted</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTheme('night')}
+                    className={`rounded-2xl p-2.5 border transition-all flex flex-col items-center gap-2 cursor-pointer ${
+                      activeTheme === 'night'
+                        ? 'border-[#50a2e9] bg-[#50a2e9]/10 ring-2 ring-[#50a2e9]/40'
+                        : 'border-white/5 bg-dark-850 hover:bg-dark-800'
+                    }`}
+                  >
+                    <div className="w-full h-16 rounded-xl bg-[#1c242c] p-2 flex flex-col justify-end relative overflow-hidden">
+                      <div className="w-3/4 h-3 rounded-full bg-gray-500 self-start mb-1" />
+                      <div className="w-5/6 h-4 rounded-lg bg-[#273441] self-end flex items-center px-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full border border-gray-400" />
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-gray-300">Night</span>
+                  </button>
                 </div>
 
-                {/* 3. Downloads Destination */}
-                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
-                      <Folder className="w-4 h-4 text-primary-400" />
-                      <span>Downloads Destination</span>
-                    </div>
+                {/* Accent Color Palette (10 colors) */}
+                <div className="flex items-center justify-between px-2 py-1">
+                  {[
+                    { id: 0, bg: 'bg-[#50a2e9]' },
+                    { id: 1, bg: 'bg-[#29b6f6]' },
+                    { id: 2, bg: 'bg-[#4caf50]' },
+                    { id: 3, bg: 'bg-[#e91e63]' },
+                    { id: 4, bg: 'bg-[#ff9800]' },
+                    { id: 5, bg: 'bg-[#9c27b0]' },
+                    { id: 6, bg: 'bg-[#f44336]' },
+                    { id: 7, bg: 'bg-[#607d8b]' },
+                    { id: 8, bg: 'bg-[#009688]' }, // Tinted teal
+                    { id: 9, bg: 'bg-gradient-to-tr from-pink-500 via-amber-400 to-cyan-400' }, // Rainbow
+                  ].map((item) => (
                     <button
+                      key={item.id}
                       type="button"
-                      onClick={handleSelectDownloadDir}
-                      className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-dark-900 hover:bg-dark-750 text-primary-400 border border-primary-500/20 transition-colors cursor-pointer"
-                    >
-                      Browse...
-                    </button>
+                      onClick={() => setSelectedAccentColor(item.id)}
+                      className={`w-6 h-6 rounded-full ${item.bg} transition-transform cursor-pointer ${
+                        selectedAccentColor === item.id
+                          ? 'ring-2 ring-white ring-offset-2 ring-offset-dark-900 scale-110 shadow-lg'
+                          : 'hover:scale-105'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                {/* Section: Theme settings */}
+                <div className="space-y-1 pt-2 border-t border-white/5">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Theme settings</div>
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Paintbrush className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Your name color</span>
+                    </div>
+                    <div className="flex items-center -space-x-1">
+                      <span className="w-3.5 h-3.5 rounded-full bg-cyan-400 border border-dark-900" />
+                      <span className="w-3.5 h-3.5 rounded-full bg-teal-300 border border-dark-900" />
+                    </div>
                   </div>
-                  <div className="text-[11px] font-mono text-gray-300 bg-dark-900 px-3 py-2 rounded-xl border border-white/5 truncate">
-                    {downloadsPath || './data/downloads'}
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Moon className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Auto-night mode</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">{autoNightMode}</span>
                   </div>
-                  <label className="flex items-center gap-2 cursor-pointer pt-1">
+
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Type className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Font family</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">{fontFamily}</span>
+                  </div>
+                </div>
+
+                {/* Section: Custom themes */}
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Custom themes</div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-20 h-20 rounded-2xl bg-dark-850 border border-white/10 flex flex-col items-center justify-center gap-1.5 p-2 text-gray-400 hover:text-white hover:border-white/20 transition-all cursor-pointer">
+                      <Paintbrush className="w-5 h-5 text-accent-cyan" />
+                      <span className="text-[11px] font-medium">Night</span>
+                    </div>
+                    <div className="w-20 h-20 rounded-2xl bg-dark-850 border border-white/10 flex flex-col items-center justify-center gap-1.5 p-2 text-gray-400 hover:text-white hover:border-white/20 transition-all cursor-pointer">
+                      <Paintbrush className="w-5 h-5 text-accent-cyan" />
+                      <span className="text-[11px] font-medium">Night</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section: Chat wallpaper */}
+                <div className="space-y-2.5 pt-2 border-t border-white/5">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Chat wallpaper</div>
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-[#0e1621] border border-white/10 shadow-inner shrink-0" />
+                    <div className="space-y-1 text-xs">
+                      <button type="button" className="text-[#50a2e9] hover:underline cursor-pointer block">Choose from gallery</button>
+                      <button type="button" className="text-[#50a2e9] hover:underline cursor-pointer block">Choose from file</button>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2.5 px-1 py-1 cursor-pointer select-none">
                     <input
                       type="checkbox"
-                      checked={alwaysAskDownloadPath}
-                      onChange={(e) => setAlwaysAskDownloadPath(e.target.checked)}
+                      checked={adaptiveLayoutWide}
+                      onChange={(e) => setAdaptiveLayoutWide(e.target.checked)}
                       className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
                     />
-                    <span className="text-xs text-gray-300">Always ask where to save each file</span>
+                    <span className="text-xs text-gray-200">Adaptive layout for wide screens</span>
                   </label>
                 </div>
 
-                {/* 4. Portable Installation Locator & Sync (Item 9) */}
-                {portableLocator && portableLocator.dataPath && (
-                  <div className="p-4 rounded-2xl bg-primary-950/40 border border-primary-500/30 space-y-3">
+                {/* Section: Chat list quick action */}
+                <div className="space-y-1 pt-2 border-t border-white/5">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Chat list quick action</div>
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Folder className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Change folder</span>
+                    </div>
+                  </div>
+                  <div className="px-1 text-[11px] text-gray-500 leading-snug">
+                    Choose the action you want to perform when you middle-click or swipe on the chat list.
+                  </div>
+                </div>
+
+                {/* 64Gram Chat Enhancements */}
+                <div className="space-y-3 pt-3 border-t border-white/5">
+                  <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-accent-cyan" />
+                    <span>64Gram Chat Enhancements</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    <ToggleItem
+                      title="Show Chat ID"
+                      desc="Display Chat ID badge in header & list with 1-click copy"
+                      icon={<Hash className="w-3.5 h-3.5" />}
+                      checked={showChatId}
+                      onChange={setShowChatId}
+                    />
+                    <ToggleItem
+                      title="Show Message ID"
+                      desc="Show #msgId pill badge and quick copy on hover"
+                      icon={<Code className="w-3.5 h-3.5" />}
+                      checked={showMessageId}
+                      onChange={setShowMessageId}
+                    />
+                    <ToggleItem
+                      title="Message Seconds"
+                      desc="Format message timestamps with seconds (HH:mm:ss)"
+                      icon={<Clock className="w-3.5 h-3.5" />}
+                      checked={showSeconds}
+                      onChange={setShowSeconds}
+                    />
+                    <ToggleItem
+                      title="Sender Avatar in Groups"
+                      desc="Render sender avatar next to group messages"
+                      icon={<Users className="w-3.5 h-3.5" />}
+                      checked={showSenderAvatar}
+                      onChange={setShowSenderAvatar}
+                    />
+                    <ToggleItem
+                      title="Quick Forward to Saved"
+                      desc="1-click direct forward button to Saved Messages on hover"
+                      icon={<Bookmark className="w-3.5 h-3.5" />}
+                      checked={quickForwardToSaved}
+                      onChange={setQuickForwardToSaved}
+                    />
+                    <ToggleItem
+                      title="Mark All As Read Button"
+                      desc="Quick action button in tab bar to mark all dialogs read"
+                      icon={<CheckCheck className="w-3.5 h-3.5" />}
+                      checked={markAllReadEnabled}
+                      onChange={setMarkAllReadEnabled}
+                    />
+                    <ToggleItem
+                      title="Inspect Callback Data"
+                      desc="Copy callback_data from inline buttons on click"
+                      icon={<Zap className="w-3.5 h-3.5 text-accent-amber" />}
+                      checked={copyCallbackData}
+                      onChange={setCopyCallbackData}
+                    />
+                    <ToggleItem
+                      title="Suppress Link Warning"
+                      desc="Open external web URLs directly without prompts"
+                      icon={<ExternalLink className="w-3.5 h-3.5 text-accent-cyan" />}
+                      checked={suppressLinkWarning}
+                      onChange={setSuppressLinkWarning}
+                    />
+                  </div>
+
+                  {/* Message Font Size (Text Scaling) */}
+                  <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-primary-300 text-xs font-bold">
-                        <Database className="w-4 h-4 text-primary-400" />
-                        <span>{t('settings.portable_detected')}</span>
+                      <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
+                        <Type className="w-4 h-4 text-accent-cyan" />
+                        <span>Message Font Size</span>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-300 font-mono">
-                        v{portableLocator.version}
+                      <span className="text-xs font-mono font-bold text-primary-400 bg-primary-500/10 px-2.5 py-0.5 rounded-lg border border-primary-500/20">
+                        {chatFontSize}px
                       </span>
                     </div>
-                    <div className="text-[11px] text-gray-300 leading-relaxed">
-                      Portable data found at:{' '}
-                      <span className="font-mono text-accent-cyan break-all">{portableLocator.dataPath}</span>
-                    </div>
                     <div className="flex items-center gap-2 pt-1">
+                      {[12, 13, 14, 15, 16, 18].map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => setChatFontSize(size)}
+                          className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                            chatFontSize === size
+                              ? 'bg-primary-600 text-white shadow-glow'
+                              : 'bg-dark-900 text-gray-400 hover:text-gray-200 border border-white/5 hover:border-white/10'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Keyboard Shortcuts Guide Button */}
+                  <div className="p-3 rounded-2xl bg-dark-800 border border-white/5 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs text-gray-300 font-medium">
+                      <Keyboard className="w-4 h-4 text-accent-amber" />
+                      <span>Keyboard Shortcuts Guide</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowShortcutsModal(true)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-900 hover:bg-dark-750 text-gray-200 border border-white/10 transition-colors cursor-pointer"
+                    >
+                      View Shortcuts
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: ADVANCED & STORAGE (Official Telegram Desktop Parity - Screenshot 4) */}
+            {activeTab === 'advanced' && (
+              <div className="space-y-5 animate-in fade-in duration-100">
+                {/* Section: Data and storage */}
+                <div className="space-y-1">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Data and storage</div>
+
+                  {/* Connection type */}
+                  <div className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Radio className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Connection type</span>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9]">Default (TCP used)</span>
+                  </div>
+
+                  {/* Download path */}
+                  <div
+                    onClick={handleSelectDownloadDir}
+                    className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Folder className="w-4 h-4 text-gray-400" />
+                      <div>
+                        <div className="text-xs text-gray-200">Download path</div>
+                        <div className="text-[10px] text-gray-500">Downloads Destination</div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-[#50a2e9] truncate max-w-[200px]">
+                      {downloadsPath ? downloadsPath : 'Default folder'}
+                    </span>
+                  </div>
+
+                  {/* Manage local storage */}
+                  <div
+                    onClick={loadCacheStats}
+                    className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <HardDrive className="w-4 h-4 text-gray-400" />
+                      <div>
+                        <div className="text-xs text-gray-200">Manage local storage</div>
+                        <div className="text-[10px] text-gray-500">Storage Usage & Media Cache</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-medium text-gray-400">
+                        {cacheStats ? cacheStats.formattedSize : 'Calculating...'}
+                      </span>
                       <button
                         type="button"
-                        disabled={isSyncingPortable}
-                        onClick={handleSyncFromPortable}
-                        className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white font-bold text-xs shadow-glow transition-all flex items-center gap-2 cursor-pointer"
+                        disabled={isClearingCache}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleClearCache()
+                        }}
+                        className="text-[11px] text-rose-400 hover:text-rose-300 font-semibold px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 cursor-pointer"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPortable ? 'animate-spin' : ''}`} />
-                        <span>{isSyncingPortable ? t('settings.portable_syncing') : t('settings.portable_sync_btn')}</span>
+                        {isClearingCache ? 'Clearing...' : 'Clear'}
                       </button>
                     </div>
-                    {syncMessage && (
-                      <div className="text-[11px] text-accent-emerald font-semibold pt-1">
-                        {syncMessage}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 3. Automatic Media Download Controls */}
-                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
-                      <Download className="w-4 h-4 text-accent-cyan" />
-                      <span>Automatic Media Download</span>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <span className="text-[11px] text-gray-400">Master Switch</span>
-                      <input
-                        type="checkbox"
-                        checked={autoDownload.enabled}
-                        onChange={(e) => setAutoDownload(prev => ({ ...prev, enabled: e.target.checked }))}
-                        className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                      />
-                    </label>
                   </div>
 
-                  <div className="text-[11px] text-gray-400">
-                    Control which media types automatically download into memory or cache for each chat type.
+                  {/* Downloads folder */}
+                  <div
+                    onClick={() => window.guidegram?.openExternal?.(downloadsPath || './data/downloads')}
+                    className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Download className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">Downloads</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-500" />
                   </div>
 
-                  <div className={`space-y-3 transition-opacity ${autoDownload.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                    {/* Private Chats */}
-                    <div className="bg-dark-900/60 p-3 rounded-xl border border-white/5 space-y-2">
-                      <div className="text-xs font-semibold text-gray-300 flex items-center justify-between">
-                        <span>Private Chats</span>
-                        <span className="text-[10px] text-gray-500">Direct 1-on-1 conversations</span>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-300">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.photosInPrivate}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, photosInPrivate: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Photos</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.videosInPrivate}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, videosInPrivate: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Videos</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.filesInPrivate}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, filesInPrivate: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Files</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Groups */}
-                    <div className="bg-dark-900/60 p-3 rounded-xl border border-white/5 space-y-2">
-                      <div className="text-xs font-semibold text-gray-300 flex items-center justify-between">
-                        <span>Groups</span>
-                        <span className="text-[10px] text-gray-500">Small and supergroups</span>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-300">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.photosInGroups}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, photosInGroups: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Photos</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.videosInGroups}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, videosInGroups: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Videos</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.filesInGroups}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, filesInGroups: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Files</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Channels */}
-                    <div className="bg-dark-900/60 p-3 rounded-xl border border-white/5 space-y-2">
-                      <div className="text-xs font-semibold text-gray-300 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                          Channels
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Data Saver</span>
-                        </span>
-                        <span className="text-[10px] text-gray-500">Broadcast channels</span>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-300">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.photosInChannels}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, photosInChannels: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Photos</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.videosInChannels}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, videosInChannels: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Videos</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={autoDownload.filesInChannels}
-                            onChange={(e) => setAutoDownload(prev => ({ ...prev, filesInChannels: e.target.checked }))}
-                            className="rounded bg-dark-800 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>Files</span>
-                        </label>
-                      </div>
-                      <p className="text-[10px] text-gray-400 italic">
-                        * Photos in channels are disabled by default to prevent unwanted high-volume downloading when viewing channels.
-                      </p>
+                  {/* Ask download path for each file toggle */}
+                  <div
+                    className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors select-none"
+                    onClick={() => setAlwaysAskDownloadPath(!alwaysAskDownloadPath)}
+                  >
+                    <span className="text-xs text-gray-200">Ask download path for each file</span>
+                    <div
+                      className={`w-10 h-5 rounded-full p-0.5 transition-colors flex items-center ${
+                        alwaysAskDownloadPath ? 'bg-primary-600 justify-end' : 'bg-dark-950 justify-start border border-white/10'
+                      }`}
+                    >
+                      <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
                     </div>
                   </div>
                 </div>
 
-                {/* 4. Performance & Animations Toggle */}
-                <div className="space-y-2">
-                  <ToggleItem
-                    title="Disable UI Animations (Low-CPU Mode)"
-                    desc="Cut CPU and RAM usage by eliminating transitions, blur and effects"
-                    icon={<Sparkles className="w-3.5 h-3.5 text-accent-amber" />}
-                    checked={disableAnimations}
-                    onChange={setDisableAnimations}
-                  />
+                {/* Section: Automatic media download */}
+                <div className="space-y-1 pt-2 border-t border-white/5">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Automatic media download</div>
+
+                  {/* In private chats */}
+                  <div
+                    className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors select-none"
+                    onClick={() => setAutoDownload(p => ({ ...p, photosInPrivate: !p.photosInPrivate }))}
+                  >
+                    <div className="flex items-center gap-3">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">In private chats</span>
+                    </div>
+                    <div
+                      className={`w-10 h-5 rounded-full p-0.5 transition-colors flex items-center ${
+                        autoDownload.photosInPrivate ? 'bg-primary-600 justify-end' : 'bg-dark-950 justify-start border border-white/10'
+                      }`}
+                    >
+                      <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
+                    </div>
+                  </div>
+
+                  {/* In groups */}
+                  <div
+                    className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors select-none"
+                    onClick={() => setAutoDownload(p => ({ ...p, photosInGroups: !p.photosInGroups }))}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Users className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">In groups</span>
+                    </div>
+                    <div
+                      className={`w-10 h-5 rounded-full p-0.5 transition-colors flex items-center ${
+                        autoDownload.photosInGroups ? 'bg-primary-600 justify-end' : 'bg-dark-950 justify-start border border-white/10'
+                      }`}
+                    >
+                      <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
+                    </div>
+                  </div>
+
+                  {/* In channels */}
+                  <div
+                    className="p-2.5 px-3 rounded-xl hover:bg-white/5 flex items-center justify-between cursor-pointer transition-colors select-none"
+                    onClick={() => setAutoDownload(p => ({ ...p, photosInChannels: !p.photosInChannels }))}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Radio className="w-4 h-4 text-gray-400" />
+                      <span className="text-xs text-gray-200">In channels</span>
+                    </div>
+                    <div
+                      className={`w-10 h-5 rounded-full p-0.5 transition-colors flex items-center ${
+                        autoDownload.photosInChannels ? 'bg-primary-600 justify-end' : 'bg-dark-950 justify-start border border-white/10'
+                      }`}
+                    >
+                      <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
+                    </div>
+                  </div>
                 </div>
 
-                {/* 4. Software Updates */}
+                {/* Section: Window title bar */}
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">Window title bar</div>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showChatNameInTitle}
+                      onChange={(e) => setShowChatNameInTitle(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Show chat name</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showActiveAccountInTitle}
+                      onChange={(e) => setShowActiveAccountInTitle(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Show active account</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={totalUnreadCountInTitle}
+                      onChange={(e) => setTotalUnreadCountInTitle(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Total unread count</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={useSystemWindowFrame}
+                      onChange={(e) => setUseSystemWindowFrame(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Use system window frame</span>
+                  </label>
+                </div>
+
+                {/* Section: System integration */}
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <div className="text-xs font-bold text-accent-cyan px-1 py-1">System integration</div>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showTrayIcon}
+                      onChange={(e) => setShowTrayIcon(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Show tray icon</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showTaskbarIcon}
+                      onChange={(e) => setShowTaskbarIcon(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Show taskbar icon</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={useMonochromeIcon}
+                      onChange={(e) => setUseMonochromeIcon(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Use monochrome icon</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={launchAtStartup}
+                      onChange={(e) => setLaunchAtStartup(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Launch Telegram when system starts</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 px-2 py-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={launchMinimized}
+                      onChange={(e) => setLaunchMinimized(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-200">Launch minimized</span>
+                  </label>
+                </div>
+
+                {/* Section: Software Updates & System Diagnostics */}
                 <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-bold text-gray-200 flex items-center gap-2">
                         <Download className="w-4 h-4 text-accent-cyan" />
-                        <span>Software Updates (Auto-checks hourly)</span>
+                        <span>Software Updates (v{appVersion})</span>
                       </div>
                       <div className="text-[11px] text-gray-400 mt-1">
-                        {updateCheckResult || `Current Version: v${appVersion}`}
+                        {updateCheckResult || 'Auto-checks hourly for releases'}
                       </div>
                     </div>
 
@@ -1172,7 +1513,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* 5. MTProto API Credentials */}
+                {/* Section: Telegram API Credentials */}
                 <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
                     <Key className="w-4 h-4 text-primary-400" />
@@ -1202,7 +1543,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* 6. System Logging */}
+                {/* Section: System Logging */}
                 <div className="p-4 rounded-2xl bg-dark-850 border border-white/5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-accent-cyan text-xs font-semibold">

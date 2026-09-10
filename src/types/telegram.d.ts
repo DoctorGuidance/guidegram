@@ -41,6 +41,8 @@ import type {
   TwoFactorStatus,
   AutoDownloadConfig,
   CacheStats,
+  MyFullProfile,
+  PrivacySecuritySettings,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -93,4 +95,6 @@ export type {
   TwoFactorStatus,
   AutoDownloadConfig,
   CacheStats,
+  MyFullProfile,
+  PrivacySecuritySettings,
 }

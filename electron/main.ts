@@ -1299,6 +1299,43 @@ function setupIpcHandlers() {
     }
   })
 
+  // Full Profile & Privacy Settings IPC
+  ipcMain.handle('telegram:get-my-full-profile', async (_event, { accountId }) => {
+    try {
+      return await accountManager.getMyFullProfile(accountId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getMyFullProfile error:`, err)
+      return null
+    }
+  })
+
+  ipcMain.handle('telegram:get-privacy-settings', async (_event, { accountId }) => {
+    try {
+      return await accountManager.getPrivacySettings(accountId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getPrivacySettings error:`, err)
+      return null
+    }
+  })
+
+  ipcMain.handle('telegram:create-group', async (_event, { accountId, title, userIds }) => {
+    try {
+      return await accountManager.createGroup(accountId, title, userIds)
+    } catch (err: any) {
+      Logger.error(`[IPC] createGroup error:`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('telegram:create-channel', async (_event, { accountId, title, about, isMegagroup }) => {
+    try {
+      return await accountManager.createChannel(accountId, title, about, isMegagroup)
+    } catch (err: any) {
+      Logger.error(`[IPC] createChannel error:`, err)
+      throw err
+    }
+  })
+
   // Storage & Cache IPC
   ipcMain.handle('telegram:get-cache-stats', async () => {
     try {
