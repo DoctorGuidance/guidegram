@@ -134,14 +134,14 @@ export class UpdateManager {
   }
 
   /**
-   * Fetch latest release JSON from GitHub API (supports proxy fallback)
+   * Fetch latest release JSON from GitHub API (supports proxy fallback & semver sorting)
    */
   private async fetchLatestRelease(proxy?: ProxyConfig): Promise<any> {
     return new Promise((resolve) => {
-      const makeRequest = () => {
+      const makeRequest = (pathUrl: string, isFallback = false) => {
         const options: https.RequestOptions = {
           hostname: 'api.github.com',
-          path: `/repos/${this.repoOwner}/${this.repoName}/releases/latest`,
+          path: pathUrl,
           method: 'GET',
           headers: {
             'User-Agent': 'Guidegram-Desktop-App',
@@ -156,25 +156,55 @@ export class UpdateManager {
           res.on('end', () => {
             if (res.statusCode === 200) {
               try {
-                resolve(JSON.parse(body))
+                const parsed = JSON.parse(body)
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  // Filter non-draft/non-prerelease and sort descending by semver
+                  const stable = parsed.filter((r: any) => !r.draft && !r.prerelease)
+                  stable.sort((a: any, b: any) => {
+                    const verA = (a.tag_name || '').replace(/^v/, '').trim()
+                    const verB = (b.tag_name || '').replace(/^v/, '').trim()
+                    return this.compareSemver(verB, verA)
+                  })
+                  resolve(stable[0] || parsed[0])
+                  return
+                } else if (parsed && typeof parsed === 'object') {
+                  resolve(parsed)
+                  return
+                }
               } catch (_) {
-                resolve(null)
+                // Ignore parse error and proceed to fallback
               }
+            }
+
+            if (!isFallback) {
+              makeRequest(`/repos/${this.repoOwner}/${this.repoName}/releases/latest`, true)
             } else {
               resolve(null)
             }
           })
         })
 
-        req.on('error', () => resolve(null))
+        req.on('error', () => {
+          if (!isFallback) {
+            makeRequest(`/repos/${this.repoOwner}/${this.repoName}/releases/latest`, true)
+          } else {
+            resolve(null)
+          }
+        })
+
         req.on('timeout', () => {
           req.destroy()
-          resolve(null)
+          if (!isFallback) {
+            makeRequest(`/repos/${this.repoOwner}/${this.repoName}/releases/latest`, true)
+          } else {
+            resolve(null)
+          }
         })
+
         req.end()
       }
 
-      makeRequest()
+      makeRequest(`/repos/${this.repoOwner}/${this.repoName}/releases`)
     })
   }
 

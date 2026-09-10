@@ -1,0 +1,26 @@
+name: Ensure v1.6.0 Is Latest Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote-latest:
+    name: 📌 Promote v1.6.0 to Latest Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Update v1.6.0 Release As Latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.6.0
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

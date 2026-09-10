@@ -38,6 +38,7 @@ jobs:
           body_path: RELEASE_NOTES.md
           draft: false
           prerelease: false
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
