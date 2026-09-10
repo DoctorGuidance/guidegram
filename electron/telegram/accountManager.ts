@@ -1783,9 +1783,14 @@ export class AccountManager {
     if (!holder || !holder.client) return []
 
     try {
+      let offsetDateSec: number | undefined = undefined
+      if (typeof offsetDate === 'number' && offsetDate > 0) {
+        offsetDateSec = offsetDate > 1e11 ? Math.floor(offsetDate / 1000) : Math.floor(offsetDate)
+      }
+
       const messages = await holder.client.getMessages(chatId, {
         limit,
-        offsetDate: offsetDate ? Math.floor(offsetDate / 1000) : undefined,
+        offsetDate: offsetDateSec,
       })
 
       return messages.map((m: any) => {

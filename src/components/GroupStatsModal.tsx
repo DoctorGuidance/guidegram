@@ -64,7 +64,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
   const { t, language, formatNumber } = useI18n()
   const isPersian = language === 'fa'
 
-  const [timeframe, setTimeframe] = useState<Timeframe>('week')
+  const [timeframe, setTimeframe] = useState<Timeframe>('today')
   const [activeTab, setActiveTab] = useState<'overview' | 'senders' | 'hours' | 'words' | 'media' | 'joins'>('overview')
   const [copied, setCopied] = useState(false)
 
@@ -82,9 +82,20 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
     })
   }, [messages])
 
+  // Compute required start timestamp for the selected timeframe
+  const getTimeframeStartTime = (tf: Timeframe) => {
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    if (tf === 'today') return todayStart
+    if (tf === 'yesterday') return todayStart - 24 * 3600 * 1000
+    if (tf === 'week') return now.getTime() - 7 * 24 * 3600 * 1000
+    if (tf === 'month') return now.getTime() - 30 * 24 * 3600 * 1000
+    return 0 // all
+  }
+
   // Fetch older messages batch from MTProto server
-  const loadHistoryBatch = async (count = 150) => {
-    if (!window.guidegram?.getHistoricalMessages || !chat?.accountId) return
+  const loadHistoryBatch = async (count = 200) => {
+    if (!window.guidegram?.getHistoricalMessages || !chat?.accountId || isLoadingHistory) return
     setIsLoadingHistory(true)
     try {
       const oldestDate = allMessages.length > 0
@@ -116,11 +127,55 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
     }
   }
 
+  // Ensure message history covers the selected timeframe
+  const ensureTimeframeHistory = async (tf: Timeframe) => {
+    if (!window.guidegram?.getHistoricalMessages || !chat?.accountId) return
+    const requiredStart = getTimeframeStartTime(tf)
+
+    let currentMessages = allMessages
+    let oldestDate = currentMessages.length > 0 ? Math.min(...currentMessages.map((m) => m.date)) : Date.now()
+
+    if (oldestDate > requiredStart && hasMoreHistory) {
+      setIsLoadingHistory(true)
+      try {
+        let attempts = 0
+        // Fetch batches until oldest message is before the required timeframe start or 5 attempts reached
+        while (oldestDate > requiredStart && attempts < 5) {
+          attempts++
+          const offsetSeconds = Math.floor(oldestDate / 1000)
+          const older = await window.guidegram.getHistoricalMessages(
+            chat.accountId,
+            chat.id,
+            250,
+            offsetSeconds
+          )
+          if (!older || older.length === 0) {
+            setHasMoreHistory(false)
+            break
+          }
+          const map = new Map<number, MessageItem>()
+          for (const m of currentMessages) map.set(m.id, m)
+          for (const m of older) map.set(m.id, m)
+          currentMessages = Array.from(map.values())
+          setAllMessages(currentMessages)
+          oldestDate = Math.min(...currentMessages.map((m) => m.date))
+        }
+      } catch (err) {
+        console.warn('Failed to ensure timeframe history:', err)
+      } finally {
+        setIsLoadingHistory(false)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen) {
+      ensureTimeframeHistory(timeframe)
+    }
+  }, [isOpen, timeframe])
+
   const handleTimeframeChange = (tf: Timeframe) => {
     setTimeframe(tf)
-    if (tf !== 'today' && allMessages.length < 150 && hasMoreHistory) {
-      loadHistoryBatch(200)
-    }
   }
 
   // 1. Filter messages by selected timeframe from full accumulated message pool
