@@ -1,4 +1,4 @@
-# 🚀 Guidegram v1.4.0 — Storage Management, Audio Synthesizer, Downloads & Font Scaling
+# 🚀 Guidegram v1.4.1 — Data Shield & Installer Safety Hotfix
 
 > **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, 64Gram & Telegraph Power Features, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
 
@@ -6,13 +6,25 @@
 
 <div align="center">
   <img src="resources/guidegram_logo_transparent.png" alt="Guidegram Logo" width="150" height="150" />
-  <h3>Guidegram v1.4.0</h3>
-  <p><strong>Storage Usage & Cache Purge • Web Audio Synthesizer • Downloads Destination • Font Scaling • Keyboard Shortcuts</strong></p>
+  <h3>Guidegram v1.4.1</h3>
+  <p><strong>NSIS Data Shield • Dual-Layer Safe Backup • Directory Protection • In-Place Upgrades</strong></p>
 </div>
 
 ---
 
-### 🌟 What's New in v1.4.0
+### 🛡️ Critical Safety Fixes in v1.4.1
+
+#### 🔒 1. NSIS Installer Data Shield (`build/installer.nsh`)
+- **Eliminated Recursive Directory Removal**: Overrode default `RMDir /r $INSTDIR` during setup updates and reinstalls. The installer now exclusively updates app binaries and runtime files, keeping user sessions, logins, caches, and custom files 100% intact.
+- **In-Place Seamless Upgrade**: Installing directly over an existing portable installation upgrades the program files in place without wiping the `data/` folder.
+
+#### 🪞 2. Dual-Layer Mirrored Safe Backup
+- **Automatic Session & Config Mirroring**: Whenever an account logs in or configurations change, `SessionStore` mirrors tokens and config to a protected OS vault (`%APPDATA%/Guidegram/safe_backup/`).
+- **Instant Auto-Restoration**: If the local `data/` folder is ever accidentally deleted or corrupted, Guidegram immediately detects the backup on launch and restores all accounts and sessions without requiring the user to log in again.
+
+---
+
+### 🌟 Features from v1.4.0 Included
 
 #### 🗄️ 1. Storage Usage & One-Click Cache Purge
 - **Live Disk Analyzer**: Scans and calculates downloaded media file sizes on disk, showing exact megabytes and file counts (`Cache on Disk: XX MB`).

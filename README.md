@@ -141,6 +141,11 @@ No installation or developer tools required. Download the portable standalone re
 - **Message Font Size**: Scalable text sizing from 12px to 18px with live in-settings preview.
 - **Power Shortcuts**: `Ctrl + 1..9` for instant account switching, `Ctrl + K` / `Ctrl + F` for global search, and `Esc` for instant dismissal.
 
+### 26. 🛡️ Guidegram Data Shield & Installer Safety Architecture
+- **In-Place Upgrade Protection**: The NSIS installer (`build/installer.nsh`) permanently disables recursive directory wipes (`RMDir /r $INSTDIR`). Selecting an existing directory updates application binaries only, preserving the `data/` directory (sessions, accounts, settings, caches) and non-application files completely intact.
+- **Dual-Layer Mirrored Safe Backup**: Automatically mirrors all account sessions and configs to an OS-protected location (`%APPDATA%/Guidegram/safe_backup`). If local data is ever removed or damaged, Guidegram auto-restores all accounts and credentials on next launch.
+- **Safe Directory Encapsulation**: Non-empty directories without Guidegram binaries are automatically protected by encapsulating installation inside a dedicated folder.
+
 ---
 
 ## 🗺️ Vision & Continuous Evolution

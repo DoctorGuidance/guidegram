@@ -39,7 +39,9 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "Guidegram"
+    "shortcutName": "Guidegram",
+    "deleteAppDataOnUninstall": false,
+    "include": "resources/installer.nsh"
   },
   "mac": {
     "icon": "resources/icon512.png",
