@@ -94,6 +94,32 @@ No installation or developer tools required. Download the portable standalone re
 - Suppresses read receipts so you can preview incoming messages without triggering double checkmarks.
 - Full native Persian/Arabic Right-to-Left (RTL) auto-detection and layout alignment across messages, quotes, and inline buttons.
 
+### 15. 🎭 Animated Stickers Drawer (TGS Lottie & WebP)
+- Built-in sticker picker drawer (`Smile` button in composer) displaying all installed sticker packs directly from your Telegram cloud profile.
+- Real-time client-side `.tgs` gzip decompression and interactive vector animation rendering via `lottie-web`.
+- Instant click-to-send using native MTProto `Api.InputDocument` references without re-uploading file bytes.
+
+### 16. 🕵️ Stealth Stories Engine (Ghost Story Viewer)
+- Interactive story rings displayed around contact avatars in the chat list.
+- Dedicated story player with timeline progress segments, caption display, and tap navigation.
+- **Stealth Privacy Superpower**: When **Ghost Mode** is active, story read receipts (`stories.readStories`) are strictly bypassed, allowing you to view any story completely anonymously.
+
+### 17. 🌐 In-Chat Live Message Translation
+- One-click translation of incoming and outgoing foreign messages directly from the message hover toolbar.
+- Powered by native MTProto `messages.translateText` with instant Persian (`fa`) target language support and RTL banner rendering.
+
+### 18. ⚡ Channel Boost Status & Level Tracking
+- Inspect any channel's current boost level, total boosts, progress towards the next level, and direct boost link directly inside the Channel Details drawer (`premium.getBoostsStatus`).
+
+### 19. 🛡️ Active Sessions & Remote Device Logout + 2FA Security
+- View all active desktop and mobile sessions connected to your account with platform icons, IP addresses, country, and app versions (`account.getAuthorizations`).
+- Terminate specific unrecognized sessions or wipe all other sessions with one click.
+- Two-Step Verification (2FA) Cloud Password protection check (`account.getPassword`).
+
+### 20. 📁 Telegram Cloud Chat Folders
+- Automatic bidirectional retrieval of server-side chat folders (`messages.getDialogFilters`).
+- Dynamic category tabs in the chat header with instant peer inclusion/exclusion filtering.
+
 ---
 
 ## 🗺️ Vision & Continuous Evolution
