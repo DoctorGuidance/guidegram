@@ -22,6 +22,7 @@ import {
 import { DialogItem, MessageItem, ChatDetails } from '../types/telegram'
 import { Avatar } from './Avatar'
 import { useI18n } from '../i18n'
+import { copyTextToClipboard } from '../utils/clipboard'
 
 interface GroupStatsModalProps {
   isOpen: boolean
@@ -373,7 +374,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
   const totalMessagesCount = filteredMessages.length
   const maxHourlyCount = Math.max(1, ...hourlyDistribution)
 
-  const handleCopyStats = () => {
+  const handleCopyStats = async () => {
     const summary = [
       `📊 Statistics for "${chat.title}" (${timeframe.toUpperCase()}):`,
       `• Total Messages: ${totalMessagesCount}`,
@@ -385,7 +386,7 @@ export const GroupStatsModal: React.FC<GroupStatsModalProps> = ({
       `• Media: ${mediaStats.photo} photos, ${mediaStats.video} videos, ${mediaStats.voice} voice notes`,
     ].join('\n')
 
-    navigator.clipboard.writeText(summary)
+    await copyTextToClipboard(summary)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }

@@ -75,6 +75,7 @@ export interface DialogItem {
   isUser: boolean
   isGroup: boolean
   isChannel: boolean
+  isBroadcast?: boolean
   isBot: boolean
   isPinned: boolean
   isSavedMessages?: boolean
@@ -166,6 +167,9 @@ export interface MessageItem {
   senderRank?: string
   ttlSeconds?: number
   isSilent?: boolean
+  senderEmojiStatusId?: string
+  senderColor?: number
+  senderIsPremium?: boolean
   replyMarkup?: {
     rows: InlineButton[][]
   }
@@ -174,6 +178,9 @@ export interface MessageItem {
 export interface ChatDetails {
   id: string
   title: string
+  firstName?: string
+  lastName?: string
+  phone?: string
   username?: string
   about?: string
   membersCount?: number
@@ -223,6 +230,20 @@ export interface ChatDetails {
   personalChannelTitle?: string
   stargiftsCount?: number
   birthday?: string
+  isBroadcast?: boolean
+  isForum?: boolean
+  isMuted?: boolean
+  availableReactions?: string[]
+  canReactWithStars?: boolean
+}
+
+export interface ContactItem {
+  id: string
+  firstName: string
+  lastName?: string
+  phone?: string
+  username?: string
+  avatarUrl?: string
 }
 
 export interface ForwardOptions {
@@ -376,13 +397,13 @@ export interface ForumTopicItem {
   title: string
   iconColor?: number
   iconEmojiId?: string
-  topMessageId: number
-  readInboxMaxId: number
-  unreadCount: number
+  topMessageId?: number
+  readInboxMaxId?: number
+  unreadCount?: number
   isClosed?: boolean
   isHidden?: boolean
   isPinned?: boolean
-  date: number
+  date?: number
 }
 
 export interface ScheduledMessageItem {
@@ -440,6 +461,14 @@ export interface CloudFolderItem {
   includePeerIds: string[]
   excludePeerIds: string[]
   pinnedPeerIds: string[]
+  contacts?: boolean
+  nonContacts?: boolean
+  groups?: boolean
+  broadcasts?: boolean
+  bots?: boolean
+  excludeMuted?: boolean
+  excludeRead?: boolean
+  excludeArchived?: boolean
 }
 
 export interface StickerItem {

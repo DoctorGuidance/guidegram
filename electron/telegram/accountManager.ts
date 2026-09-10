@@ -28,6 +28,7 @@ import {
   BotCallbackResult,
   CustomEmojiPayload,
   ForumTopicItem,
+  ContactItem,
   ScheduledMessageItem,
   StarGiftItem,
   ActiveSessionItem,
@@ -85,6 +86,23 @@ export class ProgressThrottler {
       this.callback(percent, extra)
     }
   }
+}
+
+/**
+ * Format any Telegram entity (User, Chat, Channel) to its complete display name,
+ * ensuring firstName + lastName are preserved with full unicode/emojis.
+ */
+export function formatEntityName(entity: any, fallback = 'Unknown'): string {
+  if (!entity) return fallback
+  if (entity.title) return entity.title
+  const parts = [entity.firstName, entity.lastName]
+    .filter(Boolean)
+    .map((s: any) => String(s).trim())
+    .filter((s: string) => s.length > 0)
+  if (parts.length > 0) return parts.join(' ')
+  if (entity.username) return `@${entity.username.replace(/^@/, '')}`
+  if (entity.phone) return entity.phone
+  return fallback
 }
 
 export interface ParallelDownloadOptions {
@@ -842,9 +860,9 @@ export class AccountManager {
   }
 
   /**
-   * Get dialog list for an account
+   * Get dialog list for an account (Optimized for instant loading)
    */
-  public async getDialogs(accountId: string, limit = 50): Promise<DialogItem[]> {
+  public async getDialogs(accountId: string, limit = 150): Promise<DialogItem[]> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) {
       throw new Error(`Account ${accountId} is still connecting or disconnected.`)
@@ -853,103 +871,155 @@ export class AccountManager {
     const dialogs = await holder.client.getDialogs({ limit })
     const nowSec = Math.floor(Date.now() / 1000)
 
-    const dialogItems = await Promise.all(
-      dialogs.map(async (d: any) => {
-        const entity = d.entity || {}
-        const isUser = d.isUser || false
-        const isGroup = d.isGroup || false
-        const isChannel = d.isChannel || false
-        const isBot = entity.bot || false
-        const peerId = d.id.toString()
-        const cachedAvatar = this.avatarCache.get(`${accountId}_${peerId}`)
+    const dialogItems = dialogs.map((d: any) => {
+      const entity = d.entity || {}
+      const isUser = d.isUser || false
+      const isGroup = d.isGroup || false
+      const isChannel = d.isChannel || false
+      const isBroadcast = isChannel && !isGroup
+      const isForum = entity.forum === true
+      const isBot = entity.bot || false
+      const peerId = d.id.toString()
+      const cachedAvatar = this.avatarCache.get(`${accountId}_${peerId}`)
 
-        const notifySettings = d.dialog?.notifySettings || (d as any).notifySettings || (entity as any)?.notifySettings
-        let isMuted = false
-        if (notifySettings) {
-          if (notifySettings.silent === true) {
-            isMuted = true
-          } else if (notifySettings.muteUntil !== undefined && notifySettings.muteUntil !== null) {
-            const muteVal = Number(notifySettings.muteUntil)
-            if (muteVal > nowSec || muteVal === 2147483647) {
-              isMuted = true
-            }
-          }
-        }
-        // In Telegram, broadcast channels without explicit un-muting are muted by default
-        if (!isMuted && isChannel && !isGroup && (!notifySettings || notifySettings.muteUntil === undefined)) {
+      const notifySettings = d.dialog?.notifySettings || (d as any).notifySettings || (entity as any)?.notifySettings
+      let isMuted = false
+      if (notifySettings) {
+        if (notifySettings.silent === true) {
           isMuted = true
-        }
-
-        const unreadCount = d.unreadCount || 0
-        const unreadMentionsCount = d.unreadMentionsCount || d.dialog?.unreadMentionsCount || 0
-        let unreadSendersCount: number | undefined = undefined
-
-        if (isGroup && unreadCount > 0) {
-          if (unreadCount === 1) {
-            unreadSendersCount = 1
-          } else {
-            try {
-              if (holder.client) {
-                const recentMsgs = await holder.client.getMessages(peerId, { limit: Math.min(unreadCount, 30) })
-                const distinctSenders = new Set(recentMsgs.map((m: any) => m.senderId?.toString()).filter(Boolean))
-                unreadSendersCount = Math.max(1, distinctSenders.size)
-              } else {
-                unreadSendersCount = 1
-              }
-            } catch (_) {
-              unreadSendersCount = Math.min(unreadCount, Math.max(2, Math.ceil(unreadCount / 3)))
-            }
+        } else if (notifySettings.muteUntil !== undefined && notifySettings.muteUntil !== null) {
+          const muteVal = Number(notifySettings.muteUntil)
+          if (muteVal > nowSec || muteVal === 2147483647) {
+            isMuted = true
           }
         }
+      }
+      // In Telegram, broadcast channels without explicit un-muting are muted by default
+      if (!isMuted && isBroadcast && (!notifySettings || notifySettings.muteUntil === undefined)) {
+        isMuted = true
+      }
 
-        const isPremium = entity.premium === true
-        const customEmojiStatusId = entity.emojiStatus?.documentId
-          ? entity.emojiStatus.documentId.toString()
-          : undefined
+      const unreadCount = d.unreadCount || 0
+      const unreadMentionsCount = d.unreadMentionsCount || d.dialog?.unreadMentionsCount || 0
+      const unreadSendersCount = isGroup && unreadCount > 0 ? (unreadCount === 1 ? 1 : 2) : undefined
 
-        return {
-          id: peerId,
-          accountId,
-          title: d.title || d.name || 'Chat',
-          unreadCount,
-          unreadMentionsCount,
-          unreadSendersCount,
-          isMuted,
-          isUser,
-          isGroup,
-          isChannel,
-          isBot,
-          isPinned: d.pinned || false,
-          lastMessageText: d.message?.message || '',
-          lastMessageDate: d.message?.date ? d.message.date * 1000 : Date.now(),
-          avatarInitials: (d.title || d.name || 'C').substring(0, 2).toUpperCase(),
-          avatarUrl: cachedAvatar,
-          username: entity.username || undefined,
-          isPremium,
-          customEmojiStatusId,
-        }
-      })
-    )
+      const isPremium = entity.premium === true
+      const customEmojiStatusId = entity.emojiStatus?.documentId
+        ? entity.emojiStatus.documentId.toString()
+        : undefined
+
+      const fullTitle =
+        (isUser
+          ? formatEntityName(entity, d.title || d.name || 'User')
+          : (entity.title || d.title || d.name)) || 'Chat'
+
+      return {
+        id: peerId,
+        accountId,
+        title: fullTitle,
+        unreadCount,
+        unreadMentionsCount,
+        unreadSendersCount,
+        isMuted,
+        isUser,
+        isGroup,
+        isChannel,
+        isBroadcast,
+        isForum,
+        isBot,
+        isPinned: d.pinned || false,
+        lastMessageText: d.message?.message || '',
+        lastMessageDate: d.message?.date ? d.message.date * 1000 : Date.now(),
+        avatarInitials: fullTitle.substring(0, 2).toUpperCase(),
+        avatarUrl: cachedAvatar,
+        username: entity.username || undefined,
+        isPremium,
+        customEmojiStatusId,
+      }
+    })
 
     return dialogItems
   }
 
   /**
+   * Fetch contacts list for an account
+   */
+  public async getContacts(accountId: string): Promise<ContactItem[]> {
+    const holder = this.clients.get(accountId)
+    if (!holder || !holder.client) throw new Error(`Account ${accountId} is not connected.`)
+    try {
+      const res: any = await holder.client.invoke(
+        new Api.contacts.GetContacts({ hash: BigInt(0) as any })
+      )
+      if (!res || !Array.isArray(res.users)) return []
+      return res.users.map((u: any) => {
+        const firstName = u.firstName || ''
+        const lastName = u.lastName || undefined
+        return {
+          id: u.id?.toString() || '',
+          firstName,
+          lastName,
+          phone: u.phone || undefined,
+          username: u.username || undefined,
+        }
+      })
+    } catch (err) {
+      Logger.error(`[AccountManager] Failed to get contacts for ${accountId}:`, err)
+      return []
+    }
+  }
+
+  /**
    * Get messages for a given chat with rich replies, media and formatting entities
    */
-  public async getMessages(accountId: string, chatId: string, limit = 40): Promise<MessageItem[]> {
+  public async getMessages(
+    accountId: string,
+    chatId: string,
+    limit = 40,
+    offsetId?: number,
+    addOffset?: number
+  ): Promise<MessageItem[]> {
     const holder = this.clients.get(accountId)
     if (!holder || !holder.client) {
       throw new Error(`Account ${accountId} is still connecting or disconnected.`)
     }
 
-    const messages = await holder.client.getMessages(chatId, { limit })
+    const options: any = { limit }
+    if (typeof offsetId === 'number' && offsetId > 0) {
+      options.offsetId = offsetId
+    }
+    if (typeof addOffset === 'number') {
+      options.addOffset = addOffset
+    }
+
+    const messages = await holder.client.getMessages(chatId, options)
 
     // Build map for quick reply lookup
     const msgMap = new Map<number, any>()
     for (const m of messages) {
       if (m && m.id) {
         msgMap.set(m.id, m)
+      }
+    }
+
+    // Pre-fetch any missing replied messages so snippets and sender names can be resolved accurately
+    const missingReplyIds = Array.from(
+      new Set(
+        messages
+          .map((m: any) => m.replyTo?.replyToMsgId)
+          .filter((id: any) => typeof id === 'number' && id > 0 && !msgMap.has(id))
+      )
+    )
+    if (missingReplyIds.length > 0) {
+      try {
+        const extraMsgs = await holder.client.getMessages(chatId, { ids: missingReplyIds })
+        for (const em of extraMsgs) {
+          if (em && em.id) {
+            msgMap.set(em.id, em)
+          }
+        }
+      } catch (e) {
+        Logger.warn(`[AccountManager] Failed to fetch missing reply messages for ${chatId}:`, e)
       }
     }
 
@@ -988,7 +1058,7 @@ export class AccountManager {
         if (replied) {
           replyTo = {
             replyToMsgId,
-            senderName: replied.sender?.firstName || replied.sender?.title || 'User',
+            senderName: formatEntityName(replied.sender, 'User'),
             text: replied.message || (replied.media ? `[${this.detectMediaType(replied.media) || 'Media'}]` : ''),
           }
         } else {
@@ -1003,12 +1073,25 @@ export class AccountManager {
       const cachedMediaUrl = this.mediaCache.get(cacheKey) || this.mediaCache.get(`${accountId}_${chatId}_${m.id}`)
       const entities = this.parseEntities(m.entities)
 
+      const senderUser = m.sender
+      let senderEmojiStatusId: string | undefined = undefined
+      if (senderUser?.emojiStatus?.documentId) {
+        senderEmojiStatusId = senderUser.emojiStatus.documentId.toString()
+      }
+      const senderColor = senderUser?.color?.color !== undefined
+        ? senderUser.color.color
+        : (m.senderId ? Math.abs(Number(m.senderId)) % 7 : undefined)
+      const senderIsPremium = senderUser?.premium === true
+
       return {
         id: m.id,
         chatId,
         accountId,
         senderId: m.senderId?.toString(),
-        senderName: m.sender?.firstName || m.sender?.title || 'Unknown',
+        senderName: formatEntityName(m.sender, 'Unknown'),
+        senderEmojiStatusId,
+        senderColor,
+        senderIsPremium,
         text: m.message || '',
         date: m.date * 1000,
         isOutgoing: m.out || false,
@@ -1696,7 +1779,7 @@ export class AccountManager {
           chatId,
           accountId,
           senderId: m.senderId?.toString(),
-          senderName: m.sender?.firstName || m.sender?.title || 'Unknown',
+          senderName: formatEntityName(m.sender, 'Unknown'),
           text: m.message || '',
           date: m.date * 1000,
           isOutgoing: m.out || false,
@@ -2032,16 +2115,63 @@ export class AccountManager {
 
       const avatarUrl = await this.getProfilePhoto(accountId, chatId)
 
+      // Notify settings & mute status
+      const notifySettings = full?.fullChat?.notifySettings || full?.fullUser?.notifySettings || (entity as any)?.notifySettings
+      let isMuted = false
+      const nowSec = Math.floor(Date.now() / 1000)
+      if (notifySettings) {
+        if (notifySettings.silent === true) {
+          isMuted = true
+        } else if (notifySettings.muteUntil !== undefined && notifySettings.muteUntil !== null) {
+          const muteVal = Number(notifySettings.muteUntil)
+          if (muteVal > nowSec || muteVal === 2147483647) {
+            isMuted = true
+          }
+        }
+      }
+      if (!isMuted && isChannel && !isGroup && (!notifySettings || notifySettings.muteUntil === undefined)) {
+        isMuted = true
+      }
+
+      // Available reactions for this channel / chat
+      let availableReactions: string[] | undefined = undefined
+      let canReactWithStars = true
+      const chatReactions = full?.fullChat?.availableReactions
+      if (chatReactions) {
+        if (chatReactions.className === 'ChatReactionsNone') {
+          availableReactions = []
+          canReactWithStars = false
+        } else if (chatReactions.className === 'ChatReactionsSome' && Array.isArray(chatReactions.reactions)) {
+          availableReactions = []
+          for (const r of chatReactions.reactions) {
+            if (r.emoticon) {
+              availableReactions.push(r.emoticon)
+            }
+          }
+        }
+        if (chatReactions.allowCustom !== undefined) {
+          canReactWithStars = true
+        }
+      }
+
       return {
         id: chatId,
-        title: entity.title || entity.firstName || 'Chat',
+        title: entity.title || formatEntityName(entity, 'Chat'),
+        firstName: entity.firstName || undefined,
+        lastName: entity.lastName || undefined,
+        phone: entity.phone || undefined,
         username,
         about,
         membersCount,
         isChannel: isChannel && !isGroup,
+        isBroadcast: isChannel && !isGroup,
         isGroup,
+        isForum: entity.forum === true,
         isUser,
         isBot,
+        isMuted,
+        availableReactions,
+        canReactWithStars,
         avatarUrl: avatarUrl || undefined,
         verified,
         fake,
@@ -2224,7 +2354,7 @@ export class AccountManager {
       chatId,
       accountId,
       senderId: msg.senderId?.toString() || holder.info.id,
-      senderName: holder.info.firstName || 'Me',
+      senderName: [holder.info.firstName, holder.info.lastName].filter(Boolean).join(' ') || 'Me',
       text: msg.message || '',
       date: (msg.date || Math.floor(Date.now() / 1000)) * 1000,
       isOutgoing: true,
@@ -2389,6 +2519,16 @@ export class AccountManager {
       const replyToMsgId = msg.replyTo?.replyToMsgId
       const replyTo: ReplyInfo | undefined = replyToMsgId ? { replyToMsgId } : undefined
 
+      const senderUser = msg.sender
+      let senderEmojiStatusId: string | undefined = undefined
+      if (senderUser?.emojiStatus?.documentId) {
+        senderEmojiStatusId = senderUser.emojiStatus.documentId.toString()
+      }
+      const senderColor = senderUser?.color?.color !== undefined
+        ? senderUser.color.color
+        : (msg.senderId ? Math.abs(Number(msg.senderId)) % 7 : undefined)
+      const senderIsPremium = senderUser?.premium === true
+
       const payload = {
         accountId,
         chatId: msg.chatId?.toString(),
@@ -2397,7 +2537,10 @@ export class AccountManager {
           chatId: msg.chatId?.toString(),
           accountId,
           senderId: msg.senderId?.toString(),
-          senderName: msg.sender?.firstName || 'Unknown',
+          senderName: formatEntityName(msg.sender, 'Unknown'),
+          senderEmojiStatusId,
+          senderColor,
+          senderIsPremium,
           postAuthor: (msg as any).postAuthor || undefined,
           senderRank: (msg as any).postAuthor || undefined,
           text: msg.message || '',
@@ -2884,6 +3027,14 @@ export class AccountManager {
             includePeerIds,
             excludePeerIds,
             pinnedPeerIds,
+            contacts: f.contacts === true,
+            nonContacts: f.nonContacts === true,
+            groups: f.groups === true,
+            broadcasts: f.broadcasts === true,
+            bots: f.bots === true,
+            excludeMuted: f.excludeMuted === true,
+            excludeRead: f.excludeRead === true,
+            excludeArchived: f.excludeArchived === true,
           }
         })
     } catch (err) {

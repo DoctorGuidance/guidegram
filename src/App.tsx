@@ -288,6 +288,22 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleMergeHistoricalMessages = (newMsgs: MessageItem[]) => {
+    if (!activeChatId || !newMsgs || newMsgs.length === 0) return
+    setMessagesByChat((prev) => {
+      const existing = prev[activeChatId] || []
+      const existingMap = new Map<number, MessageItem>()
+      for (const m of existing) {
+        existingMap.set(m.id, m)
+      }
+      for (const m of newMsgs) {
+        existingMap.set(m.id, m)
+      }
+      const merged = Array.from(existingMap.values()).sort((a, b) => a.id - b.id)
+      return { ...prev, [activeChatId]: merged }
+    })
+  }
+
   const handleSelectAccount = (accountId: string) => {
     setActiveAccountId(accountId)
     setIsUnifiedInboxOpen(false)
@@ -573,8 +589,12 @@ export const App: React.FC = () => {
   const unreadCounts: Record<TabCategory, number> = {
     all: currentDialogs.reduce((acc, d) => acc + d.unreadCount, 0),
     users: currentDialogs.filter((d) => d.isUser).reduce((acc, d) => acc + d.unreadCount, 0),
-    groups: currentDialogs.filter((d) => d.isGroup).reduce((acc, d) => acc + d.unreadCount, 0),
-    channels: currentDialogs.filter((d) => d.isChannel).reduce((acc, d) => acc + d.unreadCount, 0),
+    groups: currentDialogs
+      .filter((d) => d.isGroup || (d.isChannel && !(d.isBroadcast ?? !d.isGroup)))
+      .reduce((acc, d) => acc + d.unreadCount, 0),
+    channels: currentDialogs
+      .filter((d) => d.isBroadcast ?? (d.isChannel && !d.isGroup))
+      .reduce((acc, d) => acc + d.unreadCount, 0),
     bots: currentDialogs.filter((d) => d.isBot).reduce((acc, d) => acc + d.unreadCount, 0),
     unread: currentDialogs.filter((d) => d.unreadCount > 0).length,
   }
@@ -788,6 +808,7 @@ export const App: React.FC = () => {
             onDeleteMessage={handleDeleteMessage}
             onToggleGhostMode={handleToggleGhostMode}
             onSelectUserOrChat={handleSelectUserOrChat}
+            onMergeHistoricalMessages={handleMergeHistoricalMessages}
           />
         </div>
       )}

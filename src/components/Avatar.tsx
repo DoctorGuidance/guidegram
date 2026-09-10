@@ -8,6 +8,7 @@ interface AvatarProps {
   avatarUrl?: string
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   className?: string
+  onClick?: (e: React.MouseEvent<HTMLDivElement | HTMLImageElement>) => void
 }
 
 // In-memory module cache to avoid refetching avatars across renders
@@ -21,6 +22,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   avatarUrl,
   size = 'md',
   className = '',
+  onClick,
 }) => {
   const cacheKey = accountId && peerId ? `${accountId}_${peerId}` : null
   const cachedUrl = cacheKey ? avatarMemoryCache.get(cacheKey) : null
@@ -75,20 +77,24 @@ export const Avatar: React.FC<AvatarProps> = ({
     xl: 'w-24 h-24 rounded-3xl text-2xl font-black shadow-glow',
   }[size]
 
+  const cursorClass = onClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
+
   if (currentUrl && !hasError) {
     return (
       <img
         src={currentUrl}
         alt={title}
+        onClick={onClick}
         onError={() => setHasError(true)}
-        className={`${sizeClasses} object-cover shrink-0 select-none border border-white/10 ${className}`}
+        className={`${sizeClasses} object-cover shrink-0 select-none border border-white/10 ${cursorClass} ${className}`}
       />
     )
   }
 
   return (
     <div
-      className={`${sizeClasses} bg-gradient-to-tr from-primary-600 via-primary-500 to-accent-cyan text-white font-bold flex items-center justify-center shrink-0 select-none shadow-sm border border-white/10 ${className}`}
+      onClick={onClick}
+      className={`${sizeClasses} bg-gradient-to-tr from-primary-600 via-primary-500 to-accent-cyan text-white font-bold flex items-center justify-center shrink-0 select-none shadow-sm border border-white/10 ${cursorClass} ${className}`}
     >
       <span>{safeInitials}</span>
     </div>

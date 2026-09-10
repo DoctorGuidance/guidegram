@@ -62,6 +62,9 @@ import {
   Tv,
   Languages,
   Zap,
+  AtSign,
+  Phone,
+  ChevronLeft,
 } from 'lucide-react'
 import { DialogItem, MessageItem, ChatDetails, MessageEntityItem, WebPagePreview, CustomEmojiPayload, ForumTopicItem, ScheduledMessageItem, MessageReactionItem, StickerItem, ChannelBoostStatus, AutoDownloadConfig } from '../types/telegram'
 import lottie from 'lottie-web'
@@ -111,6 +114,7 @@ interface ChatViewportProps {
   onDeleteMessage?: (message: MessageItem) => Promise<boolean> | void
   onToggleGhostMode: () => void
   onSelectUserOrChat?: (target: string) => void
+  onMergeHistoricalMessages?: (newMessages: MessageItem[]) => void
 }
 
 interface StagedAttachment {
@@ -465,6 +469,28 @@ export const CustomEmojiView: React.FC<{
   return <span className="inline-block">{fallback || '⭐'}</span>
 }
 
+export const TELEGRAM_PEER_COLORS = [
+  'text-[#e17076]', // 0: red / coral
+  'text-[#faa774]', // 1: orange / gold
+  'text-[#a695e7]', // 2: violet / purple
+  'text-[#7bc862]', // 3: green
+  'text-[#6ec9cb]', // 4: cyan
+  'text-[#65aadd]', // 5: blue
+  'text-[#ee7aae]', // 6: pink
+]
+
+export function getTelegramPeerColorClass(peerId?: string, colorIndex?: number): string {
+  if (colorIndex !== undefined && colorIndex >= 0 && colorIndex < TELEGRAM_PEER_COLORS.length) {
+    return TELEGRAM_PEER_COLORS[colorIndex]
+  }
+  if (!peerId) return 'text-accent-cyan'
+  let num = 0
+  for (let i = 0; i < peerId.length; i++) {
+    num = (num * 31 + peerId.charCodeAt(i)) >>> 0
+  }
+  return TELEGRAM_PEER_COLORS[num % TELEGRAM_PEER_COLORS.length]
+}
+
 export const ChatViewport: React.FC<ChatViewportProps> = ({
   chat,
   messages,
@@ -486,6 +512,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   onDeleteMessage,
   onToggleGhostMode,
   onSelectUserOrChat,
+  onMergeHistoricalMessages,
 }) => {
   const [inputText, setInputText] = useState('')
   const [copiedChatId, setCopiedChatId] = useState(false)
@@ -507,6 +534,11 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
   const failedMediaKeysRef = useRef<Set<string>>(new Set())
+
+  // Dedicated User Profile Drawer (for clicking sender avatar or member)
+  const [userProfilePeerId, setUserProfilePeerId] = useState<string | null>(null)
+  const [userProfileDetails, setUserProfileDetails] = useState<ChatDetails | null>(null)
+  const [isLoadingUserProfile, setIsLoadingUserProfile] = useState(false)
 
   // Sync isMuted state whenever selected chat changes or updates
   useEffect(() => {
@@ -1119,6 +1151,34 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
       console.warn('Failed to fetch chat details:', err)
     } finally {
       setIsLoadingDetails(false)
+    }
+  }
+
+  // Open dedicated User Profile Drawer for a user
+  const handleOpenUserProfile = (peerId?: string, fallbackTitle?: string) => {
+    if (!peerId || !chat) return
+    setUserProfilePeerId(peerId)
+    setUserProfileDetails({
+      id: peerId,
+      title: fallbackTitle || 'User',
+      isChannel: false,
+      isGroup: false,
+      isUser: true,
+      isBot: false,
+    })
+    setIsLoadingUserProfile(true)
+    if (window.guidegram?.getChatDetails) {
+      window.guidegram
+        .getChatDetails(chat.accountId, peerId)
+        .then((details) => {
+          if (details) setUserProfileDetails(details)
+          setIsLoadingUserProfile(false)
+        })
+        .catch(() => {
+          setIsLoadingUserProfile(false)
+        })
+    } else {
+      setIsLoadingUserProfile(false)
     }
   }
 
@@ -1873,16 +1933,42 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     })
   }
 
-  // Scroll to replied message and highlight it
-  const handleScrollToReply = (replyId: number) => {
+  // Scroll to replied message and highlight it, fetching historical context if not loaded
+  const handleScrollToReply = async (replyId: number) => {
     const el = document.getElementById(`msg-${replyId}`)
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       el.classList.add('reply-highlight')
       setTimeout(() => el.classList.remove('reply-highlight'), 1800)
-    } else {
-      showToast(`Original message #${replyId} not in loaded history`)
+      return
     }
+
+    if (chat && window.guidegram?.getMessages) {
+      showToast(`Loading original message #${replyId}...`)
+      try {
+        const chunk = await window.guidegram.getMessages(chat.accountId, chat.id, 50, replyId, -25)
+        if (chunk && chunk.length > 0) {
+          if (onMergeHistoricalMessages) {
+            onMergeHistoricalMessages(chunk)
+          }
+          setTimeout(() => {
+            const targetEl = document.getElementById(`msg-${replyId}`)
+            if (targetEl) {
+              targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              targetEl.classList.add('reply-highlight')
+              setTimeout(() => targetEl.classList.remove('reply-highlight'), 1800)
+            } else {
+              showToast(`Original message #${replyId} not in loaded history`)
+            }
+          }, 250)
+          return
+        }
+      } catch (err) {
+        console.warn('Failed to load message context:', err)
+      }
+    }
+
+    showToast(`Original message #${replyId} not in loaded history`)
   }
 
   /**
@@ -3300,6 +3386,12 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                       initials={(msg.senderName || 'U').substring(0, 2).toUpperCase()}
                       size="sm"
                       className="shrink-0 self-end mb-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (msg.senderId) {
+                          handleOpenUserProfile(msg.senderId, msg.senderName)
+                        }
+                      }}
                     />
                   )}
 
@@ -3323,13 +3415,28 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         <span
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleSearchFromUser(msg.senderId, msg.senderName)
+                            if (msg.senderId) {
+                              handleOpenUserProfile(msg.senderId, msg.senderName)
+                            } else {
+                              handleSearchFromUser(msg.senderId, msg.senderName)
+                            }
                           }}
-                          title={`Click to search messages from ${msg.senderName}`}
-                          className="text-[11px] font-bold text-accent-cyan hover:underline cursor-pointer"
+                          title={`Click to view profile of ${msg.senderName}`}
+                          className={`text-[11px] font-bold hover:underline cursor-pointer ${getTelegramPeerColorClass(
+                            msg.senderId,
+                            msg.senderColor
+                          )}`}
                         >
                           {msg.senderName}
                         </span>
+                        {msg.senderEmojiStatusId && (
+                          <CustomEmojiView
+                            accountId={msg.accountId}
+                            documentId={msg.senderEmojiStatusId}
+                            fallback="⭐"
+                            className="inline-block w-3.5 h-3.5 align-middle select-none shrink-0"
+                          />
+                        )}
                         {getSenderAdminTitle(msg) && (
                           <span
                             className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-md border flex items-center gap-0.5 select-none ${
@@ -5026,7 +5133,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                         .map((p) => (
                           <div
                             key={p.id}
-                            className="p-2 rounded-xl bg-dark-800/80 hover:bg-dark-750 flex items-center justify-between gap-2 border border-white/5 transition-colors group"
+                            onClick={() => handleOpenUserProfile(p.id, p.name)}
+                            className="p-2 rounded-xl bg-dark-800/80 hover:bg-dark-750 flex items-center justify-between gap-2 border border-white/5 transition-colors group cursor-pointer"
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <Avatar
@@ -5141,6 +5249,235 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                   <span>Open in Telegram Official</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4.5 Dedicated User Profile Drawer */}
+      {userProfilePeerId && (
+        <div className="absolute inset-0 z-40 flex justify-end bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-80 md:w-96 h-full bg-dark-900 border-l border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-250 select-none"
+          >
+            {/* Drawer Header */}
+            <div className="h-16 px-5 border-b border-white/5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUserProfilePeerId(null)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="text-sm font-bold text-gray-100">User Profile</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUserProfilePeerId(null)}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* Avatar & Title Hero */}
+              <div className="flex flex-col items-center text-center">
+                <Avatar
+                  accountId={chat.accountId}
+                  peerId={userProfilePeerId}
+                  title={userProfileDetails?.title || 'User'}
+                  avatarUrl={userProfileDetails?.avatarUrl}
+                  size="xl"
+                  className="mb-3"
+                  onClick={() => {
+                    if (userProfileDetails?.avatarUrl) {
+                      setLightboxUrl(userProfileDetails.avatarUrl)
+                    }
+                  }}
+                />
+
+                <div className="flex items-center justify-center gap-1.5 mb-1 px-2">
+                  <h3
+                    dir={isRTL(userProfileDetails?.title || '') ? 'rtl' : 'ltr'}
+                    className="text-base font-bold text-white"
+                  >
+                    {userProfileDetails?.title || 'User'}
+                  </h3>
+                  {userProfileDetails?.customEmojiStatusId && (
+                    <CustomEmojiView
+                      accountId={chat.accountId}
+                      documentId={userProfileDetails.customEmojiStatusId}
+                      fallback="⭐"
+                      className="inline-block w-5 h-5 align-middle select-none shrink-0"
+                    />
+                  )}
+                  {userProfileDetails?.verified && (
+                    <span className="text-primary-400 text-xs" title="Verified">✓</span>
+                  )}
+                </div>
+
+                <div className="text-xs text-gray-400 flex items-center gap-1.5">
+                  <User className="w-3 h-3 text-accent-cyan" />
+                  <span>Personal Profile</span>
+                </div>
+              </div>
+
+              {/* Action Buttons: Send Message, Search, Mention */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = userProfileDetails?.username || userProfilePeerId
+                    setUserProfilePeerId(null)
+                    if (onSelectUserOrChat) {
+                      onSelectUserOrChat(target)
+                    }
+                  }}
+                  className="p-2.5 rounded-xl bg-primary-600/20 hover:bg-primary-600/35 border border-primary-500/30 text-primary-300 hover:text-white flex flex-col items-center gap-1 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span className="text-[10px]">Message</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserProfilePeerId(null)
+                    handleSearchFromUser(userProfilePeerId, userProfileDetails?.title)
+                  }}
+                  className="p-2.5 rounded-xl bg-accent-cyan/15 hover:bg-accent-cyan/30 border border-accent-cyan/30 text-accent-cyan hover:text-white flex flex-col items-center gap-1 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <Search className="w-4 h-4" />
+                  <span className="text-[10px]">Search</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const mention = userProfileDetails?.username
+                      ? `@${userProfileDetails.username} `
+                      : `${userProfileDetails?.title || 'User'} `
+                    setInputText((prev) => prev + mention)
+                    setUserProfilePeerId(null)
+                    textareaRef.current?.focus()
+                  }}
+                  className="p-2.5 rounded-xl bg-accent-violet/15 hover:bg-accent-violet/30 border border-accent-violet/30 text-accent-violet hover:text-white flex flex-col items-center gap-1 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <AtSign className="w-4 h-4" />
+                  <span className="text-[10px]">Mention</span>
+                </button>
+              </div>
+
+              {/* Bio / About */}
+              {userProfileDetails?.about && (
+                <div className="p-3.5 rounded-2xl bg-dark-850/90 border border-white/5 space-y-1">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bio</div>
+                  <p
+                    dir={isRTL(userProfileDetails.about) ? 'rtl' : 'ltr'}
+                    className="text-xs text-gray-200 whitespace-pre-wrap select-text leading-relaxed"
+                  >
+                    {userProfileDetails.about}
+                  </p>
+                </div>
+              )}
+
+              {/* User ID & Username & Phone */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-dark-850/90 border border-white/5">
+                  <div className="flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-accent-cyan shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">User ID</span>
+                      <span className="font-mono text-xs text-gray-200">{userProfilePeerId}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(userProfilePeerId)
+                      showToast(`Copied User ID: ${userProfilePeerId}`)
+                    }}
+                    title="Copy User ID"
+                    className="p-1.5 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {userProfileDetails?.username && (
+                  <div className="flex items-center justify-between p-3 rounded-2xl bg-dark-850/90 border border-white/5">
+                    <div className="flex items-center gap-2">
+                      <AtSign className="w-4 h-4 text-accent-cyan shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Username</span>
+                        <span className="text-xs text-gray-200">@{userProfileDetails.username}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`@${userProfileDetails.username}`)
+                        showToast(`Copied @${userProfileDetails.username}`)
+                      }}
+                      title="Copy Username"
+                      className="p-1.5 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {userProfileDetails?.phone && (
+                  <div className="flex items-center justify-between p-3 rounded-2xl bg-dark-850/90 border border-white/5">
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-accent-emerald shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Phone</span>
+                        <span className="text-xs text-gray-200">{userProfileDetails.phone}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(userProfileDetails.phone!)
+                        showToast(`Copied Phone Number`)
+                      }}
+                      title="Copy Phone"
+                      className="p-1.5 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Personal Channel Card */}
+              {userProfileDetails?.personalChannelId && (
+                <div
+                  onClick={() => {
+                    if (onSelectUserOrChat) {
+                      setUserProfilePeerId(null)
+                      onSelectUserOrChat(userProfileDetails.personalChannelId!)
+                    }
+                  }}
+                  className="p-3 rounded-2xl bg-gradient-to-r from-primary-950/40 via-dark-850/90 to-dark-850 border border-primary-500/20 hover:border-primary-500/40 transition-all cursor-pointer space-y-1 group"
+                >
+                  <div className="text-[10px] font-bold text-primary-400 uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Radio className="w-3 h-3" />
+                      <span>Personal Channel</span>
+                    </span>
+                    <ExternalLink className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                  </div>
+                  <div className="text-xs font-semibold text-white truncate">
+                    {userProfileDetails.personalChannelTitle || `Channel #${userProfileDetails.personalChannelId}`}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -5304,6 +5641,23 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
             >
               <User className="w-3.5 h-3.5 shrink-0 text-accent-cyan" />
               <span>Copy User ID ({contextMenu.message.senderId})</span>
+            </button>
+          )}
+
+          {/* View User Profile in Group */}
+          {chat.isGroup && contextMenu.message.senderId && (
+            <button
+              type="button"
+              onClick={() => {
+                const sid = contextMenu.message.senderId!
+                const sname = contextMenu.message.senderName
+                setContextMenu(null)
+                handleOpenUserProfile(sid, sname)
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+            >
+              <User className="w-3.5 h-3.5 shrink-0 text-primary-400" />
+              <span>View profile of {contextMenu.message.senderName || 'user'}</span>
             </button>
           )}
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, protocol, net, dialog, session } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, protocol, net, dialog, session, clipboard } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath, pathToFileURL } from 'url'
@@ -842,9 +842,18 @@ function setupIpcHandlers() {
     }
   })
 
-  ipcMain.handle('telegram:get-messages', async (_event, { accountId, chatId, limit }) => {
+  ipcMain.handle('telegram:get-contacts', async (_event, { accountId }) => {
     try {
-      return await accountManager.getMessages(accountId, chatId, limit)
+      return await accountManager.getContacts(accountId)
+    } catch (err: any) {
+      Logger.warn(`[IPC] getContacts failed for ${accountId}:`, err)
+      return []
+    }
+  })
+
+  ipcMain.handle('telegram:get-messages', async (_event, { accountId, chatId, limit, offsetId, addOffset }) => {
+    try {
+      return await accountManager.getMessages(accountId, chatId, limit, offsetId, addOffset)
     } catch (err: any) {
       Logger.error(`[IPC] getMessages failed:`, err)
       throw err
@@ -1384,6 +1393,19 @@ function setupIpcHandlers() {
     Logger.info(`[System] Opening log folder: ${logDir}`)
     await shell.openPath(logDir)
     return logDir
+  })
+
+  ipcMain.handle('system:copy-to-clipboard', async (_event, { text }: { text: string }) => {
+    try {
+      if (typeof text === 'string') {
+        clipboard.writeText(text)
+        return true
+      }
+      return false
+    } catch (err: any) {
+      Logger.warn('[IPC] copy-to-clipboard error:', err)
+      return false
+    }
   })
 
   ipcMain.handle('system:log-renderer-error', async (_event, { message, stack }) => {

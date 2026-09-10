@@ -18,6 +18,7 @@ import {
   BotCallbackResult,
   CustomEmojiPayload,
   ForumTopicItem,
+  ContactItem,
   ScheduledMessageItem,
   StarGiftItem,
   ActiveSessionItem,
@@ -63,8 +64,16 @@ const guidegramAPI = {
   // Dialogs & Messages
   getDialogs: (accountId: string) =>
     ipcRenderer.invoke('telegram:get-dialogs', { accountId }),
-  getMessages: (accountId: string, chatId: string, limit?: number) =>
-    ipcRenderer.invoke('telegram:get-messages', { accountId, chatId, limit }),
+  getContacts: (accountId: string): Promise<ContactItem[]> =>
+    ipcRenderer.invoke('telegram:get-contacts', { accountId }),
+  getMessages: (
+    accountId: string,
+    chatId: string,
+    limit?: number,
+    offsetId?: number,
+    addOffset?: number
+  ): Promise<MessageItem[]> =>
+    ipcRenderer.invoke('telegram:get-messages', { accountId, chatId, limit, offsetId, addOffset }),
   sendMessage: (
     accountId: string,
     chatId: string,
@@ -91,6 +100,8 @@ const guidegramAPI = {
       return (file as any).path || ''
     }
   },
+  copyToClipboard: (text: string): Promise<boolean> =>
+    ipcRenderer.invoke('system:copy-to-clipboard', { text }),
   forwardMessages: (
     accountId: string,
     toChatId: string | string[],

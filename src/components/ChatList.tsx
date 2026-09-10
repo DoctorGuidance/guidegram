@@ -84,18 +84,21 @@ export const ChatList: React.FC<ChatListProps> = ({
       }
     }
 
+    const isBroadcast = dialog.isBroadcast ?? (dialog.isChannel && !dialog.isGroup)
+    const isGroup = dialog.isGroup || (dialog.isChannel && !isBroadcast)
+
     if (searchQuery.trim()) {
       // In search mode, apply search filter category
-      if (searchFilter === 'channels' && !dialog.isChannel) return false
-      if (searchFilter === 'groups' && !dialog.isGroup) return false
+      if (searchFilter === 'channels' && !isBroadcast) return false
+      if (searchFilter === 'groups' && !isGroup) return false
       if (searchFilter === 'private' && !dialog.isUser) return false
       return true
     }
 
     // Normal tab category match
     if (activeTab === 'users' && !dialog.isUser) return false
-    if (activeTab === 'groups' && !dialog.isGroup) return false
-    if (activeTab === 'channels' && !dialog.isChannel) return false
+    if (activeTab === 'groups' && !isGroup) return false
+    if (activeTab === 'channels' && !isBroadcast) return false
     if (activeTab === 'bots' && !dialog.isBot) return false
     if (activeTab === 'unread' && dialog.unreadCount === 0) return false
 
@@ -105,8 +108,30 @@ export const ChatList: React.FC<ChatListProps> = ({
       const folder = cloudFolders?.find((f) => f.id === folderId)
       if (folder) {
         if (folder.excludePeerIds?.includes(dialog.id)) return false
-        if (folder.includePeerIds?.length > 0 && !folder.includePeerIds.includes(dialog.id)) {
-          return false
+        if (folder.excludeMuted && dialog.isMuted) return false
+        if (folder.excludeRead && dialog.unreadCount === 0) return false
+
+        const hasFlags = folder.contacts || folder.nonContacts || folder.groups || folder.broadcasts || folder.bots
+        const hasIncludePeers = folder.includePeerIds && folder.includePeerIds.length > 0
+
+        if (hasIncludePeers || hasFlags) {
+          let matched = false
+          if (hasIncludePeers && folder.includePeerIds.includes(dialog.id)) {
+            matched = true
+          }
+          if (folder.broadcasts && isBroadcast) {
+            matched = true
+          }
+          if (folder.groups && isGroup) {
+            matched = true
+          }
+          if (folder.bots && dialog.isBot) {
+            matched = true
+          }
+          if ((folder.contacts || folder.nonContacts) && dialog.isUser && !dialog.isBot) {
+            matched = true
+          }
+          if (!matched) return false
         }
       }
     }

@@ -45,6 +45,7 @@ import {
 import { AppConfig, AccountInfo, CloseAction, UpdateInfo, UpdateProgress, PortableLocatorInfo, AutoDownloadConfig, CacheStats } from '../types/telegram'
 import { playNotificationSound } from '../utils/soundEffects'
 import { useI18n } from '../i18n'
+import { copyTextToClipboard } from '../utils/clipboard'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -373,8 +374,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const handleCopyPath = () => {
-    navigator.clipboard.writeText(portablePath)
+  const handleCopyPath = async () => {
+    await copyTextToClipboard(portablePath)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
