@@ -39,6 +39,7 @@ import type {
   ChannelBoostStatus,
   TwoFactorStatus,
   AutoDownloadConfig,
+  CacheStats,
 } from '../../electron/telegram/types'
 
 declare global {
@@ -89,4 +90,5 @@ export type {
   ChannelBoostStatus,
   TwoFactorStatus,
   AutoDownloadConfig,
+  CacheStats,
 }

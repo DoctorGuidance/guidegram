@@ -1,4 +1,4 @@
-# 🚀 Guidegram v1.3.1 — Automatic Media Download Controls & Channel Data Saver
+# 🚀 Guidegram v1.4.0 — Storage Management, Audio Synthesizer, Downloads & Font Scaling
 
 > **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, 64Gram & Telegraph Power Features, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
 
@@ -6,27 +6,43 @@
 
 <div align="center">
   <img src="resources/guidegram_logo_transparent.png" alt="Guidegram Logo" width="150" height="150" />
-  <h3>Guidegram v1.3.1</h3>
-  <p><strong>Automatic Media Download Controls • Channel Data Saver • Animated Stickers Drawer • Stealth Stories Engine • In-Chat Translation</strong></p>
+  <h3>Guidegram v1.4.0</h3>
+  <p><strong>Storage Usage & Cache Purge • Web Audio Synthesizer • Downloads Destination • Font Scaling • Keyboard Shortcuts</strong></p>
 </div>
 
 ---
 
-### 🌟 What's New in v1.3.1
+### 🌟 What's New in v1.4.0
 
-#### 📥 1. Granular Automatic Media Download Controls
-- **Full Parity with Telegram Desktop**: Complete per-media and per-chat type controls for **Photos**, **Videos**, and **Files** across:
-  - **Private Chats** (Direct 1-on-1 conversations)
-  - **Groups** (Small and supergroups)
-  - **Channels** (Broadcast channels)
-- **Configurable in Settings**: New dedicated section in the `Advanced` tab of Settings with a master toggle and individual category checkboxes.
-- **Deep Merge Compatibility**: Safely initializes with existing configurations without losing user preferences.
+#### 🗄️ 1. Storage Usage & One-Click Cache Purge
+- **Live Disk Analyzer**: Scans and calculates downloaded media file sizes on disk, showing exact megabytes and file counts (`Cache on Disk: XX MB`).
+- **Safe Cache Purge**: Clears temporary downloaded images and videos without touching credentials, account session tokens, or chat databases.
 
-#### 🛡️ 2. Channel Data Saver (Disabled by Default)
-- **Automatic Channel Photo Download Disabled by Default**: Viewing high-traffic channels will no longer eagerly download hundreds of high-resolution images in the background, saving bandwidth and disk space.
-- **On-Demand Loading Cards**: When automatic download is disabled, photos and media display an elegant placeholder card with a **"Click to load image"** button so you only download what you choose to see.
+#### 🔔 2. Pure Web Audio Synthesizer & Real Notifications
+- **Zero-Asset Notification Chime**: Synthesizes Telegram-style harmonic tones via the browser Web Audio API, guaranteeing flawless audio playback across all machines without external mp3 files.
+- **Sound & Toast Toggle**: Full persistence of `notificationsEnabled` and `soundEnabled` in `AppConfig` with a "Play Chime" test button in Settings.
+
+#### 📂 3. Custom Downloads Destination
+- **Folder Picker**: Choose any directory on your computer as your downloads folder.
+- **Save As Option**: Toggle "Always ask where to save each file" for complete per-file destination control.
+
+#### 🎨 4. Chat Message Font Size Scaling
+- **Adjustable Text Size**: Select message sizes from `12px` to `18px` (12, 13, 14, 15, 16, 18px) with real-time in-settings sample preview and instant message bubble scaling.
+
+#### ⌨️ 5. Power Keyboard Shortcuts
+- `Ctrl + 1..9`: Instant one-keystroke account switching across multiple profiles.
+- `Ctrl + K` / `Ctrl + F`: Jump to conversation search input.
+- `Alt + F`: Direct forward without quote (Telegraph style).
+- `Esc`: Close open drawers, modals, and previews.
+- Dedicated **Keyboard Shortcuts Guide** modal in Settings.
 
 ---
+
+### 🌟 Features from v1.3.1 & v1.3.0 Included
+
+#### 📥 6. Granular Automatic Media Download & Channel Data Saver
+- Complete per-media and per-chat type controls for Photos, Videos, and Files across Private Chats, Groups, and Channels.
+- **Channel Data Saver**: Channel photos are disabled by default to eliminate bandwidth flooding, with on-demand **"Click to load image"** buttons.
 
 ### 🌟 Features from v1.3.0 Included
 

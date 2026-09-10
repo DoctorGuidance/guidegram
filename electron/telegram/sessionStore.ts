@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { AppConfig, AccountInfo, ProxyConfig } from './types'
+import { AppConfig, AccountInfo, ProxyConfig, CacheStats } from './types'
 
 export class SessionStore {
   private dataDir: string
@@ -62,6 +62,11 @@ export class SessionStore {
         maxVideoSizeMB: 10,
         maxFileSizeMB: 5,
       },
+      notificationsEnabled: true,
+      soundEnabled: true,
+      downloadsPath: path.join(this.dataDir, 'downloads'),
+      alwaysAskDownloadPath: false,
+      chatFontSize: 14,
     }
 
     try {
@@ -130,5 +135,80 @@ export class SessionStore {
 
   public getDataDirectory(): string {
     return this.dataDir
+  }
+
+  public getCacheStats(): CacheStats {
+    let totalBytes = 0
+    let filesCount = 0
+
+    const scanDir = (dir: string) => {
+      if (!fs.existsSync(dir)) return
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name)
+          if (entry.isDirectory()) {
+            if (entry.name !== 'sessions') {
+              scanDir(fullPath)
+            }
+          } else if (entry.isFile()) {
+            try {
+              const stat = fs.statSync(fullPath)
+              totalBytes += stat.size
+              filesCount++
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    scanDir(path.join(this.dataDir, 'media'))
+    scanDir(path.join(this.dataDir, 'temp'))
+
+    const formattedSize =
+      totalBytes < 1024 * 1024
+        ? `${(totalBytes / 1024).toFixed(1)} KB`
+        : `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
+
+    return {
+      totalBytes,
+      formattedSize,
+      filesCount,
+    }
+  }
+
+  public clearCache(): { clearedBytes: number; clearedFiles: number } {
+    let clearedBytes = 0
+    let clearedFiles = 0
+
+    const cleanDir = (dir: string) => {
+      if (!fs.existsSync(dir)) return
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name)
+          if (entry.isDirectory()) {
+            if (entry.name !== 'sessions') {
+              cleanDir(fullPath)
+              try {
+                fs.rmdirSync(fullPath)
+              } catch {}
+            }
+          } else if (entry.isFile()) {
+            try {
+              const stat = fs.statSync(fullPath)
+              clearedBytes += stat.size
+              fs.unlinkSync(fullPath)
+              clearedFiles++
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    cleanDir(path.join(this.dataDir, 'media'))
+    cleanDir(path.join(this.dataDir, 'temp'))
+
+    return { clearedBytes, clearedFiles }
   }
 }

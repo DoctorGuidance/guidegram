@@ -37,8 +37,13 @@ import {
   HardDrive,
   Database,
   Radio,
+  Volume2,
+  Folder,
+  Type,
+  Keyboard,
 } from 'lucide-react'
-import { AppConfig, AccountInfo, CloseAction, UpdateInfo, UpdateProgress, PortableLocatorInfo, AutoDownloadConfig } from '../types/telegram'
+import { AppConfig, AccountInfo, CloseAction, UpdateInfo, UpdateProgress, PortableLocatorInfo, AutoDownloadConfig, CacheStats } from '../types/telegram'
+import { playNotificationSound } from '../utils/soundEffects'
 import { useI18n } from '../i18n'
 
 interface SettingsModalProps {
@@ -143,6 +148,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Window Close Action Preference
   const [closeAction, setCloseAction] = useState<CloseAction>('ask')
 
+  // Notifications & Sound
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [soundEnabled, setSoundEnabled] = useState(true)
+
+  // Downloads Directory & Ask where to save
+  const [downloadsPath, setDownloadsPath] = useState('')
+  const [alwaysAskDownloadPath, setAlwaysAskDownloadPath] = useState(false)
+
+  // Chat Font Size
+  const [chatFontSize, setChatFontSize] = useState(14)
+
+  // Cache & Storage Usage
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null)
+  const [isClearingCache, setIsClearingCache] = useState(false)
+  const [clearCacheMessage, setClearCacheMessage] = useState<string | null>(null)
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false)
+
   // Portable Locator & Sync state
   const [portableLocator, setPortableLocator] = useState<PortableLocatorInfo | null>(null)
   const [isSyncingPortable, setIsSyncingPortable] = useState(false)
@@ -196,17 +218,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setSuppressLinkWarning(cfg.suppressLinkWarning ?? false)
         setAntiFingerprinting(cfg.antiFingerprinting ?? true)
         setCloseAction(cfg.closeAction || 'ask')
+        setNotificationsEnabled(cfg.notificationsEnabled ?? true)
+        setSoundEnabled(cfg.soundEnabled ?? true)
+        setDownloadsPath(cfg.downloadsPath || '')
+        setAlwaysAskDownloadPath(cfg.alwaysAskDownloadPath ?? false)
+        setChatFontSize(cfg.chatFontSize || 14)
         if (cfg.autoDownload) {
           setAutoDownload(cfg.autoDownload)
         }
       })
+      window.guidegram?.getPortableDataPath?.().then(setDownloadsPath)
       window.guidegram?.getPortableDataPath?.().then(setPortablePath)
       window.guidegram?.getPortableLocator?.().then((info) => {
         if (info) setPortableLocator(info)
       })
+      loadCacheStats()
       loadLogs()
     }
   }, [isOpen])
+
+  const loadCacheStats = async () => {
+    try {
+      if (window.guidegram?.getCacheStats) {
+        const stats = await window.guidegram.getCacheStats()
+        setCacheStats(stats)
+      }
+    } catch {}
+  }
+
+  const handleClearCache = async () => {
+    setIsClearingCache(true)
+    setClearCacheMessage(null)
+    try {
+      if (window.guidegram?.clearCache) {
+        const res = await window.guidegram.clearCache()
+        const mb = (res.clearedBytes / (1024 * 1024)).toFixed(1)
+        setClearCacheMessage(`Cleaned ${res.clearedFiles} cached files (${mb} MB freed).`)
+        await loadCacheStats()
+        setTimeout(() => setClearCacheMessage(null), 3500)
+      }
+    } catch (e: any) {
+      setClearCacheMessage('Failed to clear cache: ' + (e.message || 'unknown error'))
+    } finally {
+      setIsClearingCache(false)
+    }
+  }
+
+  const handleSelectDownloadDir = async () => {
+    try {
+      if (window.guidegram?.selectDownloadDirectory) {
+        const dir = await window.guidegram.selectDownloadDirectory()
+        if (dir) {
+          setDownloadsPath(dir)
+        }
+      }
+    } catch {}
+  }
 
   const handleManualCheckUpdates = async () => {
     setCheckingUpdate(true)
@@ -294,6 +361,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       suppressLinkWarning,
       antiFingerprinting,
       autoDownload,
+      notificationsEnabled,
+      soundEnabled,
+      downloadsPath,
+      alwaysAskDownloadPath,
+      chatFontSize,
     })
     setConfig(updated)
     onConfigUpdated?.(updated)
@@ -593,16 +665,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     title="Desktop Notifications"
                     desc="Show toast notifications when new messages arrive"
                     icon={<Bell className="w-3.5 h-3.5" />}
-                    checked={true}
-                    onChange={() => {}}
+                    checked={notificationsEnabled}
+                    onChange={setNotificationsEnabled}
                   />
                   <ToggleItem
                     title="Sound Effects"
                     desc="Play sound on incoming direct messages"
-                    icon={<Sparkles className="w-3.5 h-3.5 text-accent-cyan" />}
-                    checked={true}
-                    onChange={() => {}}
+                    icon={<Volume2 className="w-3.5 h-3.5 text-accent-cyan" />}
+                    checked={soundEnabled}
+                    onChange={setSoundEnabled}
                   />
+                </div>
+
+                <div className="pt-2 flex items-center justify-between p-3.5 rounded-2xl bg-dark-800 border border-white/5">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-200">Notification Sound</div>
+                    <div className="text-[11px] text-gray-400">High-fidelity Web Audio synthesized chime</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => playNotificationSound()}
+                    className="px-3.5 py-1.5 rounded-xl bg-dark-900 hover:bg-dark-750 text-xs font-semibold text-primary-400 border border-primary-500/20 hover:border-primary-500/40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>Play Chime</span>
+                  </button>
                 </div>
               </div>
             )}
@@ -723,6 +810,56 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={setSuppressLinkWarning}
                   />
                 </div>
+
+                {/* Message Font Size (Text Scaling) */}
+                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
+                      <Type className="w-4 h-4 text-accent-cyan" />
+                      <span>Message Font Size</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-primary-400 bg-primary-500/10 px-2.5 py-0.5 rounded-lg border border-primary-500/20">
+                      {chatFontSize}px
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    {[12, 13, 14, 15, 16, 18].map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => setChatFontSize(size)}
+                        className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                          chatFontSize === size
+                            ? 'bg-primary-600 text-white shadow-glow'
+                            : 'bg-dark-900 text-gray-400 hover:text-gray-200 border border-white/5 hover:border-white/10'
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    className="p-3 rounded-xl bg-dark-900/60 border border-white/5 text-gray-300 italic truncate"
+                    style={{ fontSize: `${chatFontSize}px` }}
+                  >
+                    Sample message: Guidegram next-generation portable desktop client.
+                  </div>
+                </div>
+
+                {/* Keyboard Shortcuts Guide Button */}
+                <div className="p-3 rounded-2xl bg-dark-800 border border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs text-gray-300 font-medium">
+                    <Keyboard className="w-4 h-4 text-accent-amber" />
+                    <span>Keyboard Shortcuts Guide</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowShortcutsModal(true)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-dark-900 hover:bg-dark-750 text-gray-200 border border-white/10 transition-colors cursor-pointer"
+                  >
+                    View Shortcuts
+                  </button>
+                </div>
               </div>
             )}
 
@@ -749,7 +886,79 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* 2. Portable Installation Locator & Sync (Item 9) */}
+                {/* 2. Storage Usage & Media Cache */}
+                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
+                      <HardDrive className="w-4 h-4 text-emerald-400" />
+                      <span>Storage Usage & Media Cache</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={loadCacheStats}
+                      className="text-[11px] text-gray-400 hover:text-gray-200 flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between bg-dark-900/80 px-3.5 py-2.5 rounded-xl border border-white/5">
+                    <div>
+                      <div className="text-[11px] text-gray-400">Media Cache on Disk</div>
+                      <div className="text-sm font-bold text-gray-100 font-mono">
+                        {cacheStats ? cacheStats.formattedSize : 'Calculating...'}
+                        <span className="text-[11px] text-gray-400 font-normal ml-2">
+                          ({cacheStats ? cacheStats.filesCount : 0} files)
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isClearingCache}
+                      onClick={handleClearCache}
+                      className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-bold border border-rose-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Trash2 className={`w-3.5 h-3.5 ${isClearingCache ? 'animate-spin' : ''}`} />
+                      <span>{isClearingCache ? 'Clearing...' : 'Clear Media Cache'}</span>
+                    </button>
+                  </div>
+                  {clearCacheMessage && (
+                    <div className="text-[11px] text-emerald-400 font-semibold pt-0.5">
+                      {clearCacheMessage}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Downloads Destination */}
+                <div className="p-4 rounded-2xl bg-dark-800 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-200">
+                      <Folder className="w-4 h-4 text-primary-400" />
+                      <span>Downloads Destination</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSelectDownloadDir}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-dark-900 hover:bg-dark-750 text-primary-400 border border-primary-500/20 transition-colors cursor-pointer"
+                    >
+                      Browse...
+                    </button>
+                  </div>
+                  <div className="text-[11px] font-mono text-gray-300 bg-dark-900 px-3 py-2 rounded-xl border border-white/5 truncate">
+                    {downloadsPath || './data/downloads'}
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={alwaysAskDownloadPath}
+                      onChange={(e) => setAlwaysAskDownloadPath(e.target.checked)}
+                      className="rounded bg-dark-900 border-white/10 text-primary-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-300">Always ask where to save each file</span>
+                  </label>
+                </div>
+
+                {/* 4. Portable Installation Locator & Sync (Item 9) */}
                 {portableLocator && portableLocator.dataPath && (
                   <div className="p-4 rounded-2xl bg-primary-950/40 border border-primary-500/30 space-y-3">
                     <div className="flex items-center justify-between">
@@ -1043,6 +1252,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Keyboard Shortcuts Reference Modal */}
+      {showShortcutsModal && (
+        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-dark-850 rounded-2xl border border-white/10 shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-bold text-gray-100">
+                <Keyboard className="w-4 h-4 text-accent-amber" />
+                <span>Keyboard Shortcuts</span>
+              </div>
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-dark-900 border border-white/5">
+                <span className="text-gray-300">Quick Switch Account</span>
+                <span className="font-mono text-accent-cyan bg-white/5 px-2 py-0.5 rounded border border-white/10">Ctrl + 1..9</span>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-dark-900 border border-white/5">
+                <span className="text-gray-300">Search Dialogs & Messages</span>
+                <span className="font-mono text-accent-cyan bg-white/5 px-2 py-0.5 rounded border border-white/10">Ctrl + K / Ctrl + F</span>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-dark-900 border border-white/5">
+                <span className="text-gray-300">Direct Forward (Telegraph Style)</span>
+                <span className="font-mono text-accent-cyan bg-white/5 px-2 py-0.5 rounded border border-white/10">Alt + F</span>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-dark-900 border border-white/5">
+                <span className="text-gray-300">Close Drawers / Modals</span>
+                <span className="font-mono text-accent-cyan bg-white/5 px-2 py-0.5 rounded border border-white/10">Esc</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowShortcutsModal(false)}
+                className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-500 text-white transition-all cursor-pointer"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

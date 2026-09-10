@@ -88,6 +88,7 @@ interface ChatViewportProps {
   copyCallbackData?: boolean
   suppressLinkWarning?: boolean
   autoDownload?: AutoDownloadConfig
+  chatFontSize?: number
   onSendMessage: (
     text: string,
     replyToMsgId?: number,
@@ -477,6 +478,7 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
   copyCallbackData = true,
   suppressLinkWarning = false,
   autoDownload,
+  chatFontSize = 14,
   onSendMessage,
   onSendMedia,
   onOpenDirectForward,
@@ -3313,7 +3315,8 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
                               : 'bg-dark-800 text-gray-200 border border-white/5 rounded-bl-sm'
                           }`
                     } ${isSelected ? 'ring-2 ring-primary-400' : ''}`}
-                  >
+                      style={{ fontSize: msg.isSticker || msg.mediaType === 'sticker' ? undefined : `${chatFontSize}px` }}
+                    >
                     {/* Group Sender Name with 64Gram Admin Badges */}
                     {!msg.isOutgoing && chat.isGroup && msg.senderName && (
                       <div className="flex items-center gap-1.5 mb-1 flex-wrap">

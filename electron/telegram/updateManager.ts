@@ -185,85 +185,121 @@ export class UpdateManager {
 
       // Create resilient PowerShell update script
       const scriptPath = path.join(tempDir, 'apply_update.ps1')
+      const batPath = path.join(tempDir, 'apply_update.bat')
       const exePath = app.getPath('exe')
 
       const psScript = `
-# Wait for main application processes to fully terminate
-Start-Sleep -Seconds 2
-
 $tempDir = "${tempDir.replace(/\\/g, '\\\\')}"
 $zipFile = "${zipPath.replace(/\\/g, '\\\\')}"
 $targetDir = "${appInstallDir.replace(/\\/g, '\\\\')}"
 $exe = "${exePath.replace(/\\/g, '\\\\')}"
 $logFile = Join-Path $tempDir "update_process.log"
 
-Add-Content -Path $logFile -Value "Starting update at $(Get-Date)"
+Add-Content -Path $logFile -Value "=========================================="
+Add-Content -Path $logFile -Value "Starting Guidegram Portable Update at $(Get-Date)"
+Add-Content -Path $logFile -Value "Target Directory: $targetDir"
+Add-Content -Path $logFile -Value "Executable: $exe"
 
-# Force terminate any remaining Guidegram processes
+# 1. Wait for Guidegram processes to exit gracefully, force terminate after 5 seconds
 $attempts = 0
-while ((Get-Process -Name "Guidegram" -ErrorAction SilentlyContinue) -and ($attempts -lt 10)) {
-    Add-Content -Path $logFile -Value "Killing lingering Guidegram processes (attempt $attempts)..."
-    Stop-Process -Name "Guidegram" -Force -ErrorAction SilentlyContinue
+while ($attempts -lt 20) {
+    $procs = Get-Process | Where-Object {
+        $_.ProcessName -like "*Guidegram*" -or ($_.Path -and $_.Path -eq $exe)
+    } -ErrorAction SilentlyContinue
+
+    if (-not $procs) {
+        Add-Content -Path $logFile -Value "All Guidegram instances terminated successfully."
+        break
+    }
+
+    if ($attempts -ge 4) {
+        Add-Content -Path $logFile -Value "Terminating lingering Guidegram processes (attempt $attempts)..."
+        $procs | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
+
     Start-Sleep -Milliseconds 500
     $attempts++
 }
 
-# Also ensure file is not locked
+# 2. Ensure Guidegram.exe is completely unlocked before extraction
 $attempts = 0
-while ($attempts -lt 10) {
+while ($attempts -lt 15) {
     try {
         if (Test-Path $exe) {
             $stream = [System.IO.File]::Open($exe, 'Open', 'ReadWrite', 'None')
             if ($stream) {
                 $stream.Close()
                 $stream.Dispose()
-                Add-Content -Path $logFile -Value "Guidegram.exe is unlocked and ready for overwrite."
+                Add-Content -Path $logFile -Value "Guidegram.exe file handle is unlocked and ready for overwrite."
                 break
             }
         } else {
             break
         }
     } catch {
-        Add-Content -Path $logFile -Value "Guidegram.exe still locked, waiting... ($($_.Exception.Message))"
+        Add-Content -Path $logFile -Value "Waiting for file unlock ($attempts): $($_.Exception.Message)"
         Start-Sleep -Seconds 1
         $attempts++
     }
 }
 
+# 3. Extract updated files over target directory with per-file retry
 try {
     Add-Content -Path $logFile -Value "Extracting $zipFile to $targetDir..."
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    
-    # Open zip and extract entry by entry to preserve data directory
+
     $zip = [System.IO.Compression.ZipFile]::OpenRead($zipFile)
+    $extractedCount = 0
+
     foreach ($entry in $zip.Entries) {
-        # Skip anything trying to touch data folder
+        # Strictly preserve existing user data folder
         if ($entry.FullName -like "data/*" -or $entry.FullName -like "data\\*") {
             continue
         }
+
         $destPath = Join-Path $targetDir $entry.FullName
         $destDir = [System.IO.Path]::GetDirectoryName($destPath)
+
         if (-not (Test-Path $destDir)) {
             New-Item -ItemType Directory -Path $destDir -Force | Out-Null
         }
+
         if (-not [string]::IsNullOrEmpty($entry.Name)) {
-            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
+            $extracted = $false
+            $retry = 0
+            while (-not $extracted -and $retry -lt 5) {
+                try {
+                    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
+                    $extracted = $true
+                    $extractedCount++
+                } catch {
+                    Start-Sleep -Milliseconds 300
+                    $retry++
+                }
+            }
+            if (-not $extracted) {
+                Add-Content -Path $logFile -Value "WARNING: Could not overwrite $($entry.FullName)"
+            }
         }
     }
     $zip.Dispose()
 
-    Add-Content -Path $logFile -Value "Extraction completed successfully."
+    Add-Content -Path $logFile -Value "Extracted $extractedCount files successfully."
     Remove-Item -Path $zipFile -Force -ErrorAction SilentlyContinue
 } catch {
-    Add-Content -Path $logFile -Value "ERROR: $($_.Exception.ToString())"
+    Add-Content -Path $logFile -Value "EXTRACTION ERROR: $($_.Exception.ToString())"
 }
 
-# Relaunch updated Guidegram executable
-Add-Content -Path $logFile -Value "Relaunching $exe"
-Start-Process -FilePath $exe
+# 4. Relaunch updated Guidegram executable with correct working directory
+Add-Content -Path $logFile -Value "Relaunching $exe with WorkingDirectory $targetDir"
+Start-Process -FilePath $exe -WorkingDirectory $targetDir
 `
       await fs.promises.writeFile(scriptPath, psScript, 'utf-8')
-      Logger.info(`[UpdateManager] Resilient update script generated at: ${scriptPath}`)
+
+      // Create a batch launcher to cleanly break away from Chromium Job Object on Windows
+      const batScript = `@echo off\r\nstart "" /b powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "${scriptPath}"\r\n`
+      await fs.promises.writeFile(batPath, batScript, 'utf-8')
+      Logger.info(`[UpdateManager] Resilient update script and breakaway launcher generated at: ${scriptPath}`)
 
       if (onProgress) {
         onProgress({
@@ -274,14 +310,15 @@ Start-Process -FilePath $exe
         })
       }
 
-      // Spawn powershell detached process
+      // Spawn detached cmd process that launches PowerShell outside Chromium Job Object
       const { spawn } = await import('child_process')
       const child = spawn(
-          'powershell.exe',
-        ['-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath],
+        'cmd.exe',
+        ['/c', 'start', '""', '/min', 'powershell.exe', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath],
         {
           detached: true,
           stdio: 'ignore',
+          windowsHide: true,
         }
       )
       child.unref()
@@ -289,7 +326,7 @@ Start-Process -FilePath $exe
       // Ensure tray is removed and all processes exit cleanly
       setTimeout(() => {
         app.exit(0)
-      }, 500)
+      }, 600)
 
       return { success: true }
     } catch (err: any) {

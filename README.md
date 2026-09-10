@@ -125,6 +125,22 @@ No installation or developer tools required. Download the portable standalone re
 - **Channel Data Saver (Enabled by Default)**: Channel photos and high-volume media are configured to manual on-demand loading by default, preventing unexpected network congestion and disk saturation when viewing large channels.
 - **On-Demand Loading Cards**: Interactive download button placeholders for media items, allowing you to load only the specific photos and documents you need.
 
+### 22. 🗄️ Storage Usage & Media Cache Management
+- **Disk Usage Calculator**: Accurately analyzes media caches and downloaded files on disk, displaying exact byte sizes and file counts.
+- **One-Click Cache Purge**: Safely frees disk space by removing cached photos, videos, and temp files while preserving authentication sessions and database history.
+
+### 23. 🔔 Pure Web Audio Synthesizer & Real Notifications
+- **Zero-Asset Notification Chime**: Synthesizes smooth Telegram-style harmonic tones using the browser Web Audio API, eliminating missing-file bugs and external audio dependencies.
+- **Desktop Toast Support**: Native toast notifications dispatch when the window is blurred or minimized.
+
+### 24. 📂 Custom Downloads Destination
+- **Folder Picker**: Choose any directory on your PC as your primary downloads destination.
+- **Save As Prompt**: Optional "Always ask where to save each file" setting for complete manual control.
+
+### 25. 🎨 Chat Font Size Scaling & Keyboard Shortcuts
+- **Message Font Size**: Scalable text sizing from 12px to 18px with live in-settings preview.
+- **Power Shortcuts**: `Ctrl + 1..9` for instant account switching, `Ctrl + K` / `Ctrl + F` for global search, and `Esc` for instant dismissal.
+
 ---
 
 ## 🗺️ Vision & Continuous Evolution

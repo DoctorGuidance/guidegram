@@ -29,6 +29,7 @@ import {
   PeerStoriesPayload,
   ChannelBoostStatus,
   TwoFactorStatus,
+  CacheStats,
 } from './telegram/types'
 
 const guidegramAPI = {
@@ -241,6 +242,14 @@ const guidegramAPI = {
     ipcRenderer.invoke('system:get-portable-locator'),
   syncFromPortable: (sourceDataPath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('system:sync-from-portable', { sourceDataPath }),
+
+  // Storage & Cache Management
+  getCacheStats: (): Promise<CacheStats> =>
+    ipcRenderer.invoke('telegram:get-cache-stats'),
+  clearCache: (): Promise<{ clearedBytes: number; clearedFiles: number }> =>
+    ipcRenderer.invoke('telegram:clear-cache'),
+  selectDownloadDirectory: (): Promise<string | null> =>
+    ipcRenderer.invoke('telegram:select-download-directory'),
 
   // Software Updates
   getAppVersion: (): Promise<string> =>

@@ -290,6 +290,20 @@ export interface AppConfig {
   antiFingerprinting?: boolean
   // Automatic Media & Data Download (Telegram Desktop Parity)
   autoDownload?: AutoDownloadConfig
+  // Notifications & Sound
+  notificationsEnabled?: boolean
+  soundEnabled?: boolean
+  // Downloads Management
+  downloadsPath?: string
+  alwaysAskDownloadPath?: boolean
+  // Appearance & Chat Scale
+  chatFontSize?: number
+}
+
+export interface CacheStats {
+  totalBytes: number
+  formattedSize: string
+  filesCount: number
 }
 
 export interface OpenFileDialogOptions {

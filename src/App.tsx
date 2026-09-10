@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { AccountDock } from './components/AccountDock'
@@ -23,6 +23,7 @@ import {
   SendMediaOptions,
   CloudFolderItem,
 } from './types/telegram'
+import { playNotificationSound } from './utils/soundEffects'
 import logoImg from './assets/logo.png'
 
 export const App: React.FC = () => {
@@ -135,6 +136,9 @@ export const App: React.FC = () => {
           ...prev,
           [chatId]: [...(prev[chatId] || []), message],
         }))
+        if (!message?.isOutgoing && configRef.current?.soundEnabled !== false) {
+          playNotificationSound()
+        }
         if (chatId !== activeChatId) {
           setDialogsByAccount((prev) => {
             const list = prev[accountId] || []
@@ -212,6 +216,52 @@ export const App: React.FC = () => {
       document.documentElement.classList.remove('disable-animations')
     }
   }, [config?.disableAnimations])
+
+  const configRef = useRef<AppConfig | null>(null)
+  useEffect(() => {
+    configRef.current = config
+  }, [config])
+
+  // Global Keyboard Shortcuts (Telegram Desktop & 64Gram Parity)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Ctrl + 1..9 -> Instant Account Switching
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+        const keyNum = parseInt(e.key, 10)
+        if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 9) {
+          const targetAcc = accounts[keyNum - 1]
+          if (targetAcc) {
+            e.preventDefault()
+            setActiveAccountId(targetAcc.id)
+            loadDialogsForAccount(targetAcc.id)
+          }
+        }
+      }
+
+      // 2. Ctrl + K / Ctrl + F -> Focus search input
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'f')) {
+        const searchInput = document.querySelector('input[placeholder*="Search"], input[placeholder*="جستجو"]') as HTMLInputElement
+        if (searchInput) {
+          e.preventDefault()
+          searchInput.focus()
+          searchInput.select()
+        }
+      }
+
+      // 3. Esc -> Close open modals
+      if (e.key === 'Escape') {
+        if (isSettingsOpen) setIsSettingsOpen(false)
+        if (isProxyModalOpen) setIsProxyModalOpen(false)
+        if (isAddAccountOpen) setIsAddAccountOpen(false)
+        if (isUnifiedInboxOpen) setIsUnifiedInboxOpen(false)
+        if (isMainMenuOpen) setIsMainMenuOpen(false)
+        if (isCloseConfirmOpen) setIsCloseConfirmOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [accounts, isSettingsOpen, isProxyModalOpen, isAddAccountOpen, isUnifiedInboxOpen, isMainMenuOpen, isCloseConfirmOpen])
 
   const loadDialogsForAccount = async (accountId: string) => {
     if (!window.guidegram?.getDialogs) return
@@ -730,6 +780,7 @@ export const App: React.FC = () => {
             copyCallbackData={config?.copyCallbackData ?? true}
             suppressLinkWarning={config?.suppressLinkWarning ?? false}
             autoDownload={config?.autoDownload}
+            chatFontSize={config?.chatFontSize || 14}
             onSendMessage={handleSendMessage}
             onSendMedia={handleSendMedia}
             onOpenDirectForward={(msg) => setForwardMessage(msg)}
