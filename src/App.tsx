@@ -988,7 +988,11 @@ export const App: React.FC = () => {
       {updateInfo && updateInfo.hasUpdate && (
         <UpdateBanner
           updateInfo={updateInfo}
-          onDismiss={() => setUpdateInfo(null)}
+          onDismiss={() => {
+            if (!updateInfo.isMandatory) {
+              setUpdateInfo(null)
+            }
+          }}
         />
       )}
     </div>

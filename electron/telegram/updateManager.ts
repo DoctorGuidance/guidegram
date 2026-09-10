@@ -39,6 +39,29 @@ export class UpdateManager {
         }
       }
 
+      // Security and Minor/Major version classification
+      const notesLower = (releaseData.body || '').toLowerCase()
+      const tagLower = tagName.toLowerCase()
+
+      const hasSecurityKeyword =
+        notesLower.includes('security') ||
+        notesLower.includes('critical') ||
+        notesLower.includes('mandatory') ||
+        notesLower.includes('vulnerability') ||
+        notesLower.includes('breaking') ||
+        tagLower.includes('sec') ||
+        tagLower.includes('crit')
+
+      const curParts = this.currentVersion.split('.').map((n) => parseInt(n, 10) || 0)
+      const latParts = latestVer.split('.').map((n) => parseInt(n, 10) || 0)
+      const isMajorBump = latParts[0] > curParts[0]
+      const isMinorBump = latParts[0] === curParts[0] && latParts[1] > curParts[1]
+
+      // Security updates or major/minor version bumps (e.g. 5.6.0 or 5.6) require mandatory download
+      const isMandatory = hasUpdate && (isMajorBump || isMinorBump || hasSecurityKeyword)
+      const isSecurityUpdate = hasUpdate && hasSecurityKeyword
+      const severity: 'critical' | 'normal' = isMandatory ? 'critical' : 'normal'
+
       const updateInfo: UpdateInfo = {
         currentVersion: this.currentVersion,
         latestVersion: latestVer,
@@ -46,6 +69,9 @@ export class UpdateManager {
         downloadUrl,
         publishedAt: releaseData.published_at,
         hasUpdate,
+        isMandatory,
+        isSecurityUpdate,
+        severity,
       }
 
       Logger.info(

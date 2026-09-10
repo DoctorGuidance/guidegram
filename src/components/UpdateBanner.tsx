@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Sparkles, Download, X, ArrowUpRight, AlertCircle, RefreshCw } from 'lucide-react'
+import { Sparkles, Download, X, ArrowUpRight, AlertCircle, RefreshCw, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { UpdateInfo, UpdateProgress } from '../types/telegram'
 
 interface UpdateBannerProps {
@@ -11,6 +11,9 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
   const [isUpdating, setIsUpdating] = useState(false)
   const [updateError, setUpdateError] = useState<string | null>(null)
   const [progress, setProgress] = useState<UpdateProgress | null>(null)
+
+  const isMandatory = !!updateInfo.isMandatory
+  const isSecurity = !!updateInfo.isSecurityUpdate
 
   useEffect(() => {
     if (!window.guidegram?.on) return
@@ -50,29 +53,62 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
   const formatMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-dark-900/95 border border-primary-500/40 rounded-3xl p-4 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom-5 duration-200 select-none">
+    <div
+      className={`fixed bottom-6 right-6 z-50 max-w-sm w-full bg-dark-900/95 rounded-3xl p-4 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom-5 duration-200 select-none border ${
+        isMandatory
+          ? 'border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)] ring-1 ring-amber-500/30'
+          : 'border-primary-500/40'
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-primary-600 to-accent-cyan flex items-center justify-center text-white shadow-glow shrink-0">
-            <Sparkles className="w-5 h-5" />
+          <div
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 ${
+              isMandatory
+                ? 'bg-gradient-to-tr from-amber-600 via-rose-600 to-orange-500 shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+                : 'bg-gradient-to-tr from-primary-600 to-accent-cyan shadow-glow'
+            }`}
+          >
+            {isSecurity ? (
+              <ShieldAlert className="w-5 h-5 text-white animate-pulse" />
+            ) : isMandatory ? (
+              <ShieldCheck className="w-5 h-5 text-white" />
+            ) : (
+              <Sparkles className="w-5 h-5" />
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-white">Guidegram v{updateInfo.latestVersion}</span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-accent-emerald/20 text-accent-emerald font-semibold border border-accent-emerald/30">
-                New
-              </span>
+              {isSecurity ? (
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30 uppercase tracking-wider">
+                  Security Update
+                </span>
+              ) : isMandatory ? (
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 uppercase tracking-wider">
+                  Required
+                </span>
+              ) : (
+                <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-accent-emerald/20 text-accent-emerald font-semibold border border-accent-emerald/30">
+                  New
+                </span>
+              )}
             </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">
-              An update is ready to install without touching your data.
+            <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
+              {isSecurity
+                ? 'Critical security patch. Installation is required to continue safely.'
+                : isMandatory
+                ? 'Major/minor protocol upgrade. Update is required to ensure compatibility.'
+                : 'An update is ready to install without touching your data.'}
             </p>
           </div>
         </div>
 
-        {!isUpdating && (
+        {!isUpdating && !isMandatory && (
           <button
             type="button"
             onClick={onDismiss}
+            title="Dismiss for this session"
             className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
@@ -84,7 +120,11 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
       {isUpdating && (
         <div className="mt-3 p-2.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-primary-300 font-semibold flex items-center gap-1.5">
+            <span
+              className={`font-semibold flex items-center gap-1.5 ${
+                isMandatory ? 'text-amber-300' : 'text-primary-300'
+              }`}
+            >
               <RefreshCw className="w-3 h-3 animate-spin text-accent-cyan" />
               {progress?.stage === 'extracting'
                 ? 'Extracting update files...'
@@ -101,7 +141,11 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
 
           <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-primary-500 to-accent-cyan transition-all duration-300 ease-out"
+              className={`h-full transition-all duration-300 ease-out ${
+                isMandatory
+                  ? 'bg-gradient-to-r from-amber-500 to-rose-500'
+                  : 'bg-gradient-to-r from-primary-500 to-accent-cyan'
+              }`}
               style={{ width: `${progress?.percent ?? 5}%` }}
             />
           </div>
@@ -137,7 +181,7 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
         </button>
 
         <div className="flex items-center gap-2">
-          {!isUpdating && (
+          {!isUpdating && !isMandatory && (
             <button
               type="button"
               onClick={onDismiss}
@@ -150,7 +194,11 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
             type="button"
             disabled={isUpdating}
             onClick={handleUpdate}
-            className="px-4 py-1.5 rounded-xl text-xs font-bold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white shadow-glow flex items-center gap-1.5 transition-all cursor-pointer"
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold disabled:opacity-50 text-white flex items-center gap-1.5 transition-all cursor-pointer ${
+              isMandatory
+                ? 'bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.35)]'
+                : 'bg-primary-600 hover:bg-primary-500 shadow-glow'
+            }`}
           >
             {isUpdating ? (
               <>
@@ -168,7 +216,7 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
             ) : (
               <>
                 <Download className="w-3.5 h-3.5" />
-                <span>Update Now</span>
+                <span>{isMandatory ? 'Update Now (Required)' : 'Update Now'}</span>
               </>
             )}
           </button>

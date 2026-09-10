@@ -268,6 +268,9 @@ export interface UpdateInfo {
   downloadUrl?: string
   publishedAt?: string
   hasUpdate: boolean
+  isMandatory?: boolean
+  isSecurityUpdate?: boolean
+  severity?: 'critical' | 'normal'
 }
 
 export interface AutoDownloadConfig {
