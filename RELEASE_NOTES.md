@@ -1,4 +1,4 @@
-# 🚀 Guidegram v1.6.0 — Official Telegram Desktop Parity & Infinite History Architecture
+# 🚀 Guidegram v1.6.1 — Robust SemVer Updater Engine & Ecosystem Polish
 
 > **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, Advanced Power Preferences, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
 
@@ -6,64 +6,50 @@
 
 <div align="center">
   <img src="resources/guidegram_logo_transparent.png" alt="Guidegram Logo" width="150" height="150" />
-  <h3>Guidegram v1.6.0</h3>
-  <p><strong>Official Telegram Desktop Parity • Infinite History Scroll • Deep Dialog Pagination • Tiered Update Enforcement</strong></p>
+  <h3>Guidegram v1.6.1</h3>
+  <p><strong>Robust SemVer Updater Engine • Automated Release Promotion • Attractiveness Hierarchy Documentation • Production Stability</strong></p>
 </div>
 
 ---
 
 ## 🚀 Key Highlights & Architectural Overview
 
-Guidegram v1.6.0 delivers full parity with the official **Telegram Desktop (TDesktop)** interface and protocol handling. This release addresses critical usability bottlenecks by introducing bidirectional infinite message history scrolling, deep dialog pagination for complete private chat visibility, an intelligent tiered update enforcement system, and comprehensive group statistics timeframe synchronization.
+Guidegram v1.6.1 is a targeted stability and engine hardening release following the milestone v1.6.0 release. It introduces an advanced SemVer-aware release detection mechanism that immunizes the in-app auto-updater against GitHub API timestamp anomalies, incorporates automated release flag promotion, and provides a comprehensive documentation overhaul reflecting user discovery priorities.
 
 ---
 
-## 📦 What's New & Feature Enhancements
+## 📦 What's New & Enhancements
 
-### 1. 📜 Infinite Chat History Scroll & Zero-Jitter Pagination
-- **Continuous Message Pagination**: Scrolling to the top of any chat automatically retrieves historical messages in 50-item batches via MTProto `offsetId` pagination.
-- **Scroll Jump Prevention**: Viewport scroll position is preserved seamlessly using height delta compensation (`newScrollHeight - prevScrollHeight + prevScrollTop`), allowing users to smoothly scroll back to the very first message in any conversation.
-- **Dynamic Loader**: Displays an elegant top loading indicator while historical messages are being fetched.
+### 1. 🛡️ Resilient SemVer-Driven Release Detection
+- **Multi-Level Version Parsing**: The in-app `updateManager.ts` engine now queries the complete roster of repository releases from GitHub API and deterministically sorts them in descending order using rigorous Semantic Versioning (`major.minor.patch`).
+- **Timestamp Race Immunity**: Eliminates dependency on GitHub's native `/releases/latest` endpoint, preventing scenarios where asynchronous parallel CI builds could cause older tags to temporarily shadow newer releases.
+- **Graceful Multi-Stage Fallback**: Retains automatic fallback to `/releases/latest` should the release array endpoint experience intermittent network throttling or proxy interruptions.
 
-### 2. 🗂️ Deep Dialog Loading & Infinite Chat List Scrolling
-- **Extended Initial Depth**: Increased initial dialogs batch to **350** items (previously 150), resolving the issue where active channels and supergroups crowded out older private chats (PVs).
-- **Infinite Scroll on Sidebar**: Scrolling near the bottom of the chat list automatically triggers chunked pagination using the timestamp of the oldest dialog (`offsetDate`), continuously populating the chat list with infinite scroll depth.
-- **Deduplication Engine**: Merges new dialog batches into the local session map without ID collisions or re-render flickering.
+### 2. 🤖 Automated Latest Release Promotion Pipeline
+- **GitHub Actions Release Hardener**: Added `ensure-latest-release.yml` workflow and enforced `make_latest: true` in the core release pipeline to guarantee that the primary repository endpoint is synchronized with the absolute latest stable release.
 
-### 3. 🛡️ Tiered Update Enforcement System
-- **Mandatory Protocol & Security Updates**: Automatically detects Major/Minor version bumps (e.g. `v1.6.0`) and security/critical tags in release notes. For mandatory releases, dismissal buttons are suppressed, enforcing an in-app required update banner to maintain protocol safety and stability.
-- **Session-Only Soft Dismissal**: Routine patch updates allow temporary dismissal for the active session, resurfacing upon the next application restart.
-- **Visual Alert System**: Amber/rose glowing border with pulsing `ShieldAlert` badge for critical updates.
-
-### 4. 📊 Group Statistics Timeframe Auto-Sync
-- **Default to Today**: Group stats now correctly default to **Today** (امروز) instead of an incomplete one-week window.
-- **Historical Periods Auto-Sync**: Switching between **Today**, **Yesterday**, **Past Week**, and **Past Month** dynamically checks if loaded history covers the timeframe and automatically queries MTProto server batches until the boundary timestamp is fully retrieved.
-- **Timestamp Precision**: Fixed a millisecond/second double-division bug in `accountManager.ts`, ensuring accurate server-side historical filtering.
-
-### 5. 🖥️ Official Telegram Desktop Interface Parity
-- **Main Menu Drawer**: Complete parity with official Telegram Desktop including user avatar, full display name, @username, and quick access navigation.
-- **My Profile Drawer**: Rich profile viewing including user biography, Telegram Star Gifts count, Data Center (DC) indicator, and Telegram Stars balance.
-- **Unified Settings**: Deep configuration for storage usage, cache purge, download directory picker, privacy and security settings, message font size scaling, and keyboard shortcuts guide.
+### 3. 📖 Product Discovery & Attractiveness Hierarchy
+- **Complete README Overhaul**: Restructured the project documentation around user value and attraction:
+  1. *Unlimited Multi-Account Dock* (Bypassing 3-account limit)
+  2. *Dedicated & Isolated Per-Account Proxies* (Zero ban risk)
+  3. *Hardware Anti-Fingerprinting & Device Identity Spoofing*
+  4. *100% Truly Portable & Self-Contained Architecture*
+  5. *Parallel Chunk Download Acceleration* (Up to 3x faster)
+  6. *Deep Group Statistics & Member Activity Intelligence* (Exclusive to Guidegram)
+  7. *Ghost Mode & Stealth Stories Viewer*
 
 ---
 
-## 🐛 Bug Fixes & Reliability Improvements
-- Sanitized all user-facing branding and mod references to native Guidegram branding.
-- Fixed message history cutoff that prevented viewing older messages in active groups.
-- Resolved private chat filtering limitation where only 1 DM was visible in busy accounts.
-- Fixed historical timestamp resolution bug in `getHistoricalMessages`.
-- Hardened single instance locking and breakaway updater launchers.
+## 🐛 Bug Fixes & Refinements
+- Fixed potential version misdetection in `fetchLatestRelease` when multiple release jobs finish closely.
+- Sanitized internal mod naming and branding across UI and documentation.
+- Retained full suite of v1.6.0 features including infinite history scroll, deep dialog pagination (350+ items), and group stats auto-sync.
 
 ---
 
-## 📊 Full Commit Log (v1.5.0...v1.6.0)
-- `bf2601d` - chore(branding): sanitize internal mod references to native Guidegram branding
-- `4011897` - docs(release): update official release notes for v1.6.0
-- `bc1a126` - chore(release): bump version to 1.6.0
-- `4031a31` - fix(stats): default group stats to today and auto-fetch historical periods
-- `b9d524e` - feat(chat): implement infinite history scroll and deep dialog pagination for desktop parity
-- `a4a9587` - feat(updater): implement tiered update enforcement with mandatory security and protocol upgrades
-- `7c1c70f` - feat(ui): complete Telegram Desktop parity for menu, profile, and settings
+## 📊 Full Commit Log (v1.6.0...v1.6.1)
+- `8933ccc` - docs(readme): reorder features by maximum user appeal led by unlimited multi-account dock
+- `de7ec51` - fix(updater): ensure robust semver release selection and promote v1.6.0 as latest
 
 ---
 
