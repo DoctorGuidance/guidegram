@@ -22,7 +22,9 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-// Enforce Windows Taskbar grouping
+// Enforce App Identity and Windows Taskbar grouping
+app.name = 'Guidegram'
+app.setName('Guidegram')
 app.setAppUserModelId('com.guidegram.desktop')
 
 // Enforce Single Instance Application Lock: prevent duplicate instances/windows
@@ -174,7 +176,7 @@ function createTray() {
 
   const trayIcon = getTrayIcon()
   tray = new Tray(trayIcon)
-  tray.setToolTip('Guidegram - Telegram Client')
+  tray.setToolTip('Guidegram')
 
   const contextMenu = Menu.buildFromTemplate([
     {
