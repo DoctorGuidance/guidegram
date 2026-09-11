@@ -38,6 +38,7 @@ Guidegram v1.6.2 introduces a multi-tier data protection shield in the Windows i
 ---
 
 ## 🐛 Bug Fixes & Refinements
+- Fixed Windows Taskbar icon hover tooltip displaying truncated description instead of clean app title "Guidegram".
 - Fixed an issue where installing into an existing installation directory could cause older uninstaller scripts to wipe the `data/` folder.
 - Verified and expanded Milestone 11 test suite with 15 passing assertions covering all installer shield macros.
 - Passed full test suite across all 17 milestones (Milestone 1 to 17).
@@ -45,8 +46,9 @@ Guidegram v1.6.2 introduces a multi-tier data protection shield in the Windows i
 ---
 
 ## 📊 Full Commit Log (v1.6.1...v1.6.2)
-- `feat(ui): highlight top 4 killer features on welcome screen`
-- `fix(installer): implement pre-install snapshot and zero-loss in-place upgrade shield`
+- `0c6fbee` - `fix(ui): enforce application title on windows taskbar hover and tray tooltip`
+- `59562e5` - `fix(installer): implement pre-install snapshot and zero-loss in-place upgrade shield`
+- `836c866` - `feat(ui): highlight top 4 killer features on welcome screen`
 
 ---
 
