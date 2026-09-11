@@ -25,7 +25,6 @@ assert(fs.existsSync(nshPath), 'resources/installer.nsh exists')
 
 const nshContent = fs.readFileSync(nshPath, 'utf8')
 assert(nshContent.includes('!macro customInit'), 'resources/installer.nsh defines customInit pre-init snapshot')
-assert(nshContent.includes('!macro setIsTryToKeepShortcuts'), 'resources/installer.nsh defines setIsTryToKeepShortcuts pre-uninstall snapshot')
 assert(nshContent.includes('!macro customInstall'), 'resources/installer.nsh defines customInstall post-extraction restoration')
 assert(nshContent.includes('!macro customRemoveFiles'), 'resources/installer.nsh defines customRemoveFiles macro')
 assert(!nshContent.includes('RMDir /r $INSTDIR'), 'resources/installer.nsh prevents dangerous RMDir /r $INSTDIR')

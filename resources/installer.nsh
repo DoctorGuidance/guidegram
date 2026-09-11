@@ -21,33 +21,6 @@
   ${EndIf}
 !macroend
 
-!undef setIsTryToKeepShortcuts
-!macro setIsTryToKeepShortcuts
-  ; CRITICAL IN-PLACE UPGRADE SHIELD:
-  ; Runs at the start of Section "install", right after user directory selection
-  ; and IMMEDIATELY BEFORE uninstallOldVersion executes!
-  ${If} ${FileExists} "$INSTDIR\data\config.json"
-    DetailPrint "Guidegram Data Shield: Existing data detected in $INSTDIR\data. Creating pre-upgrade snapshot..."
-    CreateDirectory "$TEMP\Guidegram_Data_Upgrade_Backup\data"
-    CreateDirectory "$TEMP\Guidegram_Data_Upgrade_Backup\data\sessions"
-    CopyFiles /SILENT "$INSTDIR\data\*.*" "$TEMP\Guidegram_Data_Upgrade_Backup\data\"
-    CopyFiles /SILENT "$INSTDIR\data\sessions\*.*" "$TEMP\Guidegram_Data_Upgrade_Backup\data\sessions\"
-
-    CreateDirectory "$APPDATA\Guidegram\safe_backup"
-    CreateDirectory "$APPDATA\Guidegram\safe_backup\sessions"
-    CopyFiles /SILENT "$INSTDIR\data\*.*" "$APPDATA\Guidegram\safe_backup\"
-    CopyFiles /SILENT "$INSTDIR\data\sessions\*.*" "$APPDATA\Guidegram\safe_backup\sessions\"
-  ${EndIf}
-
-  ; Retain original electron-builder shortcut preservation logic
-  StrCpy $isTryToKeepShortcuts "true"
-  !ifdef allowToChangeInstallationDirectory
-    ${ifNot} ${isUpdated}
-      StrCpy $isTryToKeepShortcuts "false"
-    ${endIf}
-  !endif
-!macroend
-
 !macro customInstall
   ; Runs during install after new files are extracted
   DetailPrint "Guidegram Data Shield: Verifying data preservation and restoring sessions..."
