@@ -6,7 +6,8 @@
   "directories": {
     "output": "release"
   },
-    "files": [
+  "files": [
+    "package.json",
     "dist",
     "dist-electron",
     "resources"

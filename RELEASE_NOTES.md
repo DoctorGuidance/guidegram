@@ -1,4 +1,4 @@
-# 🚀 Guidegram v1.6.1 — Robust SemVer Updater Engine & Ecosystem Polish
+# 🚀 Guidegram v1.6.2 — Zero-Loss In-Place Upgrade Shield & Welcome Screen Highlights
 
 > **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, Advanced Power Preferences, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
 
@@ -6,50 +6,47 @@
 
 <div align="center">
   <img src="resources/guidegram_logo_transparent.png" alt="Guidegram Logo" width="150" height="150" />
-  <h3>Guidegram v1.6.1</h3>
-  <p><strong>Robust SemVer Updater Engine • Automated Release Promotion • Attractiveness Hierarchy Documentation • Production Stability</strong></p>
+  <h3>Guidegram v1.6.2</h3>
+  <p><strong>Zero-Loss In-Place Upgrade Shield • Pre-Install Data Snapshots • Killer Feature Discovery • Packaging Integrity</strong></p>
 </div>
 
 ---
 
 ## 🚀 Key Highlights & Architectural Overview
 
-Guidegram v1.6.1 is a targeted stability and engine hardening release following the milestone v1.6.0 release. It introduces an advanced SemVer-aware release detection mechanism that immunizes the in-app auto-updater against GitHub API timestamp anomalies, incorporates automated release flag promotion, and provides a comprehensive documentation overhaul reflecting user discovery priorities.
+Guidegram v1.6.2 introduces a multi-tier data protection shield in the Windows installer engine. It guarantees 100% zero data loss when installing or upgrading into an existing directory, immunizing existing user accounts, sessions, and preferences against legacy uninstaller behaviors. Additionally, the first-run welcome screen highlights Guidegram's top killer features for immediate discovery.
 
 ---
 
 ## 📦 What's New & Enhancements
 
-### 1. 🛡️ Resilient SemVer-Driven Release Detection
-- **Multi-Level Version Parsing**: The in-app `updateManager.ts` engine now queries the complete roster of repository releases from GitHub API and deterministically sorts them in descending order using rigorous Semantic Versioning (`major.minor.patch`).
-- **Timestamp Race Immunity**: Eliminates dependency on GitHub's native `/releases/latest` endpoint, preventing scenarios where asynchronous parallel CI builds could cause older tags to temporarily shadow newer releases.
-- **Graceful Multi-Stage Fallback**: Retains automatic fallback to `/releases/latest` should the release array endpoint experience intermittent network throttling or proxy interruptions.
+### 1. 🛡️ Multi-Tier In-Place Upgrade Shield (`resources/installer.nsh`)
+- **Pre-Install Data Snapshot (`customInit` & `setIsTryToKeepShortcuts`)**: Before any legacy uninstaller or file extraction can run, the installer automatically detects existing `data/` and creates pre-flight snapshots in both `$TEMP` and `%APPDATA%\Guidegram\safe_backup`.
+- **Automatic Post-Extraction Restoration (`customInstall`)**: Once new application binaries are extracted, the installer inspects `$INSTDIR\data\config.json`. If missing or wiped by an older uninstaller version, all configs and session files are restored instantly from the snapshot.
+- **Surgical Uninstaller Protection (`customRemoveFiles`)**: Prevents recursive deletion of `$INSTDIR`. Only application binaries, dlls, and resources are uninstalled, leaving user sessions, caches, and accounts completely intact.
 
-### 2. 🤖 Automated Latest Release Promotion Pipeline
-- **GitHub Actions Release Hardener**: Added `ensure-latest-release.yml` workflow and enforced `make_latest: true` in the core release pipeline to guarantee that the primary repository endpoint is synchronized with the absolute latest stable release.
+### 2. 🌟 Welcome Screen Feature Showcase
+- **Top 4 Killer Features Highlighted**: The first-run onboarding screen prominently features:
+  1. *Unlimited Multi-Account Dock* (Bypass Telegram's 3-account limit)
+  2. *Dedicated Per-Account Proxies* (Isolated proxy routing for zero ban risk)
+  3. *Deep Group Statistics & Analytics* (Historical metrics exclusive to Guidegram)
+  4. *Hardware Anti-Fingerprinting Shield* (Hardware spoofing and stealth protection)
 
-### 3. 📖 Product Discovery & Attractiveness Hierarchy
-- **Complete README Overhaul**: Restructured the project documentation around user value and attraction:
-  1. *Unlimited Multi-Account Dock* (Bypassing 3-account limit)
-  2. *Dedicated & Isolated Per-Account Proxies* (Zero ban risk)
-  3. *Hardware Anti-Fingerprinting & Device Identity Spoofing*
-  4. *100% Truly Portable & Self-Contained Architecture*
-  5. *Parallel Chunk Download Acceleration* (Up to 3x faster)
-  6. *Deep Group Statistics & Member Activity Intelligence* (Exclusive to Guidegram)
-  7. *Ghost Mode & Stealth Stories Viewer*
+### 3. 📦 Packaging Configuration Polish
+- Added `package.json` to electron-builder files bundle for seamless asar integrity verification across all platforms.
 
 ---
 
 ## 🐛 Bug Fixes & Refinements
-- Fixed potential version misdetection in `fetchLatestRelease` when multiple release jobs finish closely.
-- Sanitized internal mod naming and branding across UI and documentation.
-- Retained full suite of v1.6.0 features including infinite history scroll, deep dialog pagination (350+ items), and group stats auto-sync.
+- Fixed an issue where installing into an existing installation directory could cause older uninstaller scripts to wipe the `data/` folder.
+- Verified and expanded Milestone 11 test suite with 15 passing assertions covering all installer shield macros.
+- Passed full test suite across all 17 milestones (Milestone 1 to 17).
 
 ---
 
-## 📊 Full Commit Log (v1.6.0...v1.6.1)
-- `8933ccc` - docs(readme): reorder features by maximum user appeal led by unlimited multi-account dock
-- `de7ec51` - fix(updater): ensure robust semver release selection and promote v1.6.0 as latest
+## 📊 Full Commit Log (v1.6.1...v1.6.2)
+- `feat(ui): highlight top 4 killer features on welcome screen`
+- `fix(installer): implement pre-install snapshot and zero-loss in-place upgrade shield`
 
 ---
 
