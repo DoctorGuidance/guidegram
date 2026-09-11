@@ -2,13 +2,14 @@ import React from 'react'
 import {
   Plus,
   Shield,
-  Forward,
-  FolderLock,
   Sparkles,
   Layers,
   Settings,
   ArrowRight,
   Lock,
+  ShieldCheck,
+  BarChart2,
+  Zap,
 } from 'lucide-react'
 import logoImg from '../assets/logo.png'
 
@@ -49,7 +50,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
         {/* Subtitle */}
         <p className="text-sm text-gray-400 max-w-lg mb-8 leading-relaxed">
-          The ultimate desktop Telegram client built for power users. Manage dozens or hundreds of accounts concurrently with dedicated per-account proxies, direct quote-free forwarding, and zero installation footprint.
+          The ultimate desktop Telegram client built for power users. Manage dozens or hundreds of accounts concurrently with dedicated per-account proxies, deep group analytics, and multi-worker downloads.
         </p>
 
         {/* Primary CTA */}
@@ -80,7 +81,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </button>
         </div>
 
-        {/* Bento Grid - 4 Feature Cards */}
+        {/* Bento Grid - 4 Killer Feature Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
           {/* Card 1 */}
           <div className="p-4 rounded-2xl bg-dark-900/80 border border-white/5 hover:border-primary-500/20 transition-all duration-200">
@@ -88,10 +89,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               <div className="p-2 rounded-xl bg-primary-600/10 text-primary-400 border border-primary-500/20">
                 <Layers className="w-4 h-4" />
               </div>
-              <h3 className="text-xs font-bold text-gray-100">No 3-Account Limit</h3>
+              <h3 className="text-xs font-bold text-gray-100">Unlimited Multi-Account</h3>
             </div>
             <p className="text-[11px] text-gray-400 leading-normal">
-              Log in to 10, 50, or 100+ accounts concurrently without paying for Premium.
+              Run 10, 50, or 100+ accounts concurrently without paying for Telegram Premium.
             </p>
           </div>
 
@@ -99,12 +100,12 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div className="p-4 rounded-2xl bg-dark-900/80 border border-white/5 hover:border-accent-cyan/20 transition-all duration-200">
             <div className="flex items-center gap-2.5 mb-1.5">
               <div className="p-2 rounded-xl bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20">
-                <Shield className="w-4 h-4" />
+                <ShieldCheck className="w-4 h-4" />
               </div>
-              <h3 className="text-xs font-bold text-gray-100">Per-Account Proxies</h3>
+              <h3 className="text-xs font-bold text-gray-100">Anti-Ban Hardware Shield</h3>
             </div>
             <p className="text-[11px] text-gray-400 leading-normal">
-              Assign dedicated SOCKS5 or MTProto proxies to each account to isolate network traffic.
+              Dedicated per-account proxies coupled with cryptographic hardware fingerprint masking.
             </p>
           </div>
 
@@ -112,12 +113,12 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div className="p-4 rounded-2xl bg-dark-900/80 border border-white/5 hover:border-accent-violet/20 transition-all duration-200">
             <div className="flex items-center gap-2.5 mb-1.5">
               <div className="p-2 rounded-xl bg-accent-violet/10 text-accent-violet border border-accent-violet/20">
-                <Forward className="w-4 h-4" />
+                <BarChart2 className="w-4 h-4" />
               </div>
-              <h3 className="text-xs font-bold text-gray-100">Direct Forward (No Quote)</h3>
+              <h3 className="text-xs font-bold text-gray-100">Deep Group Intelligence</h3>
             </div>
             <p className="text-[11px] text-gray-400 leading-normal">
-              Forward messages silently with original author and channel headers completely removed.
+              Real-time active member leaderboards, 24-hour heatmaps, and message analytics.
             </p>
           </div>
 
@@ -125,12 +126,12 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div className="p-4 rounded-2xl bg-dark-900/80 border border-white/5 hover:border-accent-emerald/20 transition-all duration-200">
             <div className="flex items-center gap-2.5 mb-1.5">
               <div className="p-2 rounded-xl bg-accent-emerald/10 text-accent-emerald border border-accent-emerald/20">
-                <FolderLock className="w-4 h-4" />
+                <Zap className="w-4 h-4" />
               </div>
-              <h3 className="text-xs font-bold text-gray-100">100% Portable Storage</h3>
+              <h3 className="text-xs font-bold text-gray-100">Turbo Parallel Downloads</h3>
             </div>
             <p className="text-[11px] text-gray-400 leading-normal">
-              All credentials and databases reside in <code className="text-gray-300 font-mono">./data/</code>. Zero registry clutter.
+              Up to 3x faster media streaming and large file transfers via 4 concurrent MTProto workers.
             </p>
           </div>
         </div>
