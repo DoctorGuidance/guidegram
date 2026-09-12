@@ -362,7 +362,7 @@ if (-not $copySuccess) {
 # 5. Write success marker for What's New celebration modal
 if ($copySuccess) {
     $markerJson = '{"status":"success","version":"' + '${resolvedTargetVer}' + '","timestamp":' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + '}'
-    Set-Content -Path $markerFile -Value $markerJson -Encoding UTF8 -Force
+    [System.IO.File]::WriteAllText($markerFile, $markerJson, (New-Object System.Text.UTF8Encoding($false)))
     Add-Content -Path $logFile -Value "Update completion marker generated successfully."
 }
 

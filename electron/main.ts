@@ -279,7 +279,7 @@ function createWindow() {
     try {
       const updateMarkerPath = path.join(portableDataDir, 'temp', 'update_completed.json')
       if (fs.existsSync(updateMarkerPath)) {
-        const markerRaw = fs.readFileSync(updateMarkerPath, 'utf-8')
+        const markerRaw = fs.readFileSync(updateMarkerPath, 'utf-8').replace(/^\uFEFF/, '').trim()
         const marker = JSON.parse(markerRaw)
         fs.unlinkSync(updateMarkerPath)
         Logger.info(`[Main] Detected fresh update to v${marker.version || app.getVersion()}. Notifying renderer...`)
