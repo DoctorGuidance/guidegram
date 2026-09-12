@@ -35,6 +35,10 @@ export const App: React.FC = () => {
   const [accounts, setAccounts] = useState<AccountInfo[]>([])
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [dialogsByAccount, setDialogsByAccount] = useState<Record<string, DialogItem[]>>({})
+  const dialogsByAccountRef = useRef<Record<string, DialogItem[]>>({})
+  useEffect(() => {
+    dialogsByAccountRef.current = dialogsByAccount
+  }, [dialogsByAccount])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [messagesByChat, setMessagesByChat] = useState<Record<string, MessageItem[]>>({})
 
@@ -164,6 +168,7 @@ export const App: React.FC = () => {
     let unsubscribeUpdate: (() => void) | undefined
     let unsubscribeAccountUpdated: (() => void) | undefined
     let unsubscribeAccountsLoaded: (() => void) | undefined
+    let unsubscribeMute: (() => void) | undefined
 
     if (window.guidegram?.on) {
       unsubscribeMsg = window.guidegram.on('telegram:new-message', (payload: any) => {
@@ -172,7 +177,9 @@ export const App: React.FC = () => {
           ...prev,
           [chatId]: [...(prev[chatId] || []), message],
         }))
-        if (!message?.isOutgoing && configRef.current?.soundEnabled !== false) {
+        const targetDialog = dialogsByAccountRef.current[accountId]?.find((d) => d.id === chatId)
+        const isChatMuted = targetDialog?.isMuted ?? false
+        if (!message?.isOutgoing && !isChatMuted && configRef.current?.soundEnabled !== false) {
           playNotificationSound()
         }
         if (chatId !== activeChatId) {
@@ -243,11 +250,27 @@ export const App: React.FC = () => {
         }
       )
 
+      // Real-time chat mute/unmute sync listener
+      unsubscribeMute = window.guidegram.on(
+        'telegram:chat-mute-toggled',
+        (payload: { accountId: string; chatId: string; isMuted: boolean }) => {
+          const { accountId, chatId, isMuted } = payload
+          setDialogsByAccount((prev) => {
+            const list = prev[accountId] || []
+            return {
+              ...prev,
+              [accountId]: list.map((d) => (d.id === chatId ? { ...d, isMuted } : d)),
+            }
+          })
+        }
+      )
+
       return () => {
         unsubscribeMsg?.()
         unsubscribeUpdate?.()
         unsubscribeAccountUpdated?.()
         unsubscribeAccountsLoaded?.()
+        unsubscribeMute?.()
         unsubscribeUpdateInstalled?.()
       }
     }

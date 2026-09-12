@@ -1267,6 +1267,9 @@ export const ChatViewport: React.FC<ChatViewportProps> = ({
     const ok = await window.guidegram.toggleChatNotifications(chat.accountId, chat.id, nextMuted)
     if (ok) {
       setIsMuted(nextMuted)
+      if (chat) {
+        chat.isMuted = nextMuted
+      }
       showToast(nextMuted ? 'Notifications muted' : 'Notifications unmuted')
     }
   }

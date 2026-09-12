@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import zlib from 'zlib'
 import { app, BrowserWindow, dialog } from 'electron'
-import { TelegramClient, Api, sessions, errors, helpers } from 'telegram'
+import { TelegramClient, Api, sessions, errors, helpers, utils } from 'telegram'
 import { NewMessage } from 'telegram/events/index.js'
 import QRCode from 'qrcode'
 import { SessionStore } from './sessionStore'
@@ -914,8 +914,14 @@ export class AccountManager {
         }
       }
       // In Telegram, broadcast channels without explicit un-muting are muted by default
-      if (!isMuted && isBroadcast && (!notifySettings || notifySettings.muteUntil === undefined)) {
-        isMuted = true
+      if (!isMuted && isBroadcast) {
+        const hasExplicitUnmute = notifySettings && (
+          notifySettings.silent === false ||
+          (notifySettings.muteUntil !== null && notifySettings.muteUntil !== undefined && Number(notifySettings.muteUntil) === 0)
+        )
+        if (!hasExplicitUnmute) {
+          isMuted = true
+        }
       }
 
       const unreadCount = d.unreadCount || 0
@@ -2154,8 +2160,14 @@ export class AccountManager {
           }
         }
       }
-      if (!isMuted && isChannel && !isGroup && (!notifySettings || notifySettings.muteUntil === undefined)) {
-        isMuted = true
+      if (!isMuted && isChannel && !isGroup) {
+        const hasExplicitUnmute = notifySettings && (
+          notifySettings.silent === false ||
+          (notifySettings.muteUntil !== null && notifySettings.muteUntil !== undefined && Number(notifySettings.muteUntil) === 0)
+        )
+        if (!hasExplicitUnmute) {
+          isMuted = true
+        }
       }
 
       // Available reactions for this channel / chat
@@ -2242,6 +2254,11 @@ export class AccountManager {
           }),
         })
       )
+      this.onEventCallback?.('telegram:chat-mute-toggled', {
+        accountId,
+        chatId,
+        isMuted: mute,
+      })
       return true
     } catch (err: any) {
       Logger.warn(`[AccountManager] toggleChatNotifications error for ${chatId}:`, err)
@@ -2508,6 +2525,50 @@ export class AccountManager {
    * Event listener for incoming messages
    */
   private setupEventListeners(accountId: string, client: TelegramClient): void {
+    // Listen for MTProto UpdateNotifySettings (when chat mute status changes from other devices/sessions)
+    client.addEventHandler(async (update: any) => {
+      try {
+        const isNotifyUpdate =
+          update instanceof Api.UpdateNotifySettings ||
+          update?.className === 'UpdateNotifySettings' ||
+          update?.originalUpdate instanceof Api.UpdateNotifySettings ||
+          update?.originalUpdate?.className === 'UpdateNotifySettings'
+
+        if (isNotifyUpdate) {
+          const u = update instanceof Api.UpdateNotifySettings ? update : (update.originalUpdate || update)
+          const peer = u.peer
+          let peerId: string | undefined
+          if (peer) {
+            const rawPeer = peer.peer || peer
+            try {
+              peerId = utils.getPeerId(rawPeer)
+            } catch (_) {
+              if (rawPeer?.channelId) peerId = `-100${rawPeer.channelId.toString()}`
+              else if (rawPeer?.chatId) peerId = `-${rawPeer.chatId.toString()}`
+              else if (rawPeer?.userId) peerId = rawPeer.userId.toString()
+            }
+          }
+          if (peerId) {
+            const s = u.notifySettings
+            const nowSec = Math.floor(Date.now() / 1000)
+            let isMuted = false
+            if (s) {
+              if (s.silent === true) isMuted = true
+              else if (s.muteUntil !== undefined && s.muteUntil !== null) {
+                const muteVal = Number(s.muteUntil)
+                if (muteVal > nowSec || muteVal === 2147483647) isMuted = true
+              }
+            }
+            this.onEventCallback?.('telegram:chat-mute-toggled', {
+              accountId,
+              chatId: peerId,
+              isMuted,
+            })
+          }
+        }
+      } catch (_) {}
+    })
+
     client.addEventHandler(async (event: any) => {
       const msg = event.message
       if (!msg) return
