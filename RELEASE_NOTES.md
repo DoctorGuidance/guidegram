@@ -1,4 +1,4 @@
-# 🚀 Guidegram v1.6.2 — Zero-Loss In-Place Upgrade Shield & Welcome Screen Highlights
+# 🚀 Guidegram v1.7.0 — Lightning Atomic Updater & Brand Refresh
 
 > **Next-Generation Portable Desktop Telegram Client** with Unlimited Multi-Account, Dedicated Per-Account Proxies, Advanced Power Preferences, Hardware Anti-Fingerprinting, and Telegram Premium MTProto Capabilities.
 
@@ -6,52 +6,56 @@
 
 <div align="center">
   <img src="resources/guidegram_logo_transparent.png" alt="Guidegram Logo" width="150" height="150" />
-  <h3>Guidegram v1.6.2</h3>
-  <p><strong>Zero-Loss In-Place Upgrade Shield • Pre-Install Data Snapshots • Killer Feature Discovery • Packaging Integrity</strong></p>
+  <h3>Guidegram v1.7.0</h3>
+  <p><strong>Lightning Atomic Updater • What's New Celebration • Brand Refresh • Resilient QR Auth • Zero Data Loss</strong></p>
 </div>
 
 ---
 
 ## 🚀 Key Highlights & Architectural Overview
 
-Guidegram v1.6.2 introduces a multi-tier data protection shield in the Windows installer engine. It guarantees 100% zero data loss when installing or upgrading into an existing directory, immunizing existing user accounts, sessions, and preferences against legacy uninstaller behaviors. Additionally, the first-run welcome screen highlights Guidegram's top killer features for immediate discovery.
+Guidegram v1.7.0 introduces a state-of-the-art **Lightning Atomic Updater** system alongside a celebratory post-update onboarding modal, refreshed brand identity aligned with our modern mint-teal color palette, and rock-solid QR authentication resilience.
 
 ---
 
 ## 📦 What's New & Enhancements
 
-### 1. 🛡️ Multi-Tier In-Place Upgrade Shield (`resources/installer.nsh`)
-- **Pre-Install Data Snapshot (`customInit` & `setIsTryToKeepShortcuts`)**: Before any legacy uninstaller or file extraction can run, the installer automatically detects existing `data/` and creates pre-flight snapshots in both `$TEMP` and `%APPDATA%\Guidegram\safe_backup`.
-- **Automatic Post-Extraction Restoration (`customInstall`)**: Once new application binaries are extracted, the installer inspects `$INSTDIR\data\config.json`. If missing or wiped by an older uninstaller version, all configs and session files are restored instantly from the snapshot.
-- **Surgical Uninstaller Protection (`customRemoveFiles`)**: Prevents recursive deletion of `$INSTDIR`. Only application binaries, dlls, and resources are uninstalled, leaving user sessions, caches, and accounts completely intact.
+### 1. ⚡ Lightning Atomic Updater & Post-Update Celebration
+- **Atomic In-Place Update Execution**: Streamlined updater engine with pre-flight sanitization, automated background binary verification, and seamless restart execution.
+- **"What's New" Celebration Modal**: Beautiful, native celebration dialog welcoming users after each successful update, highlighting fresh capabilities and release highlights.
+- **Resilient Update Markers**: Hardened UTF-8 marker persistence with BOM protection and robust schema validation across process lifecycles.
 
-### 2. 🌟 Welcome Screen Feature Showcase
-- **Top 4 Killer Features Highlighted**: The first-run onboarding screen prominently features:
-  1. *Unlimited Multi-Account Dock* (Bypass Telegram's 3-account limit)
-  2. *Dedicated Per-Account Proxies* (Isolated proxy routing for zero ban risk)
-  3. *Deep Group Statistics & Analytics* (Historical metrics exclusive to Guidegram)
-  4. *Hardware Anti-Fingerprinting Shield* (Hardware spoofing and stealth protection)
+### 2. 🎨 Brand Identity & Theme Refresh
+- **Mint-Teal Brand Palette Alignment**: Complete UI color palette harmonization reflecting the official Guidegram logo mint-teal accents.
+- **Enhanced Visual Hierarchy**: Refined guest drawer menus, eliminated legacy mock badges, and elevated high-contrast action buttons for optimal legibility.
 
-### 3. 📦 Packaging Configuration Polish
-- Added `package.json` to electron-builder files bundle for seamless asar integrity verification across all platforms.
+### 3. 🔐 Hardened Authentication & Channel Sync
+- **Resilient QR Authentication**: Enhanced MTProto QR code login flow with automatic refresh cycles and timeout handling.
+- **Broadcast Channel Notification Sync**: Resolved edge-cases in broadcast channel mute state detection and synchronized server-side notify settings accurately.
 
----
-
-## 🐛 Bug Fixes & Refinements
-- Fixed Windows Taskbar icon hover tooltip displaying truncated description instead of clean app title "Guidegram".
-- Fixed an issue where installing into an existing installation directory could cause older uninstaller scripts to wipe the `data/` folder.
-- Verified and expanded Milestone 11 test suite with 15 passing assertions covering all installer shield macros.
-- Passed full test suite across all 17 milestones (Milestone 1 to 17).
+### 4. 🌐 Organization Infrastructure Transition
+- Fully updated repository endpoints, release assets, and telemetry references to the official `guidegram` GitHub organization.
 
 ---
 
-## 📊 Full Commit Log (v1.6.1...v1.6.2)
-- `0c6fbee` - `fix(ui): enforce application title on windows taskbar hover and tray tooltip`
-- `59562e5` - `fix(installer): implement pre-install snapshot and zero-loss in-place upgrade shield`
-- `836c866` - `feat(ui): highlight top 4 killer features on welcome screen`
+## 🐛 Bug Fixes & Stability Improvements
+- **fix(notifications)**: Corrected broadcast channel mute state detection and synchronized server-side notify settings accurately.
+- **fix(updater)**: Sanitized update marker parsing to handle clean UTF-8 encoding without BOM artefacts.
+- **fix(ui)**: Cleaned up guest drawer menu hierarchy and eliminated legacy mock badges.
+- **refactor**: Updated repository URLs and download links to point to the `guidegram` organization.
+
+---
+
+## 📊 Full Commit Log (v1.6.2...v1.7.0)
+- `154acff` - `refactor: update repository links and release owner to guidegram organization`
+- `8e18658` - `fix(notifications): correct broadcast channel mute detection and notify settings sync`
+- `f338f30` - `fix(updater): sanitize update marker parsing and UTF-8 encoding without BOM`
+- `ac80265` - `feat(updater): implement lightning atomic updater, what's new celebration modal, and resilient QR auth`
+- `ea8ef19` - `fix(ui): eliminate mock badges and refine guest drawer menu hierarchy`
+- `39056de` - `feat(ui): align brand colors with logo mint-teal palette and enhance connect button contrast`
 
 ---
 
 <div align="center">
-  <p>Crafted with precision by <strong>DoctorGuidance</strong></p>
+  <p>Crafted with precision by <strong>DoctorGuidance</strong> & the <strong>Guidegram Team</strong></p>
 </div>
