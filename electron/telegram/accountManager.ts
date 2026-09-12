@@ -592,6 +592,10 @@ export class AccountManager {
 
       return payload
     } catch (err: any) {
+      if (qrState.cancelled) {
+        Logger.info('[AccountManager] startQrAuth cancelled during initiation, suppressing error.')
+        return { url: '', qrDataUrl: '', expires: 0 }
+      }
       Logger.error('[AccountManager] startQrAuth failed:', err)
       if (this.pendingQrAuth === qrState) {
         this.pendingQrAuth = undefined

@@ -274,6 +274,20 @@ function createWindow() {
 
   mainWindow.webContents.on('did-finish-load', () => {
     Logger.info('[Renderer] Main HTML content loaded successfully.')
+
+    // Check if an update was just applied
+    try {
+      const updateMarkerPath = path.join(portableDataDir, 'temp', 'update_completed.json')
+      if (fs.existsSync(updateMarkerPath)) {
+        const markerRaw = fs.readFileSync(updateMarkerPath, 'utf-8')
+        const marker = JSON.parse(markerRaw)
+        fs.unlinkSync(updateMarkerPath)
+        Logger.info(`[Main] Detected fresh update to v${marker.version || app.getVersion()}. Notifying renderer...`)
+        mainWindow?.webContents.send('app:update-installed', marker)
+      }
+    } catch (markerErr) {
+      Logger.warn('[Main] Error reading update marker:', markerErr)
+    }
   })
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
@@ -758,11 +772,11 @@ function setupIpcHandlers() {
     return updateManager.checkForUpdates(activeProxy)
   })
 
-  ipcMain.handle('system:install-update', async (_event, { downloadUrl }: { downloadUrl: string }) => {
+  ipcMain.handle('system:install-update', async (_event, { downloadUrl, version }: { downloadUrl: string; version?: string }) => {
     const appDir = isDev
       ? path.resolve(__dirname, '..')
       : path.dirname(app.getPath('exe'))
-    return updateManager.performPortableUpdate(downloadUrl, appDir, portableDataDir, (progress) => {
+    return updateManager.performPortableUpdate(downloadUrl, appDir, portableDataDir, version, (progress) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('app:update-progress', progress)
       }
@@ -810,6 +824,10 @@ function setupIpcHandlers() {
     try {
       return await accountManager.startQrAuth(proxy)
     } catch (err: any) {
+      if (err?.message?.includes('CANCEL') || err?.message?.includes('disconnect')) {
+        Logger.info('[IPC] startQrAuth cancelled or disconnected, returning empty token payload.')
+        return { url: '', qrDataUrl: '', expires: 0 }
+      }
       Logger.error('[IPC] startQrAuth failed:', err)
       throw err
     }

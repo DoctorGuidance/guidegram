@@ -88,10 +88,17 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
     try {
       const proxy = customProxy !== undefined ? customProxy : getProxyConfig()
       const payload = await window.guidegram.startQrAuth(proxy)
-      setQrPayload(payload)
-      setQrState('qr')
+      if (payload && payload.qrDataUrl) {
+        setQrPayload(payload)
+        setQrState('qr')
+      }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to initialize QR login. Please check connection or proxy.')
+      const msg = err?.message || ''
+      if (msg.includes('reply was never sent') || msg.includes('CANCEL') || msg.includes('disconnected')) {
+        // Race condition / aborted previous request; ignore spurious error
+        return
+      }
+      setErrorMessage(msg || 'Failed to initialize QR login. Please check connection or proxy.')
     }
   }, [getProxyConfig])
 
@@ -110,6 +117,9 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
     },
     [onAccountAdded, onClose]
   )
+
+  const handleSuccessRef = useRef(handleSuccess)
+  handleSuccessRef.current = handleSuccess
 
   // Lifecycle & IPC Event Subscriptions for QR Login
   useEffect(() => {
@@ -144,7 +154,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
     const unsubSuccess = window.guidegram.on(
       'telegram:qr-success',
       ({ account }: { account: AccountInfo }) => {
-        handleSuccess(account)
+        handleSuccessRef.current(account)
       }
     )
 
@@ -164,7 +174,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
       unsubError()
       window.guidegram.cancelQrAuth().catch(() => {})
     }
-  }, [isOpen, loginMethod, handleSuccess])
+  }, [isOpen, loginMethod])
 
   // 2-minute (120s) countdown timer for QR session
   useEffect(() => {

@@ -16,6 +16,7 @@ import { ContactsModal } from './components/ContactsModal'
 import { CreateChatModal } from './components/CreateChatModal'
 import { CloseConfirmModal } from './components/CloseConfirmModal'
 import { UpdateBanner } from './components/UpdateBanner'
+import { WhatsNewModal } from './components/WhatsNewModal'
 import {
   AccountInfo,
   DialogItem,
@@ -93,11 +94,24 @@ export const App: React.FC = () => {
     }
   }, [isResizingSidebar, sidebarWidth])
 
-  // Auto-Update State
+  // Auto-Update & What's New State
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [whatsNewVersion, setWhatsNewVersion] = useState<string | null>(null)
 
   // Initial Data Load
   useEffect(() => {
+    const compareSemver = (a: string, b: string): number => {
+      const pa = a.split('.').map((n) => parseInt(n, 10) || 0)
+      const pb = b.split('.').map((n) => parseInt(n, 10) || 0)
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const na = pa[i] || 0
+        const nb = pb[i] || 0
+        if (na > nb) return 1
+        if (na < nb) return -1
+      }
+      return 0
+    }
+
     const initApp = async () => {
       try {
         if (window.guidegram) {
@@ -117,6 +131,17 @@ export const App: React.FC = () => {
             setConfig(cfg)
             setGhostMode(cfg.ghostMode || false)
           }
+
+          // Check if newly updated to show What's New celebration
+          try {
+            const currentVer = (await window.guidegram.getAppVersion?.()) || '1.6.2'
+            const lastSeenKey = 'guidegram_last_seen_version'
+            const lastSeenVer = localStorage.getItem(lastSeenKey)
+            if (lastSeenVer && compareSemver(currentVer, lastSeenVer) > 0) {
+              setWhatsNewVersion(currentVer)
+            }
+            localStorage.setItem(lastSeenKey, currentVer)
+          } catch (_) {}
         }
       } catch (err) {
         console.error('App init error:', err)
@@ -209,13 +234,22 @@ export const App: React.FC = () => {
       unsubscribeUpdate = window.guidegram.on('app:update-available', (info: UpdateInfo) => {
         setUpdateInfo(info)
       })
-    }
 
-    return () => {
-      unsubscribeMsg?.()
-      unsubscribeUpdate?.()
-      unsubscribeAccountUpdated?.()
-      unsubscribeAccountsLoaded?.()
+      // Update completion celebration listener
+      const unsubscribeUpdateInstalled = window.guidegram.on(
+        'app:update-installed',
+        (marker: { version: string }) => {
+          setWhatsNewVersion(marker?.version || '1.6.2')
+        }
+      )
+
+      return () => {
+        unsubscribeMsg?.()
+        unsubscribeUpdate?.()
+        unsubscribeAccountUpdated?.()
+        unsubscribeAccountsLoaded?.()
+        unsubscribeUpdateInstalled?.()
+      }
     }
   }, [])
 
@@ -1059,6 +1093,12 @@ export const App: React.FC = () => {
         isOpen={isCloseConfirmOpen}
         onClose={() => setIsCloseConfirmOpen(false)}
         onConfirm={handleConfirmClose}
+      />
+
+      <WhatsNewModal
+        isOpen={!!whatsNewVersion}
+        version={whatsNewVersion || '1.6.2'}
+        onClose={() => setWhatsNewVersion(null)}
       />
 
       {updateInfo && updateInfo.hasUpdate && (

@@ -282,8 +282,8 @@ const guidegramAPI = {
     ipcRenderer.invoke('app:get-version'),
   checkForUpdates: (): Promise<UpdateInfo | null> =>
     ipcRenderer.invoke('system:check-for-updates'),
-  installUpdate: (downloadUrl: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke('system:install-update', { downloadUrl }),
+  installUpdate: (downloadUrl: string, version?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('system:install-update', { downloadUrl, version }),
 
   // Logging & Diagnostics
   getLogs: (maxLines?: number) => ipcRenderer.invoke('system:get-logs', { maxLines }),

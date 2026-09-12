@@ -38,7 +38,10 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
 
     try {
       if (window.guidegram?.installUpdate) {
-        const res = await window.guidegram.installUpdate(updateInfo.downloadUrl)
+        const res = await window.guidegram.installUpdate(
+          updateInfo.downloadUrl,
+          updateInfo.latestVersion
+        )
         if (!res.success) {
           setUpdateError(res.error || 'Failed to apply update.')
           setIsUpdating(false)
