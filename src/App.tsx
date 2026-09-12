@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { AccountDock } from './components/AccountDock'
@@ -623,6 +623,15 @@ export const App: React.FC = () => {
     await window.guidegram?.updateConfig({ ghostMode: next })
   }
 
+  const handleToggleNightMode = async () => {
+    const isNight = config?.theme !== 'light'
+    const nextTheme = isNight ? 'light' : 'dark'
+    if (config) {
+      setConfig({ ...config, theme: nextTheme })
+    }
+    await window.guidegram?.updateConfig({ theme: nextTheme })
+  }
+
   const handleAccountAdded = (newAccount: AccountInfo) => {
     setAccounts((prev) => {
       const exists = prev.some((a) => a.id === newAccount.id)
@@ -650,18 +659,36 @@ export const App: React.FC = () => {
   const currentChat = currentDialogs.find((d) => d.id === activeChatId) || null
   const currentMessages = (activeChatId && messagesByChat[activeChatId]) || []
 
+  // Compute archived unread count
+  const archivedUnreadCount = useMemo(() => {
+    return currentDialogs
+      .filter((d) => d.folderId === 1 || (d as any).archived)
+      .reduce((acc, d) => acc + (d.unreadCount || 0), 0)
+  }, [currentDialogs])
+
+  // Compute unread counts per account for multi-account switcher
+  const unreadCountsByAccount = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const acc of accounts) {
+      const dList = dialogsByAccount[acc.id] || []
+      map[acc.id] = dList.reduce((sum, d) => sum + (d.unreadCount || 0), 0)
+    }
+    return map
+  }, [accounts, dialogsByAccount])
+
   // Compute unread counts for tabs
   const unreadCounts: Record<TabCategory, number> = {
-    all: currentDialogs.reduce((acc, d) => acc + d.unreadCount, 0),
-    users: currentDialogs.filter((d) => d.isUser).reduce((acc, d) => acc + d.unreadCount, 0),
+    all: currentDialogs.filter((d) => d.folderId !== 1 && !(d as any).archived).reduce((acc, d) => acc + d.unreadCount, 0),
+    users: currentDialogs.filter((d) => d.isUser && d.folderId !== 1 && !(d as any).archived).reduce((acc, d) => acc + d.unreadCount, 0),
     groups: currentDialogs
-      .filter((d) => d.isGroup || (d.isChannel && !(d.isBroadcast ?? !d.isGroup)))
+      .filter((d) => (d.isGroup || (d.isChannel && !(d.isBroadcast ?? !d.isGroup))) && d.folderId !== 1 && !(d as any).archived)
       .reduce((acc, d) => acc + d.unreadCount, 0),
     channels: currentDialogs
-      .filter((d) => d.isBroadcast ?? (d.isChannel && !d.isGroup))
+      .filter((d) => (d.isBroadcast ?? (d.isChannel && !d.isGroup)) && d.folderId !== 1 && !(d as any).archived)
       .reduce((acc, d) => acc + d.unreadCount, 0),
-    bots: currentDialogs.filter((d) => d.isBot).reduce((acc, d) => acc + d.unreadCount, 0),
-    unread: currentDialogs.filter((d) => d.unreadCount > 0).length,
+    bots: currentDialogs.filter((d) => d.isBot && d.folderId !== 1 && !(d as any).archived).reduce((acc, d) => acc + d.unreadCount, 0),
+    unread: currentDialogs.filter((d) => d.unreadCount > 0 && d.folderId !== 1 && !(d as any).archived).length,
+    archived: archivedUnreadCount,
   }
 
   // Cloud folders unread counts
@@ -960,6 +987,10 @@ export const App: React.FC = () => {
           setIsMainMenuOpen(false)
           setActiveTab('archived' as any)
         }}
+        archivedUnreadCount={archivedUnreadCount}
+        unreadCountsByAccount={unreadCountsByAccount}
+        isNightMode={config?.theme !== 'light'}
+        onToggleNightMode={handleToggleNightMode}
       />
 
       {/* Modals & Slide-over Drawers */}

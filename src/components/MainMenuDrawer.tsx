@@ -23,6 +23,7 @@ import { AccountInfo } from '../types/telegram'
 import { Avatar } from './Avatar'
 import { StarGiftsModal } from './StarGiftsModal'
 import { ActiveSessionsModal } from './ActiveSessionsModal'
+import logoImg from '../assets/logo.png'
 
 interface MainMenuDrawerProps {
   isOpen: boolean
@@ -64,7 +65,7 @@ export const MainMenuDrawer: React.FC<MainMenuDrawerProps> = ({
   onOpenNewChannel,
   onOpenContacts,
   onOpenCalls,
-  archivedUnreadCount = 17,
+  archivedUnreadCount = 0,
   unreadCountsByAccount = {},
   isNightMode = true,
   onToggleNightMode,
@@ -106,7 +107,7 @@ export const MainMenuDrawer: React.FC<MainMenuDrawerProps> = ({
             <X className="w-4 h-4" />
           </button>
 
-          {activeAccount && (
+          {activeAccount ? (
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
                 <Avatar
@@ -154,11 +155,28 @@ export const MainMenuDrawer: React.FC<MainMenuDrawerProps> = ({
                 </button>
               </div>
             </div>
+          ) : (
+            <div className="flex items-center gap-3 pr-8 py-1">
+              <div className="w-10 h-10 rounded-xl overflow-hidden shadow-glow flex items-center justify-center border border-accent-cyan/30 bg-dark-900/80 shrink-0">
+                <img src={logoImg} alt="Guidegram Logo" className="w-full h-full object-cover" />
+              </div>
+              <div className="min-w-0 flex flex-col">
+                <div className="text-sm font-bold text-white tracking-wide truncate flex items-center gap-1.5">
+                  <span>Guidegram</span>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.2 bg-primary-600/20 text-primary-300 border border-primary-500/30 rounded">
+                    Portable
+                  </span>
+                </div>
+                <div className="text-[11px] text-gray-400 font-medium mt-0.5">
+                  No account connected
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Account Switcher List (Screenshot 1 parity) */}
-        {isAccountsExpanded && (
+        {/* Account Switcher List (Only when accounts exist and switcher is expanded) */}
+        {activeAccount && isAccountsExpanded && accounts.length > 0 && (
           <div className="bg-[#17212b] border-b border-white/5 p-2 space-y-1 animate-in fade-in duration-150">
             {accounts.map((acc) => {
               const isActive = acc.id === activeAccount?.id
@@ -222,167 +240,219 @@ export const MainMenuDrawer: React.FC<MainMenuDrawerProps> = ({
           </div>
         )}
 
-        {/* Navigation Menu Options (Official Telegram Desktop Hierarchy) */}
+        {/* Navigation Menu Options */}
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10">
-          {/* Archived chats */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenArchivedChats?.()
-            }}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <div className="flex items-center gap-4">
-              <Archive className="w-4 h-4 text-gray-400" />
-              <span>Archived chats</span>
-            </div>
-            {archivedUnreadCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 text-[11px] font-bold font-mono">
-                {archivedUnreadCount}
-              </span>
-            )}
-          </button>
+          {activeAccount ? (
+            <>
+              {/* Archived chats */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenArchivedChats?.()
+                }}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <div className="flex items-center gap-4">
+                  <Archive className="w-4 h-4 text-gray-400" />
+                  <span>Archived chats</span>
+                </div>
+                {archivedUnreadCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 text-[11px] font-bold font-mono">
+                    {archivedUnreadCount}
+                  </span>
+                )}
+              </button>
 
-          {/* My Profile */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenProfile()
-            }}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <User className="w-4 h-4 text-gray-400" />
-            <span>My Profile</span>
-          </button>
+              {/* My Profile */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenProfile()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <User className="w-4 h-4 text-gray-400" />
+                <span>My Profile</span>
+              </button>
 
-          <div className="my-1 border-t border-white/5" />
+              <div className="my-1 border-t border-white/5" />
 
-          {/* New Group */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenNewGroup?.()
-            }}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <Users className="w-4 h-4 text-gray-400" />
-            <span>New Group</span>
-          </button>
+              {/* New Group */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenNewGroup?.()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <Users className="w-4 h-4 text-gray-400" />
+                <span>New Group</span>
+              </button>
 
-          {/* New Channel */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenNewChannel?.()
-            }}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <Megaphone className="w-4 h-4 text-gray-400" />
-            <span>New Channel</span>
-          </button>
+              {/* New Channel */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenNewChannel?.()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <Megaphone className="w-4 h-4 text-gray-400" />
+                <span>New Channel</span>
+              </button>
 
-          {/* Contacts */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenContacts?.()
-            }}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <User className="w-4 h-4 text-gray-400" />
-            <span>Contacts</span>
-          </button>
+              {/* Contacts */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenContacts?.()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <User className="w-4 h-4 text-gray-400" />
+                <span>Contacts</span>
+              </button>
 
-          {/* Calls */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenCalls?.()
-            }}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <Phone className="w-4 h-4 text-gray-400" />
-            <span>Calls</span>
-          </button>
+              {/* Calls */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenCalls?.()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <Phone className="w-4 h-4 text-gray-400" />
+                <span>Calls</span>
+              </button>
 
-          {/* Saved Messages */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenSavedMessages()
-            }}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <Bookmark className="w-4 h-4 text-gray-400" />
-            <span>Saved Messages</span>
-          </button>
+              {/* Saved Messages */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenSavedMessages()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <Bookmark className="w-4 h-4 text-gray-400" />
+                <span>Saved Messages</span>
+              </button>
 
-          {/* Star Gifts Shelf */}
-          <button
-            type="button"
-            onClick={() => setIsStarGiftsOpen(true)}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <Gift className="w-4 h-4 text-purple-400" />
-            <span>Star Gifts Shelf</span>
-          </button>
+              {/* Star Gifts Shelf */}
+              <button
+                type="button"
+                onClick={() => setIsStarGiftsOpen(true)}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <Gift className="w-4 h-4 text-purple-400" />
+                <span>Star Gifts Shelf</span>
+              </button>
 
-          {/* Settings */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenSettings()
-            }}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <Settings className="w-4 h-4 text-gray-400" />
-            <span>Settings</span>
-          </button>
+              {/* Settings */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenSettings()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <Settings className="w-4 h-4 text-gray-400" />
+                <span>Settings</span>
+              </button>
 
-          {/* Devices & Sessions */}
-          <button
-            type="button"
-            onClick={() => setIsActiveSessionsOpen(true)}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <Laptop className="w-4 h-4 text-emerald-400" />
-            <span>Devices & Sessions</span>
-          </button>
+              {/* Devices & Sessions */}
+              <button
+                type="button"
+                onClick={() => setIsActiveSessionsOpen(true)}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <Laptop className="w-4 h-4 text-emerald-400" />
+                <span>Devices & Sessions</span>
+              </button>
 
-          {/* Proxy Settings */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onOpenProxyModal()
-            }}
-            className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-          >
-            <ShieldCheck className="w-4 h-4 text-gray-400" />
-            <span>Proxy Settings</span>
-          </button>
+              {/* Proxy Settings */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenProxyModal()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-gray-400" />
+                <span>Proxy Settings</span>
+              </button>
 
-          {/* Ghost Mode Toggle */}
-          {onToggleGhostMode && (
-            <button
-              type="button"
-              onClick={onToggleGhostMode}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
-            >
-              <div className="flex items-center gap-4">
-                <Radio className={`w-4 h-4 ${ghostMode ? 'text-accent-emerald' : 'text-gray-400'}`} />
-                <span>Ghost Mode</span>
+              {/* Ghost Mode Toggle */}
+              {onToggleGhostMode && (
+                <button
+                  type="button"
+                  onClick={onToggleGhostMode}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+                >
+                  <div className="flex items-center gap-4">
+                    <Radio className={`w-4 h-4 ${ghostMode ? 'text-accent-emerald' : 'text-gray-400'}`} />
+                    <span>Ghost Mode</span>
+                  </div>
+                  <div className={`w-2 h-2 rounded-full ${ghostMode ? 'bg-accent-emerald animate-pulse' : 'bg-gray-600'}`} />
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Logged Out / Guest Options */}
+              <div className="p-1 mb-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose()
+                    onOpenAddAccount()
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-primary-600/30 to-accent-cyan/20 border border-primary-500/30 hover:border-primary-500/50 hover:bg-primary-600/40 text-white transition-all cursor-pointer shadow-sm group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-accent-cyan flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col text-left min-w-0">
+                    <span className="text-xs font-bold text-gray-100">Connect Telegram Account</span>
+                    <span className="text-[10px] text-gray-400 truncate">Sign in via QR or phone</span>
+                  </div>
+                </button>
               </div>
-              <div className={`w-2 h-2 rounded-full ${ghostMode ? 'bg-accent-emerald animate-pulse' : 'bg-gray-600'}`} />
-            </button>
+
+              {/* Proxy Settings */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenProxyModal()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-accent-cyan" />
+                <span>Proxy Settings</span>
+              </button>
+
+              {/* Settings */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenSettings()
+                }}
+                className="w-full flex items-center gap-4 px-3.5 py-2.5 rounded-xl hover:bg-white/5 text-gray-200 hover:text-white transition-colors text-xs font-medium cursor-pointer"
+              >
+                <Settings className="w-4 h-4 text-gray-400" />
+                <span>Settings</span>
+              </button>
+            </>
           )}
 
           <div className="my-1 border-t border-white/5" />

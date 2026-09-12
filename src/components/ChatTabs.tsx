@@ -1,5 +1,5 @@
 import React from 'react'
-import { MessageSquare, Users, Radio, Bot, BellRing, Layers, CheckCheck, Folder } from 'lucide-react'
+import { MessageSquare, Users, Radio, Bot, BellRing, Layers, CheckCheck, Folder, Archive } from 'lucide-react'
 import { CloudFolderItem } from '../types/telegram'
 
 export type TabCategory = 'all' | 'users' | 'groups' | 'channels' | 'bots' | 'unread' | string
@@ -85,6 +85,9 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
     { id: 'channels', label: 'Channels', icon: <Radio className="w-3.5 h-3.5" /> },
     { id: 'bots', label: 'Bots', icon: <Bot className="w-3.5 h-3.5" /> },
     { id: 'unread', label: 'Unread', icon: <BellRing className="w-3.5 h-3.5" /> },
+    ...(activeTab === 'archived'
+      ? [{ id: 'archived', label: 'Archived', icon: <Archive className="w-3.5 h-3.5 text-teal-400" /> }]
+      : []),
   ]
 
   const effectiveFolders = (cloudFoldersProp && cloudFoldersProp.length > 0)

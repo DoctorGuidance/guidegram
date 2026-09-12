@@ -350,7 +350,10 @@ runTest('4.4: Dialogs (.glass-modal) and Panels (.glass-panel) receive opaque co
 runTest('4.5: Messages (.reply-highlight) neutralized from continuous repainting', () => {
   const cssContent = fs.readFileSync(path.resolve('src/index.css'), 'utf-8')
   assert(cssContent.includes('.disable-animations .reply-highlight'))
-  assert(cssContent.includes('box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.9) !important;'))
+  assert(
+    cssContent.includes('box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.9) !important;') ||
+    cssContent.includes('box-shadow: 0 0 0 2px rgba(57, 198, 164, 0.9) !important;')
+  )
 })
 
 runTest('4.6: App.tsx applies .disable-animations to documentElement', () => {

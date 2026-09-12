@@ -99,6 +99,18 @@ export const ChatList: React.FC<ChatListProps> = ({
       return true
     }
 
+    const isArchived = dialog.folderId === 1 || (dialog as any).archived === true
+
+    // Archived chats tab filter
+    if (activeTab === 'archived') {
+      return isArchived
+    }
+
+    // Exclude archived chats from regular tabs unless actively searching
+    if (!cleanQuery && isArchived) {
+      return false
+    }
+
     // Normal tab category match
     if (activeTab === 'users' && !dialog.isUser) return false
     if (activeTab === 'groups' && !isGroup) return false
