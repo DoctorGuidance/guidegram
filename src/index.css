@@ -80,10 +80,10 @@
 /* Smooth reply-to glow animation */
 @keyframes replyGlow {
   0% {
-    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.9), 0 0 25px rgba(6, 182, 212, 0.5);
+    box-shadow: 0 0 0 2px rgba(57, 198, 164, 0.9), 0 0 25px rgba(57, 198, 164, 0.5);
   }
   60% {
-    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.8), 0 0 20px rgba(6, 182, 212, 0.4);
+    box-shadow: 0 0 0 2px rgba(57, 198, 164, 0.8), 0 0 20px rgba(57, 198, 164, 0.4);
   }
   100% {
     box-shadow: none;
@@ -151,5 +151,5 @@
 /* Static fallback for reply highlight glow without continuous repaint */
 .disable-animations .reply-highlight {
   animation: none !important;
-  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.9) !important;
+  box-shadow: 0 0 0 2px rgba(57, 198, 164, 0.9) !important;
 }

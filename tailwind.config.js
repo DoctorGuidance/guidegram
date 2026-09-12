@@ -18,12 +18,17 @@ export default {
           600: '#323B4E',
         },
         primary: {
-          50: '#EBF5FF',
-          100: '#E1EFFE',
-          400: '#76A9FA',
-          500: '#3F83F8',
-          600: '#2A75F3',
-          700: '#1A56DB',
+          50: '#F0FDF9',
+          100: '#CCFBEF',
+          200: '#99F6E0',
+          300: '#5EEAD4',
+          400: '#39C6A4', // Exact Logo Color
+          500: '#20B391',
+          600: '#0E8A6E', // High-contrast, rich deep teal for white text (WCAG AA > 4.5:1)
+          700: '#0B7059',
+          800: '#095947',
+          900: '#074537',
+          950: '#032B22',
         },
         accent: {
           cyan: '#06B6D4',
@@ -37,7 +42,7 @@ export default {
         sans: ['Segoe UI', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       boxShadow: {
-        'glow': '0 0 20px -3px rgba(42, 117, 243, 0.3)',
+        'glow': '0 0 25px -4px rgba(57, 198, 164, 0.38)',
         'glow-emerald': '0 0 20px -3px rgba(16, 185, 129, 0.3)',
       }
     },

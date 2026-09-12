@@ -50,10 +50,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <div className="p-1 rounded-lg text-gray-400 group-hover:text-white transition-colors">
             <Menu className="w-4 h-4" />
           </div>
-          <div className="w-6 h-6 rounded-lg overflow-hidden shadow-glow flex items-center justify-center border border-accent-cyan/30">
+          <div className="w-6 h-6 rounded-lg overflow-hidden shadow-glow flex items-center justify-center border border-primary-400/40">
             <img src={logoImg} alt="Guidegram Logo" className="w-full h-full object-cover" />
           </div>
-          <span className="text-xs font-bold text-gray-200 tracking-wide">Guidegram</span>
+          <span className="text-xs font-bold text-gray-200 group-hover:text-primary-300 tracking-wide transition-colors">Guidegram</span>
         </button>
         <span className="text-[10px] font-semibold px-1.5 py-0.2 bg-primary-600/20 text-primary-300 border border-primary-500/30 rounded-md">
           v{__APP_VERSION__}
