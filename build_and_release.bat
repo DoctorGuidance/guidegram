@@ -69,7 +69,7 @@ if %errorlevel% equ 0 (
 ) else (
     echo [i] GitHub CLI (gh) is not installed.
     echo [*] Opening the GitHub Actions page in your browser where you can click "Run workflow"...
-    start https://github.com/DoctorGuidance/guidegram/actions/workflows/build-release.yml
+    start https://github.com/guidegram/guidegram/actions/workflows/build-release.yml
 )
 echo.
 pause
@@ -92,17 +92,17 @@ if not "%tag%"=="" (
         call gh workflow run build-release.yml -f tag_name="%tag%"
         echo [OK] Windows binary uploaded and macOS cloud build initiated!
     ) else (
-        start https://github.com/DoctorGuidance/guidegram/actions/workflows/build-release.yml
+        start https://github.com/guidegram/guidegram/actions/workflows/build-release.yml
     )
 ) else (
-    start https://github.com/DoctorGuidance/guidegram/actions/workflows/build-release.yml
+    start https://github.com/guidegram/guidegram/actions/workflows/build-release.yml
 )
 echo.
 pause
 goto end
 
 :open_browser
-start https://github.com/DoctorGuidance/guidegram/actions/workflows/build-release.yml
+start https://github.com/guidegram/guidegram/actions/workflows/build-release.yml
 goto end
 
 :invalid

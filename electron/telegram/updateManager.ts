@@ -7,7 +7,7 @@ import { Logger } from './logger'
 
 export class UpdateManager {
   private currentVersion: string
-  private repoOwner = 'DoctorGuidance'
+  private repoOwner = 'guidegram'
   private repoName = 'guidegram'
   private timer: NodeJS.Timeout | null = null
 

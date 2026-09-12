@@ -456,9 +456,9 @@ function extractFirstUrl(text) {
 
 runTest('3.1: extractFirstUrl accurately extracts URLs from plain text, sentences and markdown', () => {
   assert.strictEqual(extractFirstUrl('https://t.me/telegram'), 'https://t.me/telegram')
-  assert.strictEqual(extractFirstUrl('Check out https://github.com/DoctorGuidance/guidegram for updates.'), 'https://github.com/DoctorGuidance/guidegram')
+  assert.strictEqual(extractFirstUrl('Check out https://github.com/guidegram/guidegram for updates.'), 'https://github.com/guidegram/guidegram')
   assert.strictEqual(extractFirstUrl('Have you seen this? (https://example.com/item/42)'), 'https://example.com/item/42')
-  assert.strictEqual(extractFirstUrl('Look at [Guidegram Repo](https://github.com/DoctorGuidance/guidegram)!'), 'https://github.com/DoctorGuidance/guidegram')
+  assert.strictEqual(extractFirstUrl('Look at [Guidegram Repo](https://github.com/guidegram/guidegram)!'), 'https://github.com/guidegram/guidegram')
   assert.strictEqual(extractFirstUrl('Multiple: https://first.com and https://second.com'), 'https://first.com')
   assert.strictEqual(extractFirstUrl('Trailing punctuation: https://test.org/path, and more'), 'https://test.org/path')
   assert.strictEqual(extractFirstUrl(''), null)

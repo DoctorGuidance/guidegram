@@ -28,7 +28,7 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
   const handleUpdate = async () => {
     if (!updateInfo.downloadUrl) {
       if (window.guidegram?.openExternal) {
-        window.guidegram.openExternal('https://github.com/DoctorGuidance/guidegram/releases/latest')
+        window.guidegram.openExternal('https://github.com/guidegram/guidegram/releases/latest')
       }
       return
     }
@@ -173,7 +173,7 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({ updateInfo, onDismis
           onClick={() => {
             if (window.guidegram?.openExternal) {
               window.guidegram.openExternal(
-                'https://github.com/DoctorGuidance/guidegram/releases/latest'
+                'https://github.com/guidegram/guidegram/releases/latest'
               )
             }
           }}

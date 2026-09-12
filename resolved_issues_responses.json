@@ -5,7 +5,7 @@
     "category": "Rich Media & Engine",
     "status": "fixed",
     "fix_summary": "Added MTProto lazy media fetching via client.downloadMedia/downloadProfilePhoto, local disk caching in ./data/media and ./data/avatars, reaction pills with live count, and transparent sticker rendering without message bubble artifacts.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe have addressed this issue directly in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### What was improved:\n- **Media & Avatar Engine**: Photos, video previews, documents, and profile avatars are cached locally into ./data/ without UI stuttering.\n- **Reaction & Stickers**: Full support for Telegram reaction pills with counters, transparent sticker display without ugly background bubble rectangles, and an interactive waveform audio player.\n\nFeel free to test it out via our [latest release](https://github.com/DoctorGuidance/guidegram/releases)!"
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe have addressed this issue directly in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### What was improved:\n- **Media & Avatar Engine**: Photos, video previews, documents, and profile avatars are cached locally into ./data/ without UI stuttering.\n- **Reaction & Stickers**: Full support for Telegram reaction pills with counters, transparent sticker display without ugly background bubble rectangles, and an interactive waveform audio player.\n\nFeel free to test it out via our [latest release](https://github.com/guidegram/guidegram/releases)!"
   },
   {
     "id": "GG-002",
@@ -13,7 +13,7 @@
     "category": "Typography & BiDi",
     "status": "fixed",
     "fix_summary": "Integrated BiDi character detection regex combined with per-paragraph isolation, ensuring punctuation marks, quotes, and inline links stay strictly on their correct side.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nThis Persian/Arabic RTL text formatting defect is resolved in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Solution details:\n- **Isolated BiDi Typography**: Uses unicode-bidi: isolate and per-line Arabic/Persian range evaluation.\n- Inline glass buttons, replies, and quoted messages dynamically adjust their layout flow (dir=rtl) so numbers, dots, and brackets no longer jump to the wrong side.\n\nYou can grab the portable build from the [releases page](https://github.com/DoctorGuidance/guidegram/releases)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nThis Persian/Arabic RTL text formatting defect is resolved in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Solution details:\n- **Isolated BiDi Typography**: Uses unicode-bidi: isolate and per-line Arabic/Persian range evaluation.\n- Inline glass buttons, replies, and quoted messages dynamically adjust their layout flow (dir=rtl) so numbers, dots, and brackets no longer jump to the wrong side.\n\nYou can grab the portable build from the [releases page](https://github.com/guidegram/guidegram/releases)."
   },
   {
     "id": "GG-003",
@@ -21,7 +21,7 @@
     "category": "Lifecycle & UX",
     "status": "fixed",
     "fix_summary": "Added CloseConfirmModal prompting user on first exit to choose between Minimize to Background and Quit Completely with a persistent Remember choice setting, backed by a Windows System Tray integration.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nWe implemented this exact lifecycle behavior in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Highlights:\n- When clicking the close button, a modern modal prompts you whether to **Minimize to Background** (to keep Telegram MTProto sessions alive and receive real-time notifications) or **Quit Completely**.\n- Includes a **Remember my choice** checkbox, fully reconfigurable in **Preferences > Window & Lifecycle Behavior**.\n- Features a persistent **Windows System Tray** icon for one-click restore and background management.\n\nCheck out the repo here: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nWe implemented this exact lifecycle behavior in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Highlights:\n- When clicking the close button, a modern modal prompts you whether to **Minimize to Background** (to keep Telegram MTProto sessions alive and receive real-time notifications) or **Quit Completely**.\n- Includes a **Remember my choice** checkbox, fully reconfigurable in **Preferences > Window & Lifecycle Behavior**.\n- Features a persistent **Windows System Tray** icon for one-click restore and background management.\n\nCheck out the repo here: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-004",
@@ -29,7 +29,7 @@
     "category": "Updater & Mobility",
     "status": "fixed",
     "fix_summary": "Implemented UpdateManager checking GitHub Releases every 1 hour (with SOCKS5/HTTP proxy support), presenting a non-intrusive corner notification banner, and running an isolated PowerShell updater script preserving ./data/.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nThis update mechanism is now live in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### How it works:\n- A lightweight background service queries GitHub Releases once every hour.\n- It routes through your active proxy configuration if enabled, bypassing regional network blocks.\n- Applying the update replaces only the application binaries while strictly protecting your ./data/ folder (sessions, proxies, avatars, and configs remain 100% intact).\n\nExplore the project on [GitHub](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nThis update mechanism is now live in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### How it works:\n- A lightweight background service queries GitHub Releases once every hour.\n- It routes through your active proxy configuration if enabled, bypassing regional network blocks.\n- Applying the update replaces only the application binaries while strictly protecting your ./data/ folder (sessions, proxies, avatars, and configs remain 100% intact).\n\nExplore the project on [GitHub](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-005",
@@ -37,7 +37,7 @@
     "category": "Authentication",
     "status": "fixed",
     "fix_summary": "Engineered pure MTProto ExportLoginToken and ImportLoginToken with 30s auto-refreshing QR canvas and smooth 2FA password fallback.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe implemented native Telegram QR code login in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Features:\n- Open Telegram on your phone (Settings > Devices > Link Desktop Device) and scan the QR code to log in instantly.\n- Automatically migrates Datacenters (DCs) and prompts for 2FA password if enabled on your account.\n- No 3-account limit—run 10+ accounts concurrently with isolated sessions.\n\nGet the portable executable at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe implemented native Telegram QR code login in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Features:\n- Open Telegram on your phone (Settings > Devices > Link Desktop Device) and scan the QR code to log in instantly.\n- Automatically migrates Datacenters (DCs) and prompts for 2FA password if enabled on your account.\n- No 3-account limit—run 10+ accounts concurrently with isolated sessions.\n\nGet the portable executable at: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "AM-3368",
@@ -45,7 +45,7 @@
     "category": "Session Management",
     "status": "fixed",
     "fix_summary": "Built multi-tenant SessionStore and AccountDock permitting unlimited simultaneous accounts, individual proxy binding, isolated local directories, and instant zero-reload switching.",
-    "response_markdown": "### Status: Resolved via Portable Multi-Session Architecture\n\nHi @author,\n\nIf you are seeking robust, isolated multi-session management without cross-account contamination, take a look at our architecture in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### How we designed session management:\n- **Isolated Session Files**: Each profile/session maintains its own secure, independent storage (./data/sessions/).\n- **Zero-Flicker Multi-Account Dock**: Switch between accounts instantly without reloading the client process.\n- **Independent Proxies**: Every session can optionally route through its own dedicated SOCKS5 or HTTP proxy.\n\nSource code and documentation: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved via Portable Multi-Session Architecture\n\nHi @author,\n\nIf you are seeking robust, isolated multi-session management without cross-account contamination, take a look at our architecture in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### How we designed session management:\n- **Isolated Session Files**: Each profile/session maintains its own secure, independent storage (./data/sessions/).\n- **Zero-Flicker Multi-Account Dock**: Switch between accounts instantly without reloading the client process.\n- **Independent Proxies**: Every session can optionally route through its own dedicated SOCKS5 or HTTP proxy.\n\nSource code and documentation: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "AM-3377",
@@ -53,7 +53,7 @@
     "category": "Networking & Proxy",
     "status": "fixed",
     "fix_summary": "Created an embedded ProxyManager supporting SOCKS5, HTTP, and MTProto proxies with an in-app ping latency test and per-session proxy binding.",
-    "response_markdown": "### Status: Resolved via Integrated Multi-Proxy Routing\n\nHello @author,\n\nRegional network restrictions and connection drops are handled seamlessly in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Solution:\n- **Built-in Proxy Engine**: Configure SOCKS5, HTTP, or custom proxy nodes directly in the app.\n- **Real-Time Latency Meter**: Test connection ping (ms) before connecting to ensure high-speed data flow.\n- **Per-Account Routing**: Assign dedicated proxies per account so restricted endpoints are automatically bypassed.\n\nCheck out the implementation here: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved via Integrated Multi-Proxy Routing\n\nHello @author,\n\nRegional network restrictions and connection drops are handled seamlessly in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Solution:\n- **Built-in Proxy Engine**: Configure SOCKS5, HTTP, or custom proxy nodes directly in the app.\n- **Real-Time Latency Meter**: Test connection ping (ms) before connecting to ensure high-speed data flow.\n- **Per-Account Routing**: Assign dedicated proxies per account so restricted endpoints are automatically bypassed.\n\nCheck out the implementation here: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-006",
@@ -61,7 +61,7 @@
     "category": "Rich Media & Audio",
     "status": "fixed",
     "fix_summary": "Built VoicePlayer component with animated waveform progression (voiceWaveform byte array), timeline dragging, and instant speed multiplier toggling (1x, 1.5x, 2x).",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe have added a modern interactive voice player in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Voice playback features:\n- **Waveform scrubbing**: Visual representation of audio levels with click-to-seek support.\n- **Speed multipliers**: Toggle between 1x, 1.5x, and 2x audio speed with 1 click.\n- **Clean audio cards**: Integrated directly into chat bubbles with duration indicators.\n\nCheck out the implementation on [GitHub](https://github.com/DoctorGuidance/guidegram)!"
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe have added a modern interactive voice player in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Voice playback features:\n- **Waveform scrubbing**: Visual representation of audio levels with click-to-seek support.\n- **Speed multipliers**: Toggle between 1x, 1.5x, and 2x audio speed with 1 click.\n- **Clean audio cards**: Integrated directly into chat bubbles with duration indicators.\n\nCheck out the implementation on [GitHub](https://github.com/guidegram/guidegram)!"
   },
   {
     "id": "GG-007",
@@ -69,7 +69,7 @@
     "category": "Layout & UI",
     "status": "fixed",
     "fix_summary": "Decoupled Electron frameless titlebar with CSS drag regions (-webkit-app-region), adjusted viewport margins, and established fluid flex layout eliminating black voids.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe completely fixed this viewport overlap and dark dead space issue in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Improvements:\n- **Clean TitleBar Separation**: The top titlebar has an exact 40px height with dedicated non-draggable control hitboxes.\n- **Fluid Layout**: Sidebar and ChatViewport maintain strict flex-1 bounds with zero overlay conflicts.\n\nTest the updated build at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe completely fixed this viewport overlap and dark dead space issue in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Improvements:\n- **Clean TitleBar Separation**: The top titlebar has an exact 40px height with dedicated non-draggable control hitboxes.\n- **Fluid Layout**: Sidebar and ChatViewport maintain strict flex-1 bounds with zero overlay conflicts.\n\nTest the updated build at: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-008",
@@ -77,7 +77,7 @@
     "category": "Chat Navigation",
     "status": "fixed",
     "fix_summary": "Added PinnedMessageBar pinned to top of ChatViewport showing sender name, message snippet, and click-to-scroll navigation to the exact message ID.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nSupport for pinned message bars is now built into **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Features:\n- Displays the current pinned announcement at the top of any group or channel.\n- Clicking the pinned bar smoothly scrolls the chat directly to the target message.\n\nCheck out the source code at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nSupport for pinned message bars is now built into **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Features:\n- Displays the current pinned announcement at the top of any group or channel.\n- Clicking the pinned bar smoothly scrolls the chat directly to the target message.\n\nCheck out the source code at: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-009",
@@ -85,7 +85,7 @@
     "category": "Channel Management",
     "status": "fixed",
     "fix_summary": "Inspected chat permissions (canSendMessages); if read-only, replaced message input bar with full-width MUTE / UNMUTE CHANNEL button with toggle API.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe addressed this in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Solution:\n- When opening a broadcast channel or read-only group, the bottom input bar is replaced with a sleek MUTE / UNMUTE button.\n- Clicking it toggles channel notifications immediately via MTProto account.updateNotifySettings.\n\nRepository: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe addressed this in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Solution:\n- When opening a broadcast channel or read-only group, the bottom input bar is replaced with a sleek MUTE / UNMUTE button.\n- Clicking it toggles channel notifications immediately via MTProto account.updateNotifySettings.\n\nRepository: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-010",
@@ -93,7 +93,7 @@
     "category": "Chat Navigation",
     "status": "fixed",
     "fix_summary": "Integrated keyboard shortcut Ctrl+F to open animated search bar in ChatViewport with real-time text matching, result counter, and quick navigation.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nIn-chat search (Ctrl + F) is fully operational in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Highlights:\n- Press Ctrl + F to slide out the in-chat search bar.\n- Matches words in loaded messages instantaneously with match counts and highlight focus.\n\nGrab the latest release at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nIn-chat search (Ctrl + F) is fully operational in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Highlights:\n- Press Ctrl + F to slide out the in-chat search bar.\n- Matches words in loaded messages instantaneously with match counts and highlight focus.\n\nGrab the latest release at: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-011",
@@ -101,7 +101,7 @@
     "category": "64Gram Power Features",
     "status": "fixed",
     "fix_summary": "Added copyCallbackData preference in Settings; clicking or right-clicking bot inline buttons displays and copies raw callback_data string to clipboard.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nWe ported the popular 64Gram feature for inspecting bot callback data into **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### How it works:\n- Enable Copy Callback Data in Preferences.\n- Clicking or right-clicking any inline keyboard button copies its raw callback_data payload to your clipboard for easy debugging.\n\nSource: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nWe ported the popular 64Gram feature for inspecting bot callback data into **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### How it works:\n- Enable Copy Callback Data in Preferences.\n- Clicking or right-clicking any inline keyboard button copies its raw callback_data payload to your clipboard for easy debugging.\n\nSource: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-012",
@@ -109,7 +109,7 @@
     "category": "64Gram Power Features",
     "status": "fixed",
     "fix_summary": "Added showSeconds preference in Settings; formats message timestamp with seconds when enabled, useful for trading, bot updates, and news feeds.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nPrecise timestamps with seconds are now available in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Features:\n- In Preferences > 64Gram Power Features, toggle Message Time with Seconds.\n- Timestamps render as HH:mm:ss for millisecond-critical bot signals and news channels.\n\nCheck out the project: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nPrecise timestamps with seconds are now available in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Features:\n- In Preferences > 64Gram Power Features, toggle Message Time with Seconds.\n- Timestamps render as HH:mm:ss for millisecond-critical bot signals and news channels.\n\nCheck out the project: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-013",
@@ -117,7 +117,7 @@
     "category": "64Gram Power Features",
     "status": "fixed",
     "fix_summary": "Added quickForwardToSaved setting; renders bookmark icon on message hover and supports Ctrl+Click on message bubble to instantly forward to Saved Messages.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe implemented 1-click forwarding to Saved Messages in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Usage:\n- Hover over any message and click the Bookmark icon, or Ctrl+Click the bubble, to instantly forward it to your Saved Messages without extra dialog popups.\n\nDownload at: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nWe implemented 1-click forwarding to Saved Messages in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Usage:\n- Hover over any message and click the Bookmark icon, or Ctrl+Click the bubble, to instantly forward it to your Saved Messages without extra dialog popups.\n\nDownload at: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-014",
@@ -125,7 +125,7 @@
     "category": "Telegraph & Privacy",
     "status": "fixed",
     "fix_summary": "Implemented DirectForwardModal with dropAuthor / withoutQuote flag and Alt+F shortcut, forwarding messages without source attribution.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nClean forwarding without quoted author headers is natively supported in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Details:\n- Press Alt + F on any message or click Direct Forward.\n- Toggle Forward Without Quote to strip the original author header entirely before sending.\n\nExplore the repo: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nClean forwarding without quoted author headers is natively supported in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Details:\n- Press Alt + F on any message or click Direct Forward.\n- Toggle Forward Without Quote to strip the original author header entirely before sending.\n\nExplore the repo: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-015",
@@ -133,7 +133,7 @@
     "category": "Dialog Management",
     "status": "fixed",
     "fix_summary": "Added markAllAsRead MTProto routine advancing max_id across dialogs, exposed via a Mark All Read button in ChatTabs.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe added a Mark All As Read button in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### How it works:\n- A single click in the folder tabs marks all unread conversations, channels, and supergroups as read by advancing their read history pointer.\n\nReleases and source: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHi @author,\n\nWe added a Mark All As Read button in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### How it works:\n- A single click in the folder tabs marks all unread conversations, channels, and supergroups as read by advancing their read history pointer.\n\nReleases and source: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-016",
@@ -141,7 +141,7 @@
     "category": "Interactivity & Navigation",
     "status": "fixed",
     "fix_summary": "Made ChatHeader clickable to open ChannelInfoDrawer with bio, member count, and notification toggles; sanitized and wrapped deep links (tg://user, @username, URLs).",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nInteractive channel headers and clickable deep links are fully implemented in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### Highlights:\n- Clicking the channel header opens a slide-out drawer with description, participant count, chat ID, and notification controls.\n- All @mentions, t.me links, and web URLs are clickable and open correctly without breaking the client window.\n\nRepository: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHey @author,\n\nInteractive channel headers and clickable deep links are fully implemented in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### Highlights:\n- Clicking the channel header opens a slide-out drawer with description, participant count, chat ID, and notification controls.\n- All @mentions, t.me links, and web URLs are clickable and open correctly without breaking the client window.\n\nRepository: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "GG-017",
@@ -149,7 +149,7 @@
     "category": "Branding & Desktop",
     "status": "fixed",
     "fix_summary": "Generated multi-resolution icon assets (icon.ico, icon16.png, icon32.png, icon256.png) in resources/ and embedded them into win-unpacked Guidegram.exe and Tray.",
-    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nThis branding and taskbar icon issue is resolved in **[Guidegram](https://github.com/DoctorGuidance/guidegram)**.\n\n#### What was added:\n- Custom embedded multi-layer icon.ico in the executable binary and taskbar.\n- Matching system tray icon with context menu actions.\n\nCheck out the release: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Resolved in Guidegram\n\nHello @author,\n\nThis branding and taskbar icon issue is resolved in **[Guidegram](https://github.com/guidegram/guidegram)**.\n\n#### What was added:\n- Custom embedded multi-layer icon.ico in the executable binary and taskbar.\n- Matching system tray icon with context menu actions.\n\nCheck out the release: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   },
   {
     "id": "AM-3384",
@@ -157,6 +157,6 @@
     "category": "Account Capability Filtering",
     "status": "addressed_by_design",
     "fix_summary": "In Guidegram, account capabilities (e.g. Premium status, admin rights, channel broadcast permissions) are dynamically evaluated per session via MTProto getChatDetails and client.getMe(), rendering only valid actionable controls per account.",
-    "response_markdown": "### Status: Handled via Dynamic Capability Filtering\n\nHi @author,\n\nIn **[Guidegram](https://github.com/DoctorGuidance/guidegram)**, we solved permission mismatch by dynamically resolving account tier and privileges before rendering UI controls.\n\n#### Architectural Approach:\n- Instead of querying static global catalogs, the client queries the active authenticated session for its exact entitlements (e.g. isPremium, chat permissions canSendMessages, bot commands).\n- The UI selectively renders features based on what the authenticated account actually supports, preventing invalid actions and failed requests.\n\nSee how we filter capabilities: [DoctorGuidance/guidegram](https://github.com/DoctorGuidance/guidegram)."
+    "response_markdown": "### Status: Handled via Dynamic Capability Filtering\n\nHi @author,\n\nIn **[Guidegram](https://github.com/guidegram/guidegram)**, we solved permission mismatch by dynamically resolving account tier and privileges before rendering UI controls.\n\n#### Architectural Approach:\n- Instead of querying static global catalogs, the client queries the active authenticated session for its exact entitlements (e.g. isPremium, chat permissions canSendMessages, bot commands).\n- The UI selectively renders features based on what the authenticated account actually supports, preventing invalid actions and failed requests.\n\nSee how we filter capabilities: [guidegram/guidegram](https://github.com/guidegram/guidegram)."
   }
 ]

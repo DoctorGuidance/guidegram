@@ -362,7 +362,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleInstallUpdate = async () => {
     if (!availableUpdate) return
     if (!availableUpdate.downloadUrl) {
-      window.guidegram?.openExternal?.('https://github.com/DoctorGuidance/guidegram/releases/latest')
+      window.guidegram?.openExternal?.('https://github.com/guidegram/guidegram/releases/latest')
       return
     }
 

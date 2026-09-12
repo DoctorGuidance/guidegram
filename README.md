@@ -4,8 +4,8 @@
   <p><strong>Next-Generation Portable Desktop Telegram Client with Unlimited Multi-Account, Dedicated Per-Account Proxies, Hardware Anti-Fingerprinting & Deep Group Analytics</strong></p>
 </div>
 
-[![GitHub Release](https://img.shields.io/github/v/release/DoctorGuidance/guidegram?style=for-the-badge&color=22c55e&logo=github)](https://github.com/DoctorGuidance/guidegram/releases/latest)
-[![Windows](https://img.shields.io/badge/Platform-Windows%20x64-0078d4?style=for-the-badge&logo=windows)](https://github.com/DoctorGuidance/guidegram/releases/latest)
+[![GitHub Release](https://img.shields.io/github/v/release/guidegram/guidegram?style=for-the-badge&color=22c55e&logo=github)](https://github.com/guidegram/guidegram/releases/latest)
+[![Windows](https://img.shields.io/badge/Platform-Windows%20x64-0078d4?style=for-the-badge&logo=windows)](https://github.com/guidegram/guidegram/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
@@ -18,7 +18,7 @@
 
 No installation or developer tools required. Download the portable standalone release for Windows:
 
-👉 **[Download Latest Release (GitHub Releases)](https://github.com/DoctorGuidance/guidegram/releases/latest)**
+👉 **[Download Latest Release (GitHub Releases)](https://github.com/guidegram/guidegram/releases/latest)**
 
 *Download the portable zip or installer from the latest release assets, extract or run `Guidegram.exe` to launch.*
 
@@ -245,7 +245,7 @@ Guidegram/
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/DoctorGuidance/guidegram.git
+git clone https://github.com/guidegram/guidegram.git
 cd guidegram
 ```
 
